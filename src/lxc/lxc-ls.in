@@ -1,0 +1,9 @@
+#!/bin/bash
+
+lxcpath=@LXCPATH@
+
+if [ ! -r $lxcpath ]; then
+    exit 0
+fi
+
+ls $* $lxcpath

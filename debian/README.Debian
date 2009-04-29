@@ -1,0 +1,17 @@
+lxc for Debian
+--------------
+
+You need to be running at least Linux 2.6.29 or above to fully avail of this
+package. Previous versions of Linux have some but not all the needed features,
+and even when applying patches won't allow using sysfs and network namespaces
+at the same time, thus providing a very limited experience.
+
+If you want to experiment with containers either wait for Debian to provide the
+correct kernel version or build your own kernel.
+
+If you want to make container usable by non-root users, run lxc-setcap as root,
+and some capabilities will be set so that normal users will be able to use the
+container utils. This is not done by default, though, and you have to
+explicitely allow it.
+
+ -- Guido Trotter <ultrotter@debian.org>  Fri, 13 Mar 2009 14:20:15 +0000

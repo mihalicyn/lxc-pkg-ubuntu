@@ -1,0 +1,50 @@
+#!/bin/bash
+# set -ex
+
+lxcpath=@LXCPATH@
+exec=""
+
+if [ ! -r $lxcpath ]; then
+    exit 0
+fi
+
+if [ $# -eq  0 ]; then
+    echo "usage: $0 -n <name>"
+    exit 1
+fi
+
+for i in $*; do
+    case $i in
+	-n)
+	    name=$2; shift 2;;
+	--exec)
+	    exec="exec"; shift;;
+    esac
+done
+
+if [ -z "$exec" ]; then
+    exec @BINDIR@/lxc-unshare -m -- @BINDIR@/lxc-netstat -n $name --exec $*
+fi
+
+if [ -z "$name" ]; then
+    echo "usage: $0 -n <name>"
+    exit 1
+fi
+
+if [ ! -d $lxcpath/$name ]; then
+    echo "'$name' does not exists"
+    exit 1
+fi
+
+if [ ! -r $lxcpath/$name ]; then
+    echo "Can not access '$name': permission denied"
+    exit 1
+fi
+
+if [ ! -f $lxcpath/$name/init ]; then
+    exit 0
+fi
+
+initpid=$(cat $lxcpath/$name/init) && \
+    mount --bind /proc/$initpid/net /proc/$$/net && \
+    exec netstat $*

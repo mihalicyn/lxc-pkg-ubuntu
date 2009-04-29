@@ -1,0 +1,13 @@
+lxc (0.6.2-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Guido Trotter <ultrotter@debian.org>  Wed, 29 Apr 2009 17:49:13 +0100
+
+lxc (0.6.1-1) unstable; urgency=low
+
+  * Initial release (Closes: #519408)
+  * Move a few scripts to "examples"
+
+ -- Guido Trotter <ultrotter@debian.org>  Fri, 27 Mar 2009 19:45:45 +0000
+
