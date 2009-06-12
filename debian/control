@@ -5,6 +5,7 @@ Maintainer: Guido Trotter <ultrotter@debian.org>
 Build-Depends: cdbs, debhelper (>= 7), autotools-dev, autotools-dev, libcap2-dev, docbook-utils
 Standards-Version: 3.8.1
 Homepage: http://lxc.sourceforge.net/
+Vcs-Git: git://git.debian.org/git/collab-maint/lxc.git
 
 Package: lxc
 Section: admin

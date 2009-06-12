@@ -1,3 +1,12 @@
+lxc (0.6.2-2) unstable; urgency=low
+
+  * Add the vcs entry in debian/control
+  * Update README.Debian mentioning lxc-checkconfig
+  * Update README.Debian mentioning the cgroups file system (closes: #532886)
+    (Thanks to Daniel Pittman for that issue and a suggested fix)
+
+ -- Guido Trotter <ultrotter@debian.org>  Fri, 12 Jun 2009 15:27:43 +0100
+
 lxc (0.6.2-1) unstable; urgency=low
 
   * New upstream release
