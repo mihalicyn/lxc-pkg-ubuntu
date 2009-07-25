@@ -26,40 +26,43 @@
 #include <sys/types.h>
 
 #include <lxc/lxc.h>
+#include "arguments.h"
 
-void usage(char *cmd)
-{
-	fprintf(stderr, "%s <command>\n", basename(cmd));
-	fprintf(stderr, "\t -n <name>   : name of the container\n");
-	_exit(1);
-}
+static const struct option my_longopts[] = {
+	LXC_COMMON_OPTIONS
+};
+
+static struct lxc_arguments my_args = {
+	.progname = "lxc-info",
+	.help     = "\
+--name=NAME\n\
+\n\
+lxc-info display the state of a container with the identifier NAME\n\
+\n\
+Options :\n\
+  -n, --name=NAME   NAME for name of the container\n",
+	.options  = my_longopts,
+	.parser   = NULL,
+	.checker  = NULL,
+};
 
 int main(int argc, char *argv[])
 {
-	char *name = NULL;
-	int opt, state, nbargs = 0;
+	int ret, state;
 
-	while ((opt = getopt(argc, argv, "n:")) != -1) {
-		switch (opt) {
-		case 'n':
-			name = optarg;
-			break;
-		}
-
-		nbargs++;
-	}
-
-	if (!name)
-		usage(argv[0]);
-
-	state = lxc_getstate(name);
-	if (state < 0) {
-		fprintf(stderr, "failed to freeze '%s'\n", name);
+	ret = lxc_arguments_parse(&my_args, argc, argv);
+	if (ret)
 		return 1;
-	}
 
-	printf("'%s' is %s\n", name, lxc_state2str(state));
+	if (lxc_log_init(my_args.log_file, my_args.log_priority,
+			 my_args.progname, my_args.quiet))
+		return 1;
+
+	state = lxc_getstate(my_args.name);
+	if (state < 0)
+		return 1;
+
+	printf("'%s' is %s\n", my_args.name, lxc_state2str(state));
 
 	return 0;
 }
-

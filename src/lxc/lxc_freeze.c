@@ -27,38 +27,35 @@
 #include <string.h>
 
 #include <lxc/lxc.h>
+#include "arguments.h"
 
-void usage(char *cmd)
-{
-	fprintf(stderr, "%s <command>\n", basename(cmd));
-	fprintf(stderr, "\t -n <name>   : name of the container\n");
-	_exit(1);
-}
+static const struct option my_longopts[] = {
+	LXC_COMMON_OPTIONS
+};
+
+static struct lxc_arguments my_args = {
+	.progname = "lxc-freeze",
+	.help     = "\
+--name=NAME\n\
+\n\
+lxc-freeze freezes a container with the identifier NAME\n\
+\n\
+Options :\n\
+  -n, --name=NAME      NAME for name of the container",
+	.options  = my_longopts,
+	.parser   = NULL,
+	.checker  = NULL,
+};
 
 int main(int argc, char *argv[])
 {
-	char *name = NULL;
-	int opt;
-	int nbargs = 0;
+	if (lxc_arguments_parse(&my_args, argc, argv))
+		return -1;
 
-	while ((opt = getopt(argc, argv, "n:")) != -1) {
-		switch (opt) {
-		case 'n':
-			name = optarg;
-			break;
-		}
+	if (lxc_log_init(my_args.log_file, my_args.log_priority,
+			 my_args.progname, my_args.quiet))
+		return -1;
 
-		nbargs++;
-	}
-
-	if (!name)
-		usage(argv[0]);
-
-	if (lxc_freeze(name)) {
-		fprintf(stderr, "failed to freeze '%s'\n", name);
-		return 1;
-	}
-
-	return 0;
+	return lxc_freeze(my_args.name);
 }
 

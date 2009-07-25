@@ -26,39 +26,60 @@
 #include <sys/types.h>
 
 #include <lxc.h>
+#include "arguments.h"
 
-void usage(char *cmd)
+static int my_checker(const struct lxc_arguments* args)
 {
-	fprintf(stderr, "%s <statefile>\n", basename(cmd));
-	fprintf(stderr, "\t -n <name>   : name of the container\n");
-	_exit(1);
+	if (!args->statefile) {
+		lxc_error(args, "no statefile specified");
+		return -1;
+	}
+
+	return 0;
 }
+
+static int my_parser(struct lxc_arguments* args, int c, char* arg)
+{
+	switch (c) {
+	case 'd':
+		args->statefile = arg;
+		break;
+	}
+
+	return 0;
+}
+
+static const struct option my_longopts[] = {
+	{"directory", required_argument, 0, 'd'},
+	LXC_COMMON_OPTIONS
+};
+
+static struct lxc_arguments my_args = {
+	.progname = "lxc-restart",
+	.help     = "\
+--name=NAME --directory STATEFILE\n\
+\n\
+lxc-restart restarts from STATEFILE the NAME container\n\
+\n\
+Options :\n\
+  -n, --name=NAME           NAME for name of the container\n\
+  -d, --directory=STATEFILE for name of statefile\n",
+	.options  = my_longopts,
+	.parser   = my_parser,
+	.checker  = my_checker,
+};
 
 int main(int argc, char *argv[])
 {
-	char *name = NULL;
-	int opt, nbargs = 0;
+	if (lxc_arguments_parse(&my_args, argc, argv))
+		return -1;
 
-	while ((opt = getopt(argc, argv, "n:")) != -1) {
-		switch (opt) {
-		case 'n':
-			name = optarg;
-			break;
-		}
+	if (lxc_log_init(my_args.log_file, my_args.log_priority,
+			 my_args.progname, my_args.quiet))
+		return -1;
 
-		nbargs++;
-	}
-
-	if (!name)
-		usage(argv[0]);
-
-	if (!argv[1])
-		usage(argv[0]);
-
-	if (lxc_restart(name, argv[1], 0)) {
-		fprintf(stderr, "failed to restart %s\n", name);
-		return 1;
-	}
+	if (lxc_restart(my_args.name, -1, 0))
+		return -1;
 
 	return 0;
 }

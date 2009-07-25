@@ -26,38 +26,81 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <signal.h>
+#include <libgen.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/mount.h>
 #define _GNU_SOURCE
 #include <getopt.h>
+#include "lxc.h"
 
-static int mount_sysfs;
-static int mount_procfs;
+lxc_log_define(lxc_init, lxc);
+
+static char const *log_file;
+static char const *log_priority;
+static int quiet;
 
 static struct option options[] = {
-	{ "mount-sysfs", no_argument, &mount_sysfs, 1 },
-	{ "mount-procfs", no_argument, &mount_procfs, 1 },
+	{ "logfile", required_argument, 0, 'o' },
+	{ "logpriority", required_argument, 0, 'l' },
+	{ "quiet", no_argument, &quiet, 1 },
+	{ 0, 0, 0, 0 },
 };
+
+static int mount_fs(const char *source, const char *target, const char *type)
+{
+	/* sometimes the umount fails */
+	if (umount(target))
+		WARN("failed to unmount %s : %s", target, strerror(errno));
+
+	if (mount(source, target, type, 0, NULL)) {
+		ERROR("failed to mount %s : %s", target, strerror(errno));
+		return -1;
+	}
+
+	DEBUG("'%s' mounted on '%s'", source, target);
+
+	return 0;
+}
+
+static inline int setup_fs(void)
+{
+	if (mount_fs("proc", "/proc", "proc"))
+		return -1;
+
+	if (mount_fs("shmfs", "/dev/shm", "tmpfs"))
+		return -1;
+
+	return 0;
+}
 
 int main(int argc, char *argv[])
 {
 	pid_t pid;
 	int nbargs = 0;
+	int err = -1;
 	char **aargv;
 
 	while (1) {
 		int ret = getopt_long_only(argc, argv, "", options, NULL);
-		if (ret == -1)
+		if (ret == -1) {
 			break;
-		if (ret == '?')
-			exit(1);
+		}
+		switch (ret) {
+		case 'o':	log_file = optarg; break;
+		case 'l':	log_priority = optarg; break;
+		case '?':
+			exit(err);
+		}
 		nbargs++;
 	}
 
+	if (lxc_log_init(log_file, log_priority, basename(argv[0]), quiet))
+		exit(err);
+
 	if (!argv[optind]) {
-		fprintf(stderr, "missing command to launch\n");
-		exit(1);
+		ERROR("missing command to launch");
+		exit(err);
 	}
 
 	aargv = &argv[optind];
@@ -66,38 +109,51 @@ int main(int argc, char *argv[])
 	pid = fork();
 	
 	if (pid < 0)
-		exit(1);
+		exit(err);
 
 	if (!pid) {
 		
-		if (mount_sysfs && mount("sysfs", "/sys", "sysfs", 0, NULL)) {
-			fprintf(stderr, "failed to mount '/sys'\n");
-			exit(1);
-		}
-		
-		if (mount_procfs && mount("proc", "/proc", "proc", 0, NULL)) {
-			fprintf(stderr, "failed to mount '/proc'\n");
-			exit(1);
-		}
+		if (setup_fs())
+			exit(err);
+
+		NOTICE("about to exec '%s'", aargv[0]);
 
 		execvp(aargv[0], aargv);
-		fprintf(stderr, "failed to exec: %s\n", aargv[0]);
-		exit(1);
+		ERROR("failed to exec: '%s' : %s", aargv[0], strerror(errno));
+		exit(err);
 	}
 
-	
+	err = lxc_close_all_inherited_fd();
+	if (err) {
+		ERROR("unable to close inherited fds");
+		goto out;
+	}
 
+	err = 0;
 	for (;;) {
 		int status;
-		if (wait(&status) < 0) {
+		int orphan = 0;
+		pid_t waited_pid;
+
+		waited_pid = wait(&status);
+		if (waited_pid < 0) {
 			if (errno == ECHILD)
-				exit(0);
+				goto out;
 			if (errno == EINTR)
 				continue;
-			fprintf(stderr, "failed to wait child\n");
-			return 1;
+			ERROR("failed to wait child : %s", strerror(errno));
+			goto out;
 		}
-	}
 
-	return 0;
+		/*
+		 * keep the exit code of started application (not wrapped pid)
+		 * and continue to wait for the end of the orphan group.
+		 */
+		if ((waited_pid != pid) || (orphan ==1))
+			continue;
+		orphan = 1;
+		err = lxc_error_set_and_log(waited_pid, status);
+	}
+out:
+	return err;
 }

@@ -21,44 +21,69 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 #include <stdio.h>
+#include <errno.h>
 #include <unistd.h>
-#include <libgen.h>
 #include <sys/types.h>
 
 #include <lxc/lxc.h>
+#include "arguments.h"
 
-void usage(char *cmd)
+lxc_log_define(lxc_destroy, lxc);
+
+static const struct option my_longopts[] = {
+	LXC_COMMON_OPTIONS
+};
+
+static struct lxc_arguments my_args = {
+	.progname = "lxc-destroy",
+	.help     = "\
+--name=NAME\n\
+\n\
+lxc-destroy destroy a container with the identifier NAME\n\
+\n\
+Options :\n\
+  -n, --name=NAME   NAME for name of the container\n",
+	.options  = my_longopts,
+	.parser   = NULL,
+	.checker  = NULL,
+};
+
+static int remove_config_file(const char *name)
 {
-	fprintf(stderr, "%s <command>\n", basename(cmd));
-	fprintf(stderr, "\t -n <name>   : name of the container\n");
-	_exit(1);
+	char path[MAXPATHLEN];
+
+	snprintf(path, MAXPATHLEN, LXCPATH "/%s/config", name);
+
+	/* config file does not exists */
+	if (access(path, F_OK))
+		return 0;
+
+	if (unlink(path)) {
+		ERROR("failed to unlink '%s'", path);
+		return -1;
+	}
+
+	return 0;
 }
 
 int main(int argc, char *argv[])
 {
-	char *name = NULL;
-	int opt;
-	int nbargs = 0;
-	int err;
+	if (lxc_arguments_parse(&my_args, argc, argv))
+		return -1;
 
-	while ((opt = getopt(argc, argv, "n:")) != -1) {
-		switch (opt) {
-		case 'n':
-			name = optarg;
-			break;
-		}
+	if (lxc_log_init(my_args.log_file, my_args.log_priority,
+			 my_args.progname, my_args.quiet))
+		return -1;
 
-		nbargs++;
+	if (remove_config_file(my_args.name))
+		WARN("failed to remove the configuration file");
+
+	if (lxc_destroy(my_args.name)) {
+		ERROR("failed to destroy the container");
+		return -1;
 	}
 
-	if (!name)
-		usage(argv[0]);
-
-	err = lxc_destroy(name);
-	if (err) {
-		fprintf(stderr, "%s\n", lxc_strerror(err));
-		return 1;
-	}
+	INFO("'%s' destroyed", my_args.name);
 
 	return 0;
 }

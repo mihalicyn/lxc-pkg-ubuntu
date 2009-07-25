@@ -43,6 +43,7 @@ extern "C" {
 #include <lxc/error.h>
 #include <lxc/cgroup.h>
 #include <lxc/monitor.h>
+#include <lxc/start.h>
 
 /*
  * Create the container object. Creates the /lxc/<name> directory
@@ -71,7 +72,7 @@ extern int lxc_destroy(const char *name);
  * @argv     : an array of char * corresponding to the commande line
  * Returns 0 on sucess, < 0 otherwise
  */
-extern int lxc_start(const char *name, char *argv[]);
+extern int lxc_start(const char *name, char *const argv[]);
 
 /*
  * Stop the container previously started with lxc_start, all
@@ -97,7 +98,7 @@ extern int lxc_monitor(const char *name, int output_fd);
  * The function will return an fd corresponding to the events
  * Returns a file descriptor on success, < 0 otherwise
  */
-extern int lxc_monitor_open();
+extern int lxc_monitor_open(void);
 
 /*
  * Read the state of the container if this one has changed
@@ -119,6 +120,8 @@ extern int lxc_monitor_close(int fd);
 /*
  * Show the console of the container.
  * @name : the name of container
+ * @tty  : the tty number
+ * @fd   : a pointer to a tty file descriptor
  * Returns 0 on sucess, < 0 otherwise
  */
 extern int lxc_console(const char *name, int ttynum, int *fd);
@@ -181,8 +184,7 @@ extern const char *lxc_strerror(int error);
  * @flags : checkpoint flags
  * Returns 0 on success, < 0 otherwise
  */
-extern int lxc_checkpoint(const char *name, const char *statefile, 
-			unsigned long flags);
+extern int lxc_checkpoint(const char *name, int fd, unsigned long flags);
 
 /*
  * Restart a container previously frozen
@@ -191,8 +193,7 @@ extern int lxc_checkpoint(const char *name, const char *statefile,
  * @flags : restart flags
  * Returns 0 on success, < 0 otherwise
  */
-extern int lxc_restart(const char *name, const char *statefile, 
-			unsigned long flags);
+extern int lxc_restart(const char *name, int fd, unsigned long flags);
 
 /*
  * Returns the version number of the library

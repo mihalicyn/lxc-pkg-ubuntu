@@ -34,39 +34,44 @@
 
 #include <lxc/lxc.h>
 
+lxc_log_define(lxc_unshare, lxc);
+
 void usage(char *cmd)
 {
 	fprintf(stderr, "%s <options> [command]\n", basename(cmd));
 	fprintf(stderr, "Options are:\n");
-	fprintf(stderr, "\t -f      : fork and unshare (automatic when unsharing the pids)\n");
-	fprintf(stderr, "\t -m      : unshare the mount points\n");
-	fprintf(stderr, "\t -p      : unshare the pids\n");
-	fprintf(stderr, "\t -h      : unshare the utsname\n");
-	fprintf(stderr, "\t -i      : unshare the sysv ipc\n");
-	fprintf(stderr, "\t -n      : unshare the network\n");
-	fprintf(stderr, "\t -u <id> : unshare the users and set a new id\n");
-	fprintf(stderr, "\t if -f or -p is specified, <command> is mandatory)\n");
+	fprintf(stderr, "\t -s flags: Ored list of flags to unshare:\n" \
+			"\t           MOUNT, PID, UTSNAME, IPC, USER, NETWORK\n");
+	fprintf(stderr, "\t -u <id> : new id to be set if -s USER is specified\n");
+	fprintf(stderr, "\t if -f or -s PID is specified, <command> is mandatory)\n");
 	_exit(1);
 }
 
 static uid_t lookup_user(const char *optarg)
 {
+	int bufflen = sysconf(_SC_GETPW_R_SIZE_MAX);
+	char buff[bufflen];
 	char name[sysconf(_SC_LOGIN_NAME_MAX)];
 	uid_t uid = -1;
+	struct passwd pwent;
+	struct passwd *pent;
 
 	if (!optarg || (optarg[0] == '\0'))
 		return uid;
-	if (sscanf(optarg, "%u", &uid) < 1) {
-		struct passwd pwent; /* not a uid -- perhaps a username */
-		struct passwd *pent;
 
+	if (sscanf(optarg, "%u", &uid) < 1) {
+		/* not a uid -- perhaps a username */
 		if (sscanf(optarg, "%s", name) < 1)
 			return uid;
-		if (getpwnam_r(name, &pwent, NULL, 0, &pent) || !pent)
+
+		if (getpwnam_r(name, &pwent, buff, bufflen, &pent) || !pent) {
+			ERROR("invalid username %s", name);
 			return uid;
+		}
 		uid = pent->pw_uid;
 	} else {
-		if (getpwuid_r(uid, NULL, NULL, 0, NULL)) {
+		if (getpwuid_r(uid, &pwent, buff, bufflen, &pent) || !pent) {
+			ERROR("invalid uid %d", uid);
 			uid = -1;
 			return uid;
 		}
@@ -74,99 +79,126 @@ static uid_t lookup_user(const char *optarg)
 	return uid;
 }
 
+static char *namespaces_list[] = {
+	"MOUNT", "PID", "UTSNAME", "IPC",
+	"USER", "NETWORK"
+};
+static int cloneflags_list[] = {
+	CLONE_NEWNS, CLONE_NEWPID, CLONE_NEWUTS, CLONE_NEWIPC,
+	CLONE_NEWUSER, CLONE_NEWNET
+};
+
+static int lxc_namespace_2_cloneflag(char *namespace)
+{
+	int i, len;
+	len = sizeof(namespaces_list)/sizeof(namespaces_list[0]);
+	for (i = 0; i < len; i++)
+		if (!strcmp(namespaces_list[i], namespace))
+			return cloneflags_list[i];
+
+	ERROR("invalid namespace name %s", namespace);
+	return -1;
+}
+
+static int lxc_fill_namespace_flags(char *flaglist, int *flags)
+{
+	char *token, *saveptr = NULL;
+	int aflag;
+
+	if (!flaglist) {
+		ERROR("need at least one namespace to unshare");
+		return -1;
+	}
+
+	token = strtok_r(flaglist, "|", &saveptr);
+	while (token) {
+
+		aflag = lxc_namespace_2_cloneflag(token);
+		if (aflag < 0)
+			return -1;
+
+		*flags |= aflag;
+
+		token = strtok_r(NULL, "|", &saveptr);
+	}
+	return 0;
+}
+
+
+struct start_arg {
+	char ***args;
+	int *flags;
+	uid_t *uid;
+};
+
+static int do_start(void *arg)
+{
+	struct start_arg *start_arg = arg;
+	char **args = *start_arg->args;
+	int flags = *start_arg->flags;
+	uid_t uid = *start_arg->uid;
+
+	if (flags & CLONE_NEWUSER && setuid(uid)) {
+		ERROR("failed to set uid %d: %s", uid, strerror(errno));
+		exit(1);
+	}
+
+	execvp(args[0], args);
+
+	ERROR("failed to exec: '%s': %s", args[0], strerror(errno));
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
-	int opt, status = 1, hastofork = 0;
+	int opt, status;
+	int ret;
+	char *namespaces = NULL;
 	char **args;
-	long flags = 0;
+	int flags = 0;
 	uid_t uid = -1; /* valid only if (flags & CLONE_NEWUSER) */
 	pid_t pid;
 
-	while ((opt = getopt(argc, argv, "fmphiu:n")) != -1) {
+	struct start_arg start_arg = {
+		.args = &args,
+		.uid = &uid,
+		.flags = &flags,
+	};
+
+	while ((opt = getopt(argc, argv, "s:u:")) != -1) {
 		switch (opt) {
-		case 'm':
-			flags |= CLONE_NEWNS;
-			break;
-		case 'p':
-			flags |= CLONE_NEWPID;
-			break;
-		case 'h':
-			flags |= CLONE_NEWUTS;
-			break;
-		case 'i':
-			flags |= CLONE_NEWIPC;
+		case 's':
+			namespaces = optarg;
 			break;
 		case 'u':
 			uid = lookup_user(optarg);
 			if (uid == -1)
-				break;
-			flags |= CLONE_NEWUSER;
-			break;
-		case 'n':
-			flags |= CLONE_NEWNET;
-			break;
-		case 'f':
-			hastofork = 1;
-			break;
+				return 1;
 		}
 	}
 
 	args = &argv[optind];
 
-	if (!flags)
+        ret = lxc_fill_namespace_flags(namespaces, &flags);
+ 	if (ret)
 		usage(argv[0]);
 
-	if ((flags & CLONE_NEWPID) || hastofork) {
-
-		if (!argv[optind] || !strlen(argv[optind]))
-			usage(argv[0]);
-
-		pid = fork_ns(flags);
-
-		if (pid < 0) {
-			fprintf(stderr, "failed to fork into a new namespace: %s\n",
-				strerror(errno));
-			return 1;
-		}
-
-		if (!pid) {
-			if (flags & CLONE_NEWUSER && setuid(uid)) {
-				fprintf(stderr, "failed to set uid %d: %s\n",
-					uid, strerror(errno));
-				exit(1);
-			}
-
-			execvp(args[0], args);
-			fprintf(stderr, "failed to exec: '%s': %s\n",
-				argv[0], strerror(errno));
-			exit(1);
-		}
-		
-		if (waitpid(pid, &status, 0) < 0)
-			fprintf(stderr, "failed to wait for '%d'\n", pid);
-		
-		return status;
-	}
-
-	if (unshare_ns(flags)) {
-		fprintf(stderr, "failed to unshare the current process: %s\n",
-			strerror(errno));
+	if (!(flags & CLONE_NEWUSER) && uid != -1) {
+		ERROR("-u <uid> needs -s USER option");
 		return 1;
 	}
 
-	if (flags & CLONE_NEWUSER && setuid(uid)) {
-		fprintf(stderr, "failed to set uid %d: %s\n",
-			uid, strerror(errno));
-		return 1;
+	pid = lxc_clone(do_start, &start_arg, flags);
+	if (pid < 0) {
+		ERROR("failed to clone");
+		return -1;
 	}
 
-	if (argv[optind] && strlen(argv[optind])) {
-		execvp(args[0], args);
-		fprintf(stderr, "failed to exec: '%s': %s\n",
-			argv[0], strerror(errno));
-		return 1;
+	if (waitpid(pid, &status, 0) < 0) {
+		ERROR("failed to wait for '%d'", pid);
+		return -1;
 	}
 
-	return 0;
+	return status;
 }
 

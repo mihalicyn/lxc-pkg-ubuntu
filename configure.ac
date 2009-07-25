@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT([lxc], [0.6.2])
+AC_INIT([lxc], [0.6.3])
 
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_AUX_DIR([config])
@@ -11,22 +11,28 @@ AC_CANONICAL_HOST
 AM_PROG_CC_C_O
 AC_GNU_SOURCE
 AC_PROG_LIBTOOL
-AC_CHECK_PROG(SETCAP, setcap, yes, no)
+AC_CHECK_PROG(SETCAP, setcap, yes, no, $PATH$PATH_SEPARATOR/sbin)
 AC_CHECK_PROG(DOCBOOK, docbook2man, yes, no)
 AM_CONDITIONAL(ENABLE_DOCBOOK, test x$DOCBOOK = xyes)
+AS_AC_EXPAND(PREFIX, $prefix)
+AS_AC_EXPAND(LIBDIR, $libdir)
 AS_AC_EXPAND(BINDIR, $bindir)
+AS_AC_EXPAND(INCLUDEDIR, $includedir)
 AS_AC_EXPAND(LIBEXECDIR, $libexecdir)
 AS_AC_EXPAND(SYSCONFDIR, $sysconfdir)
+AS_AC_EXPAND(DATADIR, $datadir)
 AS_AC_EXPAND(LOCALSTATEDIR, $localstatedir)
 AS_AC_EXPAND(LXCPATH, "${localstatedir}/lib/lxc")
+AS_AC_EXPAND(LXC_GENERATE_DATE, "$(date)")
 
-AC_CHECK_HEADERS([linux/netlink.h linux/genetlink.h], [], AC_MSG_ERROR([netlink headers not found]),
+AC_CHECK_HEADERS([linux/netlink.h linux/genetlink.h], [], AC_MSG_ERROR([netlink headers not found. Please install the linux kernel headers.]),
 [#include <linux/types.h>
 #include <bits/sockaddr.h>
 #include <linux/socket.h>])
 
 AC_CHECK_HEADERS([sys/capability.h], [], AC_MSG_ERROR([please install libcap-devel.]),
-[#include <sys/capability.h>])
+[#include <sys/types.h>
+#include <sys/capability.h>])
 
 # Some systems lack PR_CAPBSET_DROP definition => HAVE_DECL_PR_CAPBSET_DROP
 AC_CHECK_DECLS([PR_CAPBSET_DROP], [], [], [#include <sys/prctl.h>])
@@ -49,14 +55,6 @@ AC_ARG_WITH([kernel-release],
 	[KERNEL_RELEASE="${withval}"],
 	[KERNEL_RELEASE=`uname -r`])
 
-AX_COMPARE_VERSION([$KERNEL_RELEASE], [ge], [2.6.29],
-				     AC_MSG_NOTICE([network autodestroy: yes]),
-				     AC_MSG_NOTICE([network autodestroy: no]))
-
-if test ${ax_compare_version} != "true"; then
-   CFLAGS="$CFLAGS -DNETWORK_DESTROY"
-fi
-
 AC_ARG_ENABLE(test, [  --enable-test    compile test program [default=no]],, enable_test=no)
 AM_CONDITIONAL(ENABLE_TEST, test x$enable_test = xyes)
 
@@ -66,6 +64,7 @@ AC_SUBST(LXC_MICRO_VERSION)
 
 AC_CONFIG_FILES([
         Makefile
+	lxc.pc
 	lxc.spec
         config/Makefile
 
@@ -85,6 +84,8 @@ AC_CONFIG_FILES([
 	doc/lxc-cgroup.sgml
 	doc/lxc.conf.sgml
 	doc/lxc.sgml
+	doc/common_options.sgml
+	doc/see_also.sgml
 
 	scripts/Makefile
 	scripts/lxc-debian
@@ -98,6 +99,7 @@ AC_CONFIG_FILES([
 	src/lxc/lxc-netstat
 	src/lxc/lxc-checkconfig
 	src/lxc/lxc-setcap
+	src/lxc/lxc-version
 
 	etc/Makefile
 	etc/lxc-macvlan.conf
@@ -130,9 +132,9 @@ if test "x$SETCAP" = "xno"; then
 Warning:
 --------
 
-The libcap-2 is not installed. That means the tools to
-set the privilege for the lxc commands are not available,
-that's ok, but you will need to run these commands as root
+The setcap binary was not found. This means the tools to set the
+privilege for the lxc commands are not available, that's ok, but you
+will need to run these commands as root or install libcap-2.
 
 ])
 
@@ -143,10 +145,10 @@ else
 Advice:
 -------
 
-If you which to have a non root user to use the lxc tools,
+If you wish to have a non root user to use the lxc tools,
 you can add the needed capabilities to the tools by invoking
 the 'lxc-setcap' script. To remove the capabilities, use
-'lxc-setcap -d'
+'lxc-setcap -d'.
 ])
 
 fi

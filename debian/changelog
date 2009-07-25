@@ -1,3 +1,14 @@
+lxc (0.6.3-1) unstable; urgency=low
+
+  * New Upstream Version
+  * Remove duplicate build-dependency on autotools-dev
+  * Build depend on linux-libc-dev
+  * Disable checking of netlink headers from configure
+    (currently fails under sid)
+  * Upgrade standards-version to 3.8.2
+
+ -- Guido Trotter <ultrotter@debian.org>  Sat, 25 Jul 2009 12:24:30 +0200
+
 lxc (0.6.2-2) unstable; urgency=low
 
   * Add the vcs entry in debian/control

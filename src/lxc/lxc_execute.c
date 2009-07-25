@@ -22,6 +22,7 @@
  */
 #define _GNU_SOURCE
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <libgen.h>
 #include <string.h>
@@ -32,90 +33,87 @@
 
 #include <lxc/lxc.h>
 #include "confile.h"
+#include "arguments.h"
 
-void usage(char *cmd)
+lxc_log_define(lxc_execute, lxc);
+
+static int my_checker(const struct lxc_arguments* args)
 {
-	fprintf(stderr, "%s <command>\n", basename(cmd));
-	fprintf(stderr, "\t -n <name>      : name of the container\n");
-	fprintf(stderr, "\t [-f <confile>] : path of the configuration file\n");
-	_exit(1);
+	if (!args->argc) {
+		lxc_error(args, "missing command to execute !");
+		return -1;
+	}
+	return 0;
 }
+
+static int my_parser(struct lxc_arguments* args, int c, char* arg)
+{
+	switch (c) {
+	case 'f': args->rcfile = arg; break;
+	}
+	return 0;
+}
+
+static const struct option my_longopts[] = {
+	{"rcfile", required_argument, 0, 'f'},
+	LXC_COMMON_OPTIONS
+};
+
+static struct lxc_arguments my_args = {
+	.progname = "lxc-execute",
+	.help     = "\
+--name=NAME -- COMMAND\n\
+\n\
+lxc-execute creates a container with the identifier NAME\n\
+and execs COMMAND into this container.\n\
+\n\
+Options :\n\
+  -n, --name=NAME   NAME for name of the container\n\
+  -f, --rcfile=FILE Load configuration file FILE\n",
+	.options  = my_longopts,
+	.parser   = my_parser,
+	.checker  = my_checker,
+};
 
 int main(int argc, char *argv[])
 {
-	char *name = NULL, *file = NULL;
 	static char **args;
 	char path[MAXPATHLEN];
-	int opt;
-	int nbargs = 0;
 	int autodestroy = 0;
-	int ret = 1;
+	int ret = -1;
 	struct lxc_conf lxc_conf;
 
-	while ((opt = getopt(argc, argv, "f:n:")) != -1) {
-		switch (opt) {
-		case 'n':
-			name = optarg;
-			break;
-		case 'f':
-			file = optarg;
-			break;
-		}
-
-		nbargs++;
-	}
-
-	if (!name || !argv[optind] || !strlen(argv[optind]))
-		usage(argv[0]);
-
-	argc -= nbargs;
-	
-	if (lxc_conf_init(&lxc_conf)) {
-		fprintf(stderr, "failed to initialize the configuration\n");
+	if (lxc_arguments_parse(&my_args, argc, argv))
 		goto out;
-	}
 
-	if (file && lxc_config_read(file, &lxc_conf)) {
-		fprintf(stderr, "invalid configuration file\n");
+	if (lxc_log_init(my_args.log_file, my_args.log_priority,
+			 my_args.progname, my_args.quiet))
 		goto out;
-	}
 
-	snprintf(path, MAXPATHLEN, LXCPATH "/%s", name);
+	if (lxc_conf_init(&lxc_conf))
+		goto out;
+
+	if (my_args.rcfile && lxc_config_read(my_args.rcfile, &lxc_conf))
+		goto out;
+
+	snprintf(path, MAXPATHLEN, LXCPATH "/%s", my_args.name);
 	if (access(path, R_OK)) {
-		if (lxc_create(name, &lxc_conf)) {
-			fprintf(stderr, "failed to create the container '%s'\n", name);
+		if (lxc_create(my_args.name, &lxc_conf))
 			goto out;
-		}
 		autodestroy = 1;
 	}
 
-	/* lxc-init --mount-procfs -- .... */
-	args = malloc((argc + 3)*sizeof(*args));
-	if (!args) {
-		fprintf(stderr, "failed to allocate memory for '%s'\n", name);
+	args = lxc_arguments_dup(LXCLIBEXECDIR "/lxc-init", &my_args);
+	if (!args)
 		goto out;
-	}
 
-	nbargs = 0;
-	args[nbargs++] = LXCLIBEXECDIR "/lxc-init";
-	args[nbargs++] = "--mount-procfs";
-	args[nbargs++] = "--";
-
-	for (opt = 0; opt < argc; opt++)
-		args[nbargs++] = argv[optind++];
-
-	ret = lxc_start(name, args);
-	if (ret) {
-		fprintf(stderr, "%s\n", lxc_strerror(ret));
-		goto out;
-	}
-
-	ret = 0;
+	ret = lxc_start(my_args.name, args);
 out:
 	if (autodestroy) {
-		if (lxc_destroy(name)) {
-			fprintf(stderr, "failed to destroy '%s'\n", name);
-			ret = 1;
+		if (lxc_destroy(my_args.name)) {
+			ERROR("failed to destroy '%s'", my_args.name);
+			if (!ret)
+				ret = -1;
 		}
 	}
 

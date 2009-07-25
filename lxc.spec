@@ -21,7 +21,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 Name: lxc
-Version: 0.6.2
+Version: 0.6.3
 Release: 1
 URL: http://lxc.sourceforge.net
 Source: http://dl.sourceforge.net/sourceforge/%{name}/%{name}-%{version}.tar.gz
@@ -68,8 +68,6 @@ find $RPM_BUILD_ROOT -type f -name '*.la' -exec rm -f {} ';'
 rm -rf %{buildroot}
 
 %post
-mkdir -p /var/lxc
-chmod ugo+w /var/lxc
 
 %files
 %defattr(-,root,root)
@@ -78,6 +76,7 @@ chmod ugo+w /var/lxc
 %{_bindir}/*
 %{_libexecdir}/*
 %{_mandir}/*
+%{_datadir}/pkgconfig/*
 
 %files devel
 %defattr(-,root,root)

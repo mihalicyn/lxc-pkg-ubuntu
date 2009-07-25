@@ -68,8 +68,6 @@ find $RPM_BUILD_ROOT -type f -name '*.la' -exec rm -f {} ';'
 rm -rf %{buildroot}
 
 %post
-mkdir -p /var/lxc
-chmod ugo+w /var/lxc
 
 %files
 %defattr(-,root,root)
@@ -78,6 +76,7 @@ chmod ugo+w /var/lxc
 %{_bindir}/*
 %{_libexecdir}/*
 %{_mandir}/*
+%{_datadir}/pkgconfig/*
 
 %files devel
 %defattr(-,root,root)

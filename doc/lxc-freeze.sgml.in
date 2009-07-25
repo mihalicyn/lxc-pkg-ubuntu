@@ -23,7 +23,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 -->
 
-<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN">
+<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN" [
+
+<!ENTITY commonoptions SYSTEM "@builddir@/common_options.sgml">
+<!ENTITY seealso SYSTEM "@builddir@/see_also.sgml">
+]>
 
 <refentry>
 
@@ -62,24 +66,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
   </refsect1>
 
-  <refsect1>
-    <title>Options</title>
-    <variablelist>
-
-      <varlistentry>
-	<term>
-	  <option>-n <replaceable>name</replaceable></option>
-	</term>
-	<listitem>
-	  <para>
-	    Specify the container name to be frozen.
-	  </para>
-	</listitem>
-      </varlistentry>
-
-    </variablelist>
-
-  </refsect1>
+  &commonoptions;
 
   <refsect1>
     <title>Diagnostic</title>
@@ -101,18 +88,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
   </refsect1>
 
-  <refsect1>
-    <title>See Also</title>
-
-    <simpara>    
-      <citerefentry>
-	<refentrytitle><command>lxc-unfreeze</command></refentrytitle>
-	<manvolnum>1</manvolnum>
-      </citerefentry>,
-    </simpara>
-
-
-  </refsect1>
+  &seealso;
 
   <refsect1>
     <title>Author</title>

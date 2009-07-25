@@ -39,50 +39,59 @@
 
 #include "error.h"
 #include "lxc.h"
-#include <lxc/log.h>
+#include "arguments.h"
 
 lxc_log_define(lxc_console, lxc);
 
-void usage(char *cmd)
+static int my_parser(struct lxc_arguments* args, int c, char* arg)
 {
-	fprintf(stderr, "%s <command>\n", basename(cmd));
-	fprintf(stderr, "\t -n <name>   : name of the container\n");
-	fprintf(stderr, "\t -t <tty#>   : tty number\n");
-	_exit(1);
+	switch (c) {
+	case 't': args->ttynum = atoi(arg); break;
+	}
+	return 0;
 }
+
+static const struct option my_longopts[] = {
+	{"tty", required_argument, 0, 't'},
+	LXC_COMMON_OPTIONS
+};
+
+static struct lxc_arguments my_args = {
+	.progname = "lxc-console",
+	.help     = "\
+--name=NAME [--tty NUMBER]\n\
+\n\
+lxc-console logs on the container with the identifier NAME\n\
+\n\
+Options :\n\
+  -n, --name=NAME   NAME for name of the container\n\
+  -t, --tty=NUMBER  console tty number\n",
+	.options  = my_longopts,
+	.parser   = my_parser,
+	.checker  = NULL,
+	.ttynum = -1,
+};
 
 int main(int argc, char *argv[])
 {
-	char *name = NULL;
-	int opt;
-	int ttynum = 0;
-	int nbargs = 0;
 	int master = -1;
 	int wait4q = 0;
-	int err = LXC_ERROR_INTERNAL;
+	int err;
 	struct termios tios, oldtios;
 
-	while ((opt = getopt(argc, argv, "t:n:")) != -1) {
-		switch (opt) {
-		case 'n':
-			name = optarg;
-			break;
-		case 't':
-			ttynum = atoi(optarg);
-			break;
-		}
+	err = lxc_arguments_parse(&my_args, argc, argv);
+	if (err)
+		return -1;
 
-		nbargs++;
-	}
-
-	if (!name || !ttynum)
-		usage(argv[0]);
+	if (lxc_log_init(my_args.log_file, my_args.log_priority,
+			 my_args.progname, my_args.quiet))
+		return -1;
 
 	/* Get current termios */
 	if (tcgetattr(0, &tios)) {
-		ERROR("failed to get current terminal settings");
-		fprintf(stderr, "%s\n", lxc_strerror(err));
-		return 1;
+		ERROR("failed to get current terminal settings : %s",
+		      strerror(errno));
+		return -1;
 	}
 
 	oldtios = tios;
@@ -97,16 +106,14 @@ int main(int argc, char *argv[])
 
 	/* Set new attributes */
 	if (tcsetattr(0, TCSAFLUSH, &tios)) {
-		SYSERROR("failed to set new terminal settings");
-		fprintf(stderr, "%s\n", lxc_strerror(err));
-		return 1;
+		ERROR("failed to set new terminal settings : %s",
+		      strerror(errno));
+		return -1;
 	}
 
-	err = lxc_console(name, ttynum, &master);
-	if (err) {
-		fprintf(stderr, "%s\n", lxc_strerror(err));
+	err = lxc_console(my_args.name, my_args.ttynum, &master);
+	if (err)
 		goto out;
-	}
 
 	fprintf(stderr, "\nType <Ctrl+a q> to exit the console\n");
 
@@ -183,7 +190,6 @@ out:
 	return err;
 
 out_err:
-	fprintf(stderr, "%s\n", lxc_strerror(-LXC_ERROR_INTERNAL));
-	err = 1;
+	err = -1;
 	goto out;
 }

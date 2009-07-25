@@ -38,14 +38,27 @@
 #define LXC_LOG_PREFIX_SIZE	32
 #define LXC_LOG_BUFFER_SIZE	512
 
-int lxc_log_fd = 2;
+int lxc_log_fd = -1;
 static char log_prefix[LXC_LOG_PREFIX_SIZE] = "lxc";
 
 lxc_log_define(lxc_log, lxc);
 
 /*---------------------------------------------------------------------------*/
+static int log_append_stderr(const struct lxc_log_appender *appender,
+			     struct lxc_log_event *event)
+{
+	if (event->priority < LXC_LOG_PRIORITY_ERROR)
+		return 0;
+
+	fprintf(stderr, "%s: ", log_prefix);
+	vfprintf(stderr, event->fmt, *event->vap);
+	fprintf(stderr, "\n");
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 static int log_append_logfile(const struct lxc_log_appender *appender,
-	const struct lxc_log_event *event)
+			      struct lxc_log_event *event)
 {
 	char buffer[LXC_LOG_BUFFER_SIZE];
 	int n;
@@ -62,10 +75,10 @@ static int log_append_logfile(const struct lxc_log_appender *appender,
 		     event->category);
 
 	n += vsnprintf(buffer + n, sizeof(buffer) - n, event->fmt,
-		       event->va);
+		       *event->vap);
 
 	if (n >= sizeof(buffer) - 1) {
-		WARN("truncated next event from %d to %d bytes", n,
+		WARN("truncated next event from %d to %zd bytes", n,
 		     sizeof(buffer));
 		n = sizeof(buffer) - 1;
 	}
@@ -74,6 +87,12 @@ static int log_append_logfile(const struct lxc_log_appender *appender,
 
 	return write(lxc_log_fd, buffer, n + 1);
 }
+
+static struct lxc_log_appender log_appender_stderr = {
+	.name		= "stderr",
+	.append		= log_append_stderr,
+	.next		= NULL,
+};
 
 static struct lxc_log_appender log_appender_logfile = {
 	.name		= "logfile",
@@ -127,9 +146,24 @@ static int log_open(const char *name)
 }
 
 /*---------------------------------------------------------------------------*/
-extern int lxc_log_init(const char *file, int priority, const char *prefix)
+extern int lxc_log_init(const char *file, const char *priority,
+			const char *prefix, int quiet)
 {
-	lxc_log_category_lxc.priority = priority;
+	int lxc_priority = LXC_LOG_PRIORITY_ERROR;
+
+	if (priority) {
+		lxc_priority = lxc_log_priority_to_int(priority);
+
+		if (lxc_priority == LXC_LOG_PRIORITY_NOTSET) {
+			ERROR("invalid log priority %s", priority);
+			return -1;
+		}
+	}
+
+	lxc_log_category_lxc.priority = lxc_priority;
+
+	if (!quiet)
+		lxc_log_category_lxc.appender->next = &log_appender_stderr;
 
 	if (prefix)
 		lxc_log_setprefix(prefix);

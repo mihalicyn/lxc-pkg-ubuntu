@@ -4,6 +4,7 @@ INCLUDES= -I$(top_srcdir)/src -DLXCPATH="\"@LXCPATH@\"" \
 AM_LDFLAGS= -lutil
 lib_LTLIBRARIES = liblxc.la
 pkginclude_HEADERS = \
+		start.h \
 		error.h \
 		monitor.h \
 		utils.h \
@@ -18,6 +19,7 @@ pkginclude_HEADERS = \
 
 
 liblxc_la_SOURCES = \
+	arguments.c arguments.h \
 	create.c \
 	destroy.c \
 	start.c \
@@ -27,14 +29,13 @@ liblxc_la_SOURCES = \
 	freezer.c \
 	checkpoint.c \
 	restart.c \
-	version.c \
 	error.h error.c \
 	parse.c parse.h \
 	cgroup.c cgroup.h \
 	lxc.h \
-	lxc_utils.h \
+	utils.c utils.h \
 	lock.c lock.h \
-	namespace.h \
+	namespace.h namespace.c \
 	conf.c conf.h \
 	list.h \
 	state.c state.h \
@@ -57,7 +58,8 @@ bin_SCRIPTS = \
 	lxc-netstat \
 	lxc-ls \
 	lxc-checkconfig \
-	lxc-setcap
+	lxc-setcap \
+	lxc-version
 
 bin_PROGRAMS = \
 	lxc-unshare \
@@ -74,8 +76,7 @@ bin_PROGRAMS = \
 	lxc-cgroup \
 	lxc-unfreeze \
 	lxc-checkpoint \
-	lxc-restart \
-	lxc-version
+	lxc-restart
 
 libexec_PROGRAMS = \
 	lxc-init
@@ -127,9 +128,3 @@ lxc_checkpoint_LDADD = liblxc.la
 
 lxc_restart_SOURCES = lxc_restart.c
 lxc_restart_LDADD = liblxc.la
-
-lxc_version_SOURCES = lxc_version.c
-lxc_version_LDADD = liblxc.la
-
-install-exec-local:
-	@mkdir -p $(DESTDIR)@LXCPATH@

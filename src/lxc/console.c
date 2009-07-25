@@ -37,7 +37,7 @@ lxc_log_define(lxc_console, lxc);
 extern int lxc_console(const char *name, int ttynum, int *fd)
 {
 	struct sockaddr_un addr = { 0 };
-	int sock, ret = -LXC_ERROR_TTY_EAGAIN;
+	int sock, ret = -1;
 
 	snprintf(addr.sun_path, sizeof(addr.sun_path), "@%s", name);
 	addr.sun_path[0] = '\0';
@@ -45,30 +45,33 @@ extern int lxc_console(const char *name, int ttynum, int *fd)
 	sock = lxc_af_unix_connect(addr.sun_path);
 	if (sock < 0) {
 		ERROR("failed to connect to the tty service");
-		goto out_err;
+		goto out;
 	}
 
 	ret = lxc_af_unix_send_credential(sock, &ttynum, sizeof(ttynum));
 	if (ret < 0) {
 		SYSERROR("failed to send credentials");
-		goto out_err;
+		goto out_close;
 	}
 
-	ret = lxc_af_unix_recv_fd(sock, fd, NULL, 0);
+	ret = lxc_af_unix_recv_fd(sock, fd, &ttynum, sizeof(ttynum));
 	if (ret < 0) {
 		ERROR("failed to connect to the tty");
-		goto out_err;
+		goto out_close;
 	}
 
+	INFO("tty %d allocated", ttynum);
+
 	if (!ret) {
-		ERROR("tty%d denied by '%s'", ttynum, name);
-		ret = -LXC_ERROR_TTY_DENIED;
-		goto out_err;
+		ERROR("console denied by '%s'", name);
+		goto out_close;
 	}
 
 	ret = 0;
 
-out_err:
-	close(sock);
+out:
 	return ret;
+out_close:
+	close(sock);
+	goto out;
 }

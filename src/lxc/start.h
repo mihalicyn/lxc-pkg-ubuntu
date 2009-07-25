@@ -21,9 +21,15 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
-#include "../config.h"
+struct lxc_handler;
 
-const char const* lxc_version(void)
-{
-	return PACKAGE_VERSION;
-}
+extern struct lxc_handler *lxc_init(const char *name);
+extern int lxc_spawn(const char *name, struct lxc_handler *handler,
+		     char *const argv[]);
+
+extern int lxc_poll(const char *name, struct lxc_handler *handler);
+extern void lxc_abort(const char *name, struct lxc_handler *handler);
+extern void lxc_fini(const char *name, struct lxc_handler *handler);
+
+
+

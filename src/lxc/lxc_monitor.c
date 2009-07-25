@@ -21,6 +21,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <libgen.h>
 #include <unistd.h>
@@ -28,55 +29,58 @@
 #include <sys/types.h>
 
 #include <lxc/lxc.h>
+#include "arguments.h"
 
-void usage(char *cmd)
-{
-	fprintf(stderr, "%s <command>\n", basename(cmd));
-	fprintf(stderr, "\t -n <name>   : name of the container or regular expression\n");
-	_exit(1);
-}
+lxc_log_define(monitor, lxc);
+
+static const struct option my_longopts[] = {
+	LXC_COMMON_OPTIONS
+};
+
+static struct lxc_arguments my_args = {
+	.progname = "lxc-monitor",
+	.help     = "\
+--name=NAME\n\
+\n\
+lxc-monitor monitors the state of the NAME container\n\
+\n\
+Options :\n\
+  -n, --name=NAME   NAME for name of the container\n\
+                    NAME may be a regular expression",
+	.options  = my_longopts,
+	.parser   = NULL,
+	.checker  = NULL,
+};
 
 int main(int argc, char *argv[])
 {
-	char *name = NULL;
 	char *regexp;
 	struct lxc_msg msg;
 	regex_t preg;
-	int fd, opt;
+	int fd;
 
-	while ((opt = getopt(argc, argv, "n:")) != -1) {
-		switch (opt) {
-		case 'n':
-			name = optarg;
-			break;
-		}
-	}
+	if (lxc_arguments_parse(&my_args, argc, argv))
+		return -1;
 
-	if (!name)
-		usage(argv[0]);
+	if (lxc_log_init(my_args.log_file, my_args.log_priority,
+			 my_args.progname, my_args.quiet))
+		return -1;
 
-	regexp = malloc(strlen(name) + 3);
-	sprintf(regexp, "^%s$", name);
+	regexp = malloc(strlen(my_args.name) + 3);
+	sprintf(regexp, "^%s$", my_args.name);
 
 	if (regcomp(&preg, regexp, REG_NOSUB|REG_EXTENDED)) {
-		fprintf(stderr, "failed to compile the regex '%s'\n",
-			name);
-		return 1;
-	}
-
-	fd = lxc_monitor_open();
-	if (fd < 0) {
-		fprintf(stderr, "failed to open monitor for '%s'\n", name);
+		ERROR("failed to compile the regex '%s'", my_args.name);
 		return -1;
 	}
 
+	fd = lxc_monitor_open();
+	if (fd < 0)
+		return -1;
+
 	for (;;) {
-		if (lxc_monitor_read(fd, &msg) < 0) {
-			fprintf(stderr, 
-				"failed to read monitor's message for '%s'\n", 
-				name);
+		if (lxc_monitor_read(fd, &msg) < 0)
 			return -1;
-		}
 
 		if (regexec(&preg, msg.name, 0, NULL, 0))
 			continue;

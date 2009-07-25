@@ -23,7 +23,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 -->
 
-<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN">
+<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN" [
+
+<!ENTITY commonoptions SYSTEM "@builddir@/common_options.sgml">
+<!ENTITY seealso SYSTEM "@builddir@/see_also.sgml">
+]>
 
 <refentry>
 
@@ -45,7 +49,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
   <refsynopsisdiv>
     <cmdsynopsis>
       <command>lxc-console <replaceable>-n name</replaceable>
-	<replaceable>-t ttynum</replaceable>
+	<optional>-t ttynum</optional>
       </command>
     </cmdsynopsis>
   </refsynopsisdiv>
@@ -56,7 +60,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
     <para>
       If the tty service has been configured and is available for the
       container specified as parameter, this command will launch a
-      console allowing to log to the container.
+      console allowing to log on the container.
     </para>
 
     <para>
@@ -80,22 +84,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
       <varlistentry>
 	<term>
-	  <option>-n <replaceable>name</replaceable></option>
+	  <option>-t <optional>ttynum</optional></option>
 	</term>
 	<listitem>
 	  <para>
-	    Specify the container name to open a console.
-	  </para>
-	</listitem>
-      </varlistentry>
-
-      <varlistentry>
-	<term>
-	  <option>-t <replaceable>ttynum</replaceable></option>
-	</term>
-	<listitem>
-	  <para>
-	    Specify the tty number to connect.
+	    Specify the tty number to connect, if not specified a tty
+	    number will be automatically choosen by the container.
 	  </para>
 	</listitem>
       </varlistentry>
@@ -103,6 +97,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
     </variablelist>
 
   </refsect1>
+
+  &commonoptions;
 
   <refsect1>
     <title>Diagnostic</title>
@@ -124,18 +120,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
   </refsect1>
 
-  <refsect1>
-    <title>See Also</title>
-
-    <simpara>    
-      <citerefentry>
-	<refentrytitle><command>lxc.conf</command></refentrytitle>
-	<manvolnum>5</manvolnum>
-      </citerefentry>
-    </simpara>
-
-
-  </refsect1>
+  &seealso;
 
   <refsect1>
     <title>Author</title>

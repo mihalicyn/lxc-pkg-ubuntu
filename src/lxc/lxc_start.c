@@ -26,72 +26,146 @@
 #include <string.h>
 #include <termios.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <sys/param.h>
 #include <sys/utsname.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <net/if.h>
 
 #include <lxc/lxc.h>
 #include <lxc/log.h>
+#include "arguments.h"
 
 lxc_log_define(lxc_start, lxc);
 
-void usage(char *cmd)
+static int my_parser(struct lxc_arguments* args, int c, char* arg)
 {
-	fprintf(stderr, "%s <command>\n", basename(cmd));
-	fprintf(stderr, "\t -n <name>   : name of the container\n");
-	_exit(1);
+	switch (c) {
+	case 'd': args->daemonize = 1; break;
+	}
+	return 0;
+}
+
+static const struct option my_longopts[] = {
+	{"daemon", no_argument, 0, 'd'},
+	LXC_COMMON_OPTIONS
+};
+
+static struct lxc_arguments my_args = {
+	.progname = "lxc-start",
+	.help     = "\
+--name=NAME -- COMMAND\n\
+\n\
+lxc-start start COMMAND in specified container NAME\n\
+\n\
+Options :\n\
+  -n, --name=NAME      NAME for name of the container\n\
+  -d, --daemon         daemonize the container",
+	.options   = my_longopts,
+	.parser    = my_parser,
+	.checker   = NULL,
+	.daemonize = 0,
+};
+
+static int save_tty(struct termios *tios)
+{
+	if (!isatty(0))
+		return 0;
+
+	if (tcgetattr(0, tios))
+		WARN("failed to get current terminal settings : %s",
+		     strerror(errno));
+
+	return 0;
+}
+
+static int restore_tty(struct termios *tios)
+{
+	struct termios current_tios;
+	void (*oldhandler)(int);
+	int ret;
+
+	if (!isatty(0))
+		return 0;
+
+	if (tcgetattr(0, &current_tios)) {
+		ERROR("failed to get current terminal settings : %s",
+		      strerror(errno));
+		return -1;
+	}
+
+	if (!memcmp(tios, &current_tios, sizeof(*tios)))
+		return 0;
+
+
+	oldhandler = signal(SIGTTOU, SIG_IGN);
+	ret = tcsetattr(0, TCSADRAIN, tios);
+	if (ret)
+		ERROR("failed to restore terminal attributes");
+	signal(SIGTTOU, oldhandler);
+
+	return ret;
 }
 
 int main(int argc, char *argv[])
 {
-	char *name = NULL;
-	char **args;
-	int opt, err = LXC_ERROR_INTERNAL, nbargs = 0;
+	char *const *args;
+	int err = -1;
 	struct termios tios;
 
-	char *default_args[] = {
+	char *const default_args[] = {
 		"/sbin/init",
 		'\0',
 	};
 
-	while ((opt = getopt(argc, argv, "n:")) != -1) {
-		switch (opt) {
-		case 'n':
-			name = optarg;
-			break;
+	if (lxc_arguments_parse(&my_args, argc, argv))
+		return err;
+
+	if (!my_args.argc)
+		args = default_args; 
+	else
+		args = my_args.argv;
+
+	if (lxc_log_init(my_args.log_file, my_args.log_priority,
+			 my_args.progname, my_args.quiet))
+		return err;
+
+	if (my_args.daemonize) {
+
+                /* do not chdir as we want to open the log file,
+		 * change the directory right after.
+		 * do not close 0, 1, 2, we want to do that
+		 * ourself because we don't want /dev/null
+		 * being reopened.
+		 */
+		if (daemon(1, 1)) {
+			SYSERROR("failed to daemonize '%s'", my_args.name);
+			return err;
 		}
 
-		nbargs++;
+		lxc_close_inherited_fd(0);
+		lxc_close_inherited_fd(1);
+		lxc_close_inherited_fd(2);
+
+		if (my_args.log_file) {
+			open(my_args.log_file, O_WRONLY | O_CLOEXEC);
+			open(my_args.log_file, O_RDONLY | O_CLOEXEC);
+			open(my_args.log_file, O_RDONLY | O_CLOEXEC);
+		}
+
+		chdir("/");
 	}
 
-	if (!argv[optind] || !strlen(argv[optind]))
-		args = default_args; 
-	else {
-		args = &argv[optind];
-		argc -= nbargs;
-	}
+	save_tty(&tios);
 
-	if (!name)
-		usage(argv[0]);
+	err = lxc_start(my_args.name, args);
 
-	if (tcgetattr(0, &tios)) {
-		ERROR("failed to get current terminal settings");
-		fprintf(stderr, "%s\n", lxc_strerror(err));
-		return 1;
-	}
-
-	err = lxc_start(name, args);
-	if (err) {
-		fprintf(stderr, "%s\n", lxc_strerror(err));
-		err = 1;
-	}
-
-	if (tcsetattr(0, TCSAFLUSH, &tios))
-		SYSERROR("failed to restore terminal attributes");
+	restore_tty(&tios);
 
 	return err;
 }
