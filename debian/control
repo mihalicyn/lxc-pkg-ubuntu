@@ -2,8 +2,8 @@ Source: lxc
 Section: admin
 Priority: optional
 Maintainer: Guido Trotter <ultrotter@debian.org>
-Build-Depends: cdbs, debhelper (>= 7), autotools-dev, libcap2-dev, docbook-utils, linux-libc-dev
-Standards-Version: 3.8.2
+Build-Depends: cdbs, debhelper (>= 7), autotools-dev, libcap-dev, linux-libc-dev
+Standards-Version: 3.8.3
 Homepage: http://lxc.sourceforge.net/
 Vcs-Git: git://git.debian.org/git/collab-maint/lxc.git
 

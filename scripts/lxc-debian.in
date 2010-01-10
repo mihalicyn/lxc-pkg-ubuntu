@@ -136,7 +136,6 @@ lxc.network.flags = up
 lxc.network.link = br0
 lxc.network.name = eth0
 lxc.network.mtu = $MTU
-lxc.mount = $TMPMNTFILE
 lxc.rootfs = $ROOTFS
 lxc.cgroup.devices.deny = a
 # /dev/null and zero
@@ -155,14 +154,17 @@ lxc.cgroup.devices.allow = c 5:2 rwm
 # rtc
 lxc.cgroup.devices.allow = c 254:0 rwm
 EOF
+
+	if [ ! -z "$TMPMNTFILE" ]; then
+		cat $TMPMNTFILE >> $CONFFILE
+	fi
 }
 
 write_lxc_mounts() {
 
-    TMPMNTFILE=$(mktemp lxc.XXXXXXXXXX)
-
     if [ ! -z "$MNTFILE" ]; then
-	cp $MNTFILE $TMPMNTFILE
+	TMPMNTFILE=$(mktemp lxc.$NAME.XXXXXXXXXX)
+	sed -e 's/^\(.*\)/lxc.mount.entry=&/' $MNTFILE >$TMPMNTFILE
     fi
 }
 

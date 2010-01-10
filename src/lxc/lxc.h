@@ -27,52 +27,24 @@
 extern "C" {
 #endif
 
+#include <stddef.h>
+#include <lxc/state.h>
+
+struct lxc_msg;
+
 /**
  Following code is for liblxc.
 
  lxc/lxc.h will contain exports of liblxc
  **/
 
-#include <lxc/state.h>
-#include <lxc/list.h>
-#include <lxc/log.h>
-#include <lxc/conf.h>
-#include <lxc/lock.h>
-#include <lxc/namespace.h>
-#include <lxc/utils.h>
-#include <lxc/error.h>
-#include <lxc/cgroup.h>
-#include <lxc/monitor.h>
-#include <lxc/start.h>
-
 /*
- * Create the container object. Creates the /lxc/<name> directory
- * and fills it with the files corresponding to the configuration
- * structure passed as parameter.
- * The first container will create the /lxc directory.
- * @name : the name of the container
- * @conf : the configuration data for the container
- * Returns 0 on success, < 0 otherwise
- */
-extern int lxc_create(const char *name, struct lxc_conf *conf);
-
-/*
- * Destroy the container object. Removes the files into the /lxc/<name>
- * directory and removes the <name> directory.
- * The last container will remove the /lxc directory.
- * @name : the name of the container to be detroyed
- * Returns 0 on success, < 0 otherwise
- */
-extern int lxc_destroy(const char *name);
-
-/*
- * Start the specified command inside a container which has
- * been created before with lxc_create.
+ * Start the specified command inside a container
  * @name     : the name of the container
  * @argv     : an array of char * corresponding to the commande line
  * Returns 0 on sucess, < 0 otherwise
  */
-extern int lxc_start(const char *name, char *const argv[]);
+extern int lxc_start(const char *name, char *const argv[], const char *rcfile);
 
 /*
  * Stop the container previously started with lxc_start, all
@@ -81,17 +53,6 @@ extern int lxc_start(const char *name, char *const argv[]);
  * Returns 0 on success, < 0 otherwise
  */
 extern int lxc_stop(const char *name);
-
-/*
- * Monitor the container, each time the state of the container
- * is changed, a state data is send through a file descriptor passed to
- * the function with output_fd.
- * The function will block until the container is destroyed.
- * @name : the name of the container
- * @output_fd : the file descriptor where to send the states
- * Returns 0 on success, < 0 otherwise
- */
-extern int lxc_monitor(const char *name, int output_fd);
 
 /*
  * Open the monitoring mechanism for a specific container
@@ -164,7 +125,7 @@ extern int lxc_cgroup_set(const char *name, const char *subsystem, const char *v
  * @subsystem : the subsystem
  * @value     : the value to be set
  * @len       : the len of the value variable
- * Returns 0 on success, < 0 otherwise
+ * Returns the number of bytes read, < 0 on error
  */
 extern int lxc_cgroup_get(const char *name, const char *subsystem, 
 			  char *value, size_t len);
@@ -178,22 +139,25 @@ extern int lxc_cgroup_get(const char *name, const char *subsystem,
 extern const char *lxc_strerror(int error);
 
 /*
- * Checkpoint a container previously frozen
+ * Checkpoint a container
  * @name : the name of the container being checkpointed
- * @fd : file descriptor on which the container is checkpointed
- * @flags : checkpoint flags
+ * @statefile: string object on which the container is checkpointed
+ * @flags : checkpoint flags (an ORed value)
  * Returns 0 on success, < 0 otherwise
  */
-extern int lxc_checkpoint(const char *name, int fd, unsigned long flags);
+extern int lxc_checkpoint(const char *name, const char *statefile, int flags);
+#define LXC_FLAG_PAUSE 1
+#define LXC_FLAG_HALT  2
 
 /*
- * Restart a container previously frozen
+ * Restart a container
  * @name : the name of the container being restarted
- * @fd : file descriptor from which the container is restarted
- * @flags : restart flags
+ * @statefile: string object from which the container is restarted
+ * @rcfile: container configuration file.
+ * @flags : restart flags (an ORed value)
  * Returns 0 on success, < 0 otherwise
  */
-extern int lxc_restart(const char *name, int fd, unsigned long flags);
+extern int lxc_restart(const char *, const char *, const char *, int);
 
 /*
  * Returns the version number of the library

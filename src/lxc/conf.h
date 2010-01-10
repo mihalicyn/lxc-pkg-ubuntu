@@ -26,6 +26,8 @@
 #include <netinet/in.h>
 #include <sys/param.h>
 
+#include <lxc/list.h>
+
 enum {
 	EMPTY,
 	VETH,
@@ -69,33 +71,22 @@ struct lxc_route6 {
 };
 /*
  * Defines a structure to configure a network device
- * @ifname : network device name
+ * @link   : lxc.network.link, name of bridge or host iface to attach if any
+ * @name   : lxc.network.name, name of iface on the container side
  * @flags  : flag of the network device (IFF_UP, ... )
  * @ipv4   : a list of ipv4 addresses to be set on the network device
  * @ipv6   : a list of ipv6 addresses to be set on the network device
  */
 struct lxc_netdev {
+	int type;
 	int flags;
-	char *ifname;
-	char *newname;
+	int ifindex;
+	char *link;
+	char *name;
 	char *hwaddr;
 	char *mtu;
 	struct lxc_list ipv4;
 	struct lxc_list ipv6;
-	struct lxc_list route4;
-	struct lxc_list route6;
-};
-
-/*
- * Defines the kind of the network to use
- * @type : the type of the network virtualization
- * @phys : phys configuration type
- * @veth : veth configuration type
- * @macvlan : macvlan configuration type
- */
-struct lxc_network {
-	int type;
-	struct lxc_list netdev;
 };
 
 /*
@@ -107,23 +98,6 @@ struct lxc_network {
 struct lxc_cgroup {
 	char *subsystem;
 	char *value;
-};
-
-/*
- * Defines the global container configuration
- * @rootfs  : the root directory to run the container
- * @mount   : the list of mount points
- * @network : the network configuration
- * @utsname : the container utsname
- */
-struct lxc_conf {
-	char *rootfs;
-	char *fstab;
-	int tty;
-	int pts;
-	struct utsname *utsname;
-	struct lxc_list cgroup;
-	struct lxc_list networks;
 };
 
 /*
@@ -151,32 +125,43 @@ struct lxc_tty_info {
 };
 
 /*
+ * Defines the global container configuration
+ * @rootfs  : the root directory to run the container
+ * @mount   : the list of mount points
+ * @network : the network configuration
+ * @utsname : the container utsname
+ */
+struct lxc_conf {
+	char *rootfs;
+	char *fstab;
+	int tty;
+	int pts;
+	struct utsname *utsname;
+	struct lxc_list cgroup;
+	struct lxc_list network;
+	struct lxc_list mount_list;
+	struct lxc_tty_info tty_info;
+	char console[MAXPATHLEN];
+};
+
+/*
  * Initialize the lxc configuration structure
  */
 extern int lxc_conf_init(struct lxc_conf *conf);
 
-/*
- * Configure the external resources for the container
- */
-extern int lxc_configure(const char *name, struct lxc_conf *conf);
+extern int lxc_create_network(struct lxc_list *networks);
+extern int lxc_assign_network(struct lxc_list *networks, pid_t pid);
 
-/*
- * Remove the resources created by the configuration
- */
-extern int lxc_unconfigure(const char *name);
-
-extern int conf_create_network(const char *name, pid_t pid);
-
-extern int conf_destroy_network(const char *name);
-
-extern int lxc_create_tty(const char *name, struct lxc_tty_info *tty_info);
+extern int lxc_create_tty(const char *name, struct lxc_conf *conf);
 extern void lxc_delete_tty(struct lxc_tty_info *tty_info);
 
 /*
  * Configure the container from inside
  */
-extern int lxc_setup(const char *name, const char *tty,
-		     const struct lxc_tty_info *tty_info);
+
+struct lxc_handler;
+
+extern int lxc_setup(const char *name, struct lxc_conf *lxc_conf);
 
 extern int conf_has(const char *name, const char *info);
 

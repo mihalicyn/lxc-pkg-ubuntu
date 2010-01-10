@@ -25,12 +25,10 @@
 
 typedef enum {
 	STOPPED, STARTING, RUNNING, STOPPING,
-	ABORTING, FREEZING, FROZEN, MAX_STATE,
+	ABORTING, FREEZING, FROZEN, THAWED, MAX_STATE,
 } lxc_state_t;
 
-extern int lxc_mkstate(const char *name);
 extern int lxc_rmstate(const char *name);
-extern int lxc_setstate(const char *name, lxc_state_t state);
 extern lxc_state_t lxc_getstate(const char *name);
 
 extern lxc_state_t lxc_str2state(const char *state);

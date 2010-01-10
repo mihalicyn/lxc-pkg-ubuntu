@@ -29,47 +29,75 @@
 #include <sys/signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <fcntl.h>
 
-#include <lxc/lxc.h>
 #include <lxc/log.h>
+#include <lxc/start.h>
+
+#include "commands.h"
 
 lxc_log_define(lxc_stop, lxc);
 
-#define MAXPIDLEN 20
-
 int lxc_stop(const char *name)
 {
-	char init[MAXPATHLEN];
-	char val[MAXPIDLEN];
-	int fd, ret = -1;
-	size_t pid;
+	struct lxc_command command = {
+		.request = { .type = LXC_COMMAND_STOP },
+	};
 
-	if (lxc_check_lock(name) < 0)
-		return ret;
+	int ret, stopped = 0;
 
-	snprintf(init, MAXPATHLEN, LXCPATH "/%s/init", name);
-	fd = open(init, O_RDONLY);
-	if (fd < 0) {
-		SYSERROR("failed to open init file for %s", name);
-		goto out_close;
+	ret = lxc_command(name, &command,&stopped);
+	if (ret < 0 && stopped) {
+		INFO("'%s' is already stopped", name);
+		return 0;
 	}
 
-	if (read(fd, val, sizeof(val)) < 0) {
-		SYSERROR("failed to read %s", init);
-		goto out_close;
+	if (ret < 0) {
+		ERROR("failed to send command");
+		return -1;
 	}
 
-	pid = atoi(val);
-
-	if (kill(pid, SIGKILL)) {
-		SYSERROR("failed to kill %zd", pid);
-		goto out_close;
+	/* we do not expect any answer, because we wait for the connection to be
+	 * closed
+	 */
+	if (ret > 0) {
+		ERROR("failed to stop '%s': %s",
+			name, strerror(-command.answer.ret));
+		return -1;
 	}
 
-	ret = 0;
+	INFO("'%s' has stopped", name);
 
-out_close:
-	close(fd);
-	return ret;
+	return 0;
 }
+
+/*----------------------------------------------------------------------------
+ * functions used by lxc-start mainloop
+ * to handle above command request.
+ *--------------------------------------------------------------------------*/
+extern int lxc_stop_callback(int fd, struct lxc_request *request,
+			struct lxc_handler *handler)
+{
+	struct lxc_answer answer;
+	int ret;
+
+	answer.ret = kill(handler->pid, SIGKILL);
+	if (!answer.ret)
+		return 0;
+
+	ret = send(fd, &answer, sizeof(answer), 0);
+	if (ret < 0) {
+		WARN("failed to send answer to the peer");
+		goto out;
+	}
+
+	if (ret != sizeof(answer)) {
+		ERROR("partial answer sent");
+		goto out;
+	}
+
+out:
+	return -1;
+}
+

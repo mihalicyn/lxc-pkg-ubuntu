@@ -31,14 +31,16 @@
 #include <sys/stat.h>
 #include <sys/file.h>
 
-#include <lxc/lxc.h>
 #include <lxc/log.h>
+#include <lxc/start.h>
+#include "commands.h"
+#include "config.h"
 
 lxc_log_define(lxc_state, lxc);
 
 static char *strstate[] = {
 	"STOPPED", "STARTING", "RUNNING", "STOPPING",
-	"ABORTING", "FREEZING", "FROZEN",
+	"ABORTING", "FREEZING", "FROZEN", "THAWED",
 };
 
 const char *lxc_state2str(lxc_state_t state)
@@ -60,64 +62,6 @@ lxc_state_t lxc_str2state(const char *state)
 	return -1;
 }
 
-int lxc_setstate(const char *name, lxc_state_t state)
-{
-	int fd, err = -1;
-	char file[MAXPATHLEN];
-	const char *str = lxc_state2str(state);
-
-	if (!str)
-		return err;
-
-	snprintf(file, MAXPATHLEN, LXCPATH "/%s/state", name);
-
-	fd = open(file, O_WRONLY);
-	if (fd < 0) {
-		SYSERROR("failed to open %s file", file);
-		return err;
-	}
-
-	if (flock(fd, LOCK_EX)) {
-		SYSERROR("failed to take the lock to %s", file);
-		goto out;
-	}
-
-	if (ftruncate(fd, 0)) {
-		SYSERROR("failed to truncate the file %s", file);
-		goto out;
-	}
-
-	if (write(fd, str, strlen(str)) < 0) {
-		SYSERROR("failed to write state to %s", file);
-		goto out;
-	}
-
-	err = 0;
-
-	DEBUG("set state to '%s'", str);
-out:
-	close(fd);
-
-	lxc_monitor_send_state(name, state);
-
-	return err;
-}
-
-int lxc_mkstate(const char *name)
-{
-	int fd;
-	char file[MAXPATHLEN];
-
-	snprintf(file, MAXPATHLEN, LXCPATH "/%s/state", name);
-	fd = creat(file, S_IRUSR|S_IWUSR);
-	if (fd < 0) {
-		SYSERROR("failed to create file %s", file);
-		return -1;
-	}
-	close(fd);
-	return 0;
-}
-
 int lxc_rmstate(const char *name)
 {
 	char file[MAXPATHLEN];
@@ -126,46 +70,19 @@ int lxc_rmstate(const char *name)
 	return 0;
 }
 
-lxc_state_t lxc_getstate(const char *name)
-{
-	int fd, err;
-	char file[MAXPATHLEN];
-
-	snprintf(file, MAXPATHLEN, LXCPATH "/%s/state", name);
-
-	fd = open(file, O_RDONLY);
-	if (fd < 0) {
-		SYSERROR("failed to open %s", file);
-		return -1;
-	}
-
-	if (flock(fd, LOCK_SH)) {
-		SYSERROR("failed to take the lock to %s", file);
-		close(fd);
-		return -1;
-	}
-
-	err = read(fd, file, strlen(file));
-	if (err < 0) {
-		SYSERROR("failed to read file %s", file);
-		close(fd);
-		return -1;
-	}
-	file[err] = '\0';
-
-	close(fd);
-	return lxc_str2state(file);
-}
-
 static int freezer_state(const char *name)
 {
+	char *nsgroup;
 	char freezer[MAXPATHLEN];
 	char status[MAXPATHLEN];
 	FILE *file;
 	int err;
 
-	snprintf(freezer, MAXPATHLEN,
-		 LXCPATH "/%s/freezer.state", name);
+	err = lxc_cgroup_path_get(&nsgroup, name);
+	if (err)
+		return -1;
+
+	snprintf(freezer, MAXPATHLEN, "%s/freezer.state", nsgroup);
 
 	file = fopen(freezer, "r");
 	if (!file)
@@ -182,10 +99,71 @@ static int freezer_state(const char *name)
 	return lxc_str2state(status);
 }
 
-lxc_state_t lxc_state(const char *name)
+static lxc_state_t __lxc_getstate(const char *name)
+{
+	struct lxc_command command = {
+		.request = { .type = LXC_COMMAND_STATE },
+	};
+
+	int ret, stopped = 0;
+
+	ret = lxc_command(name, &command, &stopped);
+	if (ret < 0 && stopped)
+		return STOPPED;
+
+	if (ret < 0) {
+		ERROR("failed to send command");
+		return -1;
+	}
+
+	if (!ret) {
+		WARN("'%s' has stopped before sending its state", name);
+		return -1;
+	}
+
+	if (command.answer.ret < 0) {
+		ERROR("failed to get state for '%s': %s",
+			name, strerror(-command.answer.ret));
+		return -1;
+	}
+
+	DEBUG("'%s' is in '%s' state", name, lxc_state2str(command.answer.ret));
+
+	return command.answer.ret;
+}
+
+lxc_state_t lxc_getstate(const char *name)
 {
 	int state = freezer_state(name);
 	if (state != FROZEN && state != FREEZING)
-		state = lxc_getstate(name);
+		state = __lxc_getstate(name);
 	return state;
 }
+
+/*----------------------------------------------------------------------------
+ * functions used by lxc-start mainloop
+ * to handle above command request.
+ *--------------------------------------------------------------------------*/
+extern int lxc_state_callback(int fd, struct lxc_request *request,
+			struct lxc_handler *handler)
+{
+	struct lxc_answer answer;
+	int ret;
+
+	answer.ret = handler->state;
+
+	ret = send(fd, &answer, sizeof(answer), 0);
+	if (ret < 0) {
+		WARN("failed to send answer to the peer");
+		goto out;
+	}
+
+	if (ret != sizeof(answer)) {
+		ERROR("partial answer sent");
+		goto out;
+	}
+
+out:
+	return ret;
+}
+

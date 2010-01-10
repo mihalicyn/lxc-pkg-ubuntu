@@ -21,7 +21,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 Name: lxc
-Version: 0.6.3
+Version: 0.6.4
 Release: 1
 URL: http://lxc.sourceforge.net
 Source: http://dl.sourceforge.net/sourceforge/%{name}/%{name}-%{version}.tar.gz
@@ -71,18 +71,17 @@ rm -rf %{buildroot}
 
 %files
 %defattr(-,root,root)
-%{_sysconfdir}/%{name}/*
 %{_libdir}/*.so*
 %{_bindir}/*
 %{_libexecdir}/*
 %{_mandir}/*
 %{_datadir}/pkgconfig/*
+%{_docdir}/%{name}/*
 
 %files devel
 %defattr(-,root,root)
 %{_includedir}/%{name}/*
 %{_libdir}/*.so*
-%{_libdir}/*.a
 
 %changelog
 

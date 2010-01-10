@@ -20,16 +20,31 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
+#ifndef __lxc_state_h
+#define __lxc_state_h
 
-struct lxc_handler;
+#include <lxc/conf.h>
+#include <lxc/state.h>
 
-extern struct lxc_handler *lxc_init(const char *name);
+struct lxc_handler {
+
+	pid_t pid;
+	lxc_state_t state;
+
+	int sigfd;
+	char nsgroup[MAXPATHLEN];
+	sigset_t oldmask;
+	struct lxc_conf conf;
+};
+
+extern struct lxc_handler *lxc_init(const char *name, const char *rcfile);
 extern int lxc_spawn(const char *name, struct lxc_handler *handler,
 		     char *const argv[]);
 
 extern int lxc_poll(const char *name, struct lxc_handler *handler);
 extern void lxc_abort(const char *name, struct lxc_handler *handler);
 extern void lxc_fini(const char *name, struct lxc_handler *handler);
+extern int lxc_set_state(const char *, struct lxc_handler *, lxc_state_t);
 
-
+#endif
 

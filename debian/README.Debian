@@ -14,7 +14,7 @@ correct kernel version or build your own kernel.
 If you want to make container usable by non-root users, run lxc-setcap as root,
 and some capabilities will be set so that normal users will be able to use the
 container utils. This is not done by default, though, and you have to
-explicitely allow it.
+explicitly allow it.
 
 lxc uses the control groups file system to control the various container
 features. In order for this to work the cgroup filesystem must be mounted

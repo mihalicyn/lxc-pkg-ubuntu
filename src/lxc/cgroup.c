@@ -37,13 +37,17 @@
 #include <net/if.h>
 
 #include "error.h"
+#include "config.h"
 
-#include <lxc/lxc.h>
 #include <lxc/log.h>
+#include <lxc/cgroup.h>
+#include <lxc/start.h>
 
 lxc_log_define(lxc_cgroup, lxc);
 
 #define MTAB "/etc/mtab"
+
+static char nsgroup_path[MAXPATHLEN];
 
 static int get_cgroup_mount(const char *mtab, char *mnt)
 {
@@ -81,10 +85,10 @@ out:
         return err;
 }
 
-int lxc_rename_nsgroup(const char *name, pid_t pid)
+int lxc_rename_nsgroup(const char *name, struct lxc_handler *handler)
 {
 	char oldname[MAXPATHLEN];
-	char newname[MAXPATHLEN];
+	char *newname = handler->nsgroup;
 	char cgroup[MAXPATHLEN];
 	int ret;
 
@@ -93,7 +97,7 @@ int lxc_rename_nsgroup(const char *name, pid_t pid)
 		return -1;
 	}
 
-	snprintf(oldname, MAXPATHLEN, "%s/%d", cgroup, pid);
+	snprintf(oldname, MAXPATHLEN, "%s/%d", cgroup, handler->pid);
 	snprintf(newname, MAXPATHLEN, "%s/%s", cgroup, name);
 
 	/* there is a previous cgroup, assume it is empty, otherwise
@@ -113,12 +117,12 @@ int lxc_rename_nsgroup(const char *name, pid_t pid)
 	else
 		DEBUG("'%s' renamed to '%s'", oldname, newname);
 
+
 	return ret;
 }
 
-int lxc_link_nsgroup(const char *name)
+int lxc_unlink_nsgroup(const char *name)
 {
-	char lxc[MAXPATHLEN];
 	char nsgroup[MAXPATHLEN];
 	char cgroup[MAXPATHLEN];
 	int ret;
@@ -128,44 +132,48 @@ int lxc_link_nsgroup(const char *name)
 		return -1;
 	}
 
-	snprintf(lxc, MAXPATHLEN, LXCPATH "/%s/nsgroup", name);
 	snprintf(nsgroup, MAXPATHLEN, "%s/%s", cgroup, name);
-
-	unlink(lxc);
-	ret = symlink(nsgroup, lxc);
+	ret = rmdir(nsgroup);
 	if (ret)
-		SYSERROR("failed to create symlink %s->%s", nsgroup, lxc);
+		SYSERROR("failed to remove cgroup '%s'", nsgroup);
 	else
-		DEBUG("'%s' linked to '%s'", nsgroup, lxc);
+		DEBUG("'%s' unlinked", nsgroup);
 
 	return ret;
 }
 
-int lxc_unlink_nsgroup(const char *name)
+int lxc_cgroup_path_get(char **path, const char *name)
 {
-	char nsgroup[MAXPATHLEN];
-	char path[MAXPATHLEN];
-	ssize_t len;
+	char cgroup[MAXPATHLEN];
 
-	snprintf(nsgroup, MAXPATHLEN, LXCPATH "/%s/nsgroup", name);
-	
-	len = readlink(nsgroup, path, MAXPATHLEN-1);
-	if (len >  0) {
-		path[len] = '\0';
-		rmdir(path);
+	*path = &nsgroup_path[0];
+
+	/*
+	 * report nsgroup_path string if already set
+	 */
+	if (**path != 0)
+		return 0;
+
+	if (get_cgroup_mount(MTAB, cgroup)) {
+		ERROR("cgroup is not mounted");
+		return -1;
 	}
 
-	DEBUG("unlinking '%s'", nsgroup);
-
-	return unlink(nsgroup);
+	snprintf(nsgroup_path, MAXPATHLEN, "%s/%s", cgroup, name);
+	return 0;
 }
 
 int lxc_cgroup_set(const char *name, const char *subsystem, const char *value)
 {
 	int fd, ret = -1;
+	char *nsgroup;
 	char path[MAXPATHLEN];
 
-        snprintf(path, MAXPATHLEN, LXCPATH "/%s/nsgroup/%s", name, subsystem);
+	ret = lxc_cgroup_path_get(&nsgroup, name);
+	if (ret)
+		return -1;
+
+        snprintf(path, MAXPATHLEN, "%s/%s", nsgroup, subsystem);
 
 	fd = open(path, O_WRONLY);
 	if (fd < 0) {
@@ -188,9 +196,14 @@ int lxc_cgroup_get(const char *name, const char *subsystem,
 		   char *value, size_t len)
 {
 	int fd, ret = -1;
+	char *nsgroup;
 	char path[MAXPATHLEN];
 
-        snprintf(path, MAXPATHLEN, LXCPATH "/%s/nsgroup/%s", name, subsystem);
+	ret = lxc_cgroup_path_get(&nsgroup, name);
+	if (ret)
+		return -1;
+
+        snprintf(path, MAXPATHLEN, "%s/%s", nsgroup, subsystem);
 
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
@@ -198,13 +211,10 @@ int lxc_cgroup_get(const char *name, const char *subsystem,
 		return -1;
 	}
 
-	if (read(fd, value, len) < 0) {
+	ret = read(fd, value, len);
+	if (ret < 0)
 		ERROR("read %s : %s", path, strerror(errno));
-		goto out;
-	}
-	
-	ret = 0;
-out:
+
 	close(fd);
 	return ret;
 }

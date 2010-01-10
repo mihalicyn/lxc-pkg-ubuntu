@@ -25,9 +25,9 @@
 
 #define MAXPRIOLEN 24
 
-int lxc_get_cgroup_mount(const char *mtab, char *mnt);
-int lxc_rename_nsgroup(const char *name, pid_t pid);
-int lxc_link_nsgroup(const char *name);
+struct lxc_handler;
+int lxc_rename_nsgroup(const char *name, struct lxc_handler *handler);
 int lxc_unlink_nsgroup(const char *name);
+int lxc_cgroup_path_get(char **path, const char *name);
 
 #endif

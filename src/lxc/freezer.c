@@ -32,18 +32,23 @@
 #include <sys/param.h>
 
 #include "error.h"
-#include <lxc/lxc.h>
+
 #include <lxc/log.h>
+#include <lxc/cgroup.h>
 
 lxc_log_define(lxc_freezer, lxc);
 
 static int freeze_unfreeze(const char *name, int freeze)
 {
+	char *nsgroup;
 	char freezer[MAXPATHLEN], *f;
-	int fd, ret = -1;
+	int fd, ret;
 	
-	snprintf(freezer, MAXPATHLEN, 
-		 LXCPATH "/%s/nsgroup/freezer.state", name);
+	ret = lxc_cgroup_path_get(&nsgroup, name);
+	if (ret)
+		return -1;
+
+	snprintf(freezer, MAXPATHLEN, "%s/freezer.state", nsgroup);
 
 	fd = open(freezer, O_WRONLY);
 	if (fd < 0) {
@@ -69,22 +74,16 @@ static int freeze_unfreeze(const char *name, int freeze)
 	if (ret) 
 		SYSERROR("failed to write to '%s'", freezer);
 
-	return 0;
+	return ret;
 }
 
 int lxc_freeze(const char *name)
 {
-	if (freeze_unfreeze(name, 1))
-		return -1;
-
-	return lxc_setstate(name, FROZEN);
+	return freeze_unfreeze(name, 1);
 }
 
 int lxc_unfreeze(const char *name)
 {
-	if (freeze_unfreeze(name, 0))
-		return -1;
-
-	return lxc_setstate(name, RUNNING);
+	return freeze_unfreeze(name, 0);
 }
 

@@ -4,9 +4,6 @@
    you don't. */
 #undef HAVE_DECL_PR_CAPBSET_DROP
 
-/* Define to 1 if you have the <dlfcn.h> header file. */
-#undef HAVE_DLFCN_H
-
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
@@ -45,6 +42,12 @@
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
+
+/* lxc executable library path */
+#undef LXCLIBEXECDIR
+
+/* lxc configuration repository */
+#undef LXCPATH
 
 /* Define to 1 if your C compiler doesn't accept -c and -o together. */
 #undef NO_MINUS_C_MINUS_O

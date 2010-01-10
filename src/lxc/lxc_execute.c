@@ -31,9 +31,12 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 
+#include <lxc/log.h>
+#include <lxc/confile.h>
 #include <lxc/lxc.h>
-#include "confile.h"
+
 #include "arguments.h"
+#include "config.h"
 
 lxc_log_define(lxc_execute, lxc);
 
@@ -43,6 +46,7 @@ static int my_checker(const struct lxc_arguments* args)
 		lxc_error(args, "missing command to execute !");
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -78,45 +82,35 @@ Options :\n\
 int main(int argc, char *argv[])
 {
 	static char **args;
-	char path[MAXPATHLEN];
-	int autodestroy = 0;
-	int ret = -1;
-	struct lxc_conf lxc_conf;
+	char *rcfile;
 
 	if (lxc_arguments_parse(&my_args, argc, argv))
-		goto out;
+		return -1;
 
 	if (lxc_log_init(my_args.log_file, my_args.log_priority,
 			 my_args.progname, my_args.quiet))
-		goto out;
-
-	if (lxc_conf_init(&lxc_conf))
-		goto out;
-
-	if (my_args.rcfile && lxc_config_read(my_args.rcfile, &lxc_conf))
-		goto out;
-
-	snprintf(path, MAXPATHLEN, LXCPATH "/%s", my_args.name);
-	if (access(path, R_OK)) {
-		if (lxc_create(my_args.name, &lxc_conf))
-			goto out;
-		autodestroy = 1;
-	}
+		return -1;
 
 	args = lxc_arguments_dup(LXCLIBEXECDIR "/lxc-init", &my_args);
 	if (!args)
-		goto out;
+		return -1;
 
-	ret = lxc_start(my_args.name, args);
-out:
-	if (autodestroy) {
-		if (lxc_destroy(my_args.name)) {
-			ERROR("failed to destroy '%s'", my_args.name);
-			if (!ret)
-				ret = -1;
+	/* rcfile is specified in the cli option */
+	if (my_args.rcfile)
+		rcfile = (char *)my_args.rcfile;
+	else {
+		if (!asprintf(&rcfile, LXCPATH "/%s/config", my_args.name)) {
+			SYSERROR("failed to allocate memory");
+			return -1;
+		}
+
+		/* container configuration does not exist */
+		if (access(rcfile, F_OK)) {
+			free(rcfile);
+			rcfile = NULL;
 		}
 	}
 
-	return ret;
+	return lxc_start(my_args.name, args, my_args.rcfile);
 }
 

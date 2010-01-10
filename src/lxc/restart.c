@@ -20,34 +20,13 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
-
-#define _GNU_SOURCE
-#include <stdio.h>
-#undef _GNU_SOURCE
-#include <string.h>
-#include <stdlib.h>
-#include <dirent.h>
-#include <errno.h>
-#include <unistd.h>
-#include <signal.h>
-#include <sys/param.h>
-#include <sys/file.h>
-#include <sys/types.h>
-#include <sys/prctl.h>
-#include <sys/wait.h>
-#include <sys/mount.h>
-
-#include "error.h"
-#include "lxc_plugin.h"
 #include <lxc/lxc.h>
 #include <lxc/log.h>
 
 lxc_log_define(lxc_restart, lxc);
 
-LXC_TTY_HANDLER(SIGINT);
-LXC_TTY_HANDLER(SIGQUIT);
-
-int lxc_restart(const char *name, int fd, unsigned long flags)
+int lxc_restart(const char *name, const char *statefile, const char *rcfile,
+		int flags)
 {
 	return 0;
 }

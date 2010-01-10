@@ -20,8 +20,11 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
+#define _GNU_SOURCE
 #include <stdio.h>
+#undef _GNU_SOURCE
 #include <libgen.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <termios.h>
@@ -39,7 +42,10 @@
 
 #include <lxc/lxc.h>
 #include <lxc/log.h>
+#include <lxc/utils.h>
+
 #include "arguments.h"
+#include "config.h"
 
 lxc_log_define(lxc_start, lxc);
 
@@ -47,12 +53,14 @@ static int my_parser(struct lxc_arguments* args, int c, char* arg)
 {
 	switch (c) {
 	case 'd': args->daemonize = 1; break;
+	case 'f': args->rcfile = arg; break;
 	}
 	return 0;
 }
 
 static const struct option my_longopts[] = {
 	{"daemon", no_argument, 0, 'd'},
+	{"rcfile", required_argument, 0, 'f'},
 	LXC_COMMON_OPTIONS
 };
 
@@ -65,7 +73,8 @@ lxc-start start COMMAND in specified container NAME\n\
 \n\
 Options :\n\
   -n, --name=NAME      NAME for name of the container\n\
-  -d, --daemon         daemonize the container",
+  -d, --daemon         daemonize the container\n\
+  -f, --rcfile=FILE    Load configuration file FILE\n",
 	.options   = my_longopts,
 	.parser    = my_parser,
 	.checker   = NULL,
@@ -102,7 +111,6 @@ static int restore_tty(struct termios *tios)
 	if (!memcmp(tios, &current_tios, sizeof(*tios)))
 		return 0;
 
-
 	oldhandler = signal(SIGTTOU, SIG_IGN);
 	ret = tcsetattr(0, TCSADRAIN, tios);
 	if (ret)
@@ -123,6 +131,8 @@ int main(int argc, char *argv[])
 		'\0',
 	};
 
+	char *rcfile = NULL;
+
 	if (lxc_arguments_parse(&my_args, argc, argv))
 		return err;
 
@@ -134,6 +144,22 @@ int main(int argc, char *argv[])
 	if (lxc_log_init(my_args.log_file, my_args.log_priority,
 			 my_args.progname, my_args.quiet))
 		return err;
+
+	/* rcfile is specified in the cli option */
+	if (my_args.rcfile)
+		rcfile = (char *)my_args.rcfile;
+	else {
+		if (!asprintf(&rcfile, LXCPATH "/%s/config", my_args.name)) {
+			SYSERROR("failed to allocate memory");
+			return err;
+		}
+
+		/* container configuration does not exist */
+		if (access(rcfile, F_OK)) {
+			free(rcfile);
+			rcfile = NULL;
+		}
+	}
 
 	if (my_args.daemonize) {
 
@@ -157,13 +183,11 @@ int main(int argc, char *argv[])
 			open(my_args.log_file, O_RDONLY | O_CLOEXEC);
 			open(my_args.log_file, O_RDONLY | O_CLOEXEC);
 		}
-
-		chdir("/");
 	}
 
 	save_tty(&tios);
 
-	err = lxc_start(my_args.name, args);
+	err = lxc_start(my_args.name, args, rcfile);
 
 	restore_tty(&tios);
 
