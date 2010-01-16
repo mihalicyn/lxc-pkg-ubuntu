@@ -1,3 +1,9 @@
+lxc (0.6.4-2) unstable; urgency=low
+
+  * Ship the /var/lib/lxc directory (closes: #565519)
+
+ -- Guido Trotter <ultrotter@debian.org>  Sat, 16 Jan 2010 16:57:00 +0000
+
 lxc (0.6.4-1) unstable; urgency=low
 
   [ Stéphane Graber ]
