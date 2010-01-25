@@ -35,43 +35,35 @@ struct mainloop_handler {
 	void *data;
 };
 
+#define MAX_EVENTS 10
+
 int lxc_mainloop(struct lxc_epoll_descr *descr)
 {
-	int i, nfds, triggered;
+	int i, nfds;
 	struct mainloop_handler *handler;
+	struct epoll_event events[MAX_EVENTS];
 
 	for (;;) {
 
-		triggered = 0;
-
-		nfds = epoll_wait(descr->epfd, descr->ev, descr->nfds, -1);
+		nfds = epoll_wait(descr->epfd, events, MAX_EVENTS, -1);
 		if (nfds < 0) {
 			if (errno == EINTR)
 				continue;
 			return -1;
 		}
 
-		for (i = 0; i < descr->nfds; i++) {
-
-			if (!(descr->ev[i].events & EPOLLIN) &&
-			    !(descr->ev[i].events & EPOLLHUP))
-				continue;
-
-			triggered++;
+		for (i = 0; i < nfds; i++) {
 			handler =
-			  (struct mainloop_handler *) descr->ev[i].data.ptr;
+				(struct mainloop_handler *) events[i].data.ptr;
 
 			/* If the handler returns a positive value, exit
 			   the mainloop */
 			if (handler->callback(handler->fd, handler->data, 
 					      descr) > 0)
 				return 0;
-
-			if (triggered == nfds)
-				break;
 		}
 
-		if (!descr->nfds)
+		if (lxc_list_empty(&descr->handlers))
 			return 0;
 	}
 }
@@ -79,9 +71,9 @@ int lxc_mainloop(struct lxc_epoll_descr *descr)
 int lxc_mainloop_add_handler(struct lxc_epoll_descr *descr, int fd, 
 			     lxc_mainloop_callback_t callback, void *data)
 {
-	struct epoll_event *ev;
+	struct epoll_event ev;
 	struct mainloop_handler *handler;
-	int ret = -1;
+	struct lxc_list *item;
 
 	handler = malloc(sizeof(*handler));
 	if (!handler)
@@ -91,64 +83,43 @@ int lxc_mainloop_add_handler(struct lxc_epoll_descr *descr, int fd,
 	handler->fd = fd;
 	handler->data = data;
 
-	ev = malloc(sizeof(*descr->ev) * (descr->nfds + 1));
-	if (!ev)
-		goto out_free;
+	ev.events = EPOLLIN;
+	ev.data.ptr = handler;
 
-	if (descr->nfds) {
-		memcpy(ev, descr->ev, sizeof(*descr->ev) * (descr->nfds));
-		free(descr->ev);
-	}
+	if (epoll_ctl(descr->epfd, EPOLL_CTL_ADD, fd, &ev) < 0)
+		goto out_free_handler;
 
-	descr->ev = ev;
-	descr->ev[descr->nfds].events = EPOLLIN;
-	descr->ev[descr->nfds].data.ptr = handler;
+	item = malloc(sizeof(*item));
+	if (!item)
+		goto out_free_handler;
 
-	ret = epoll_ctl(descr->epfd, EPOLL_CTL_ADD, fd, 
-			&descr->ev[descr->nfds]);
+	item->elem = handler;
+	lxc_list_add(&descr->handlers, item);
+	return 0;
 
-	descr->nfds++;
-out:
-	return ret;
-
-out_free:
+out_free_handler:
 	free(handler);
-	goto out;
+	return -1;
 }
 
 int lxc_mainloop_del_handler(struct lxc_epoll_descr *descr, int fd)
 {
-	struct epoll_event *ev;
 	struct mainloop_handler *handler;
-	int i, j, idx = 0;
+	struct lxc_list *iterator;
 
-	for (i = 0; i < descr->nfds; i++) {
-		
-		handler = descr->ev[i].data.ptr;
+	lxc_list_for_each(iterator, &descr->handlers) {
+		handler = iterator->elem;
 
-		if (handler->fd != fd)
-			continue;
+		if (handler->fd == fd) {
+			/* found */
+			if (epoll_ctl(descr->epfd, EPOLL_CTL_DEL, fd, NULL))
+				return -1;
 
-		if (epoll_ctl(descr->epfd, EPOLL_CTL_DEL, fd, NULL))
-			return -1;
-
-		ev = malloc(sizeof(*ev) * (descr->nfds - 1));
-		if (!ev)
-			return -1;
-
-		for (j = 0; j < descr->nfds; j++) {
-			if (i == j)
-				continue;
-			ev[idx] = descr->ev[idx];
-			idx++;
+			lxc_list_del(iterator);
+			free(iterator->elem);
+			free(iterator);
+			return 0;
 		}
-
-		free(descr->ev[i].data.ptr);
-		free(descr->ev);
-		descr->ev = ev;
-		descr->nfds--;
-		
-		return 0;
 	}
 
 	return -1;
@@ -156,24 +127,28 @@ int lxc_mainloop_del_handler(struct lxc_epoll_descr *descr, int fd)
 
 int lxc_mainloop_open(struct lxc_epoll_descr *descr)
 {
-	descr->nfds = 0;
-	descr->ev = NULL;
-
 	/* hint value passed to epoll create */
 	descr->epfd = epoll_create(2);
 	if (descr->epfd < 0)
 		return -1;
 
+	lxc_list_init(&descr->handlers);
 	return 0;
 }
 
 int lxc_mainloop_close(struct lxc_epoll_descr *descr)
 {
-	int i;
+	struct lxc_list *iterator, *next;
 
-	for (i = 0; i < descr->nfds; i++)
-		free(descr->ev[i].data.ptr);
-	free(descr->ev);
+	iterator = descr->handlers.next;
+	while (iterator != &descr->handlers) {
+		next = iterator->next;
+
+		lxc_list_del(iterator);
+		free(iterator->elem);
+		free(iterator);
+		iterator = next;
+	}
 
 	return close(descr->epfd);
 }

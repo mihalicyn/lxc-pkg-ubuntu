@@ -1,3 +1,9 @@
+lxc (0.6.5-1) unstable; urgency=low
+
+  * New upstream version (closes: #566771)
+
+ -- Guido Trotter <ultrotter@debian.org>  Mon, 25 Jan 2010 15:39:38 +0000
+
 lxc (0.6.4-2) unstable; urgency=low
 
   * Ship the /var/lib/lxc directory (closes: #565519)

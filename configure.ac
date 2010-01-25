@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT([lxc], [0.6.4])
+AC_INIT([lxc], [0.6.5])
 
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_AUX_DIR([config])
@@ -44,7 +44,7 @@ AS_AC_EXPAND(DOCDIR, $docdir)
 AC_ARG_WITH([config-path],
 	[AC_HELP_STRING(
 		[--with-config-path=dir],
-		[lxc configuration repository]
+		[lxc configuration repository path]
 	)], [], [with_config_path="${localstatedir}/lib/lxc"])
 
 AS_AC_EXPAND(LXC_GENERATE_DATE, "$(date)")
@@ -102,14 +102,16 @@ AC_CONFIG_FILES([
 
 	doc/examples/Makefile
 	doc/examples/lxc-macvlan.conf
+	doc/examples/lxc-vlan.conf
 	doc/examples/lxc-no-netns.conf
 	doc/examples/lxc-empty-netns.conf
 	doc/examples/lxc-phys.conf
 	doc/examples/lxc-veth.conf
-	doc/examples/lxc-complex-config
+	doc/examples/lxc-complex.conf
 
 	scripts/Makefile
 	scripts/lxc-debian
+	scripts/lxc-busybox
 	scripts/lxc-fedora
 	scripts/lxc-sshd
 

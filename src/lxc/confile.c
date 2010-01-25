@@ -33,6 +33,7 @@
 #include <net/if.h>
 
 #include "parse.h"
+#include "utils.h"
 
 #include <lxc/log.h>
 #include <lxc/conf.h>
@@ -44,15 +45,20 @@ static int config_tty(const char *, char *, struct lxc_conf *);
 static int config_cgroup(const char *, char *, struct lxc_conf *);
 static int config_mount(const char *, char *, struct lxc_conf *);
 static int config_rootfs(const char *, char *, struct lxc_conf *);
+static int config_pivotdir(const char *, char *, struct lxc_conf *);
 static int config_utsname(const char *, char *, struct lxc_conf *);
 static int config_network_type(const char *, char *, struct lxc_conf *);
 static int config_network_flags(const char *, char *, struct lxc_conf *);
 static int config_network_link(const char *, char *, struct lxc_conf *);
 static int config_network_name(const char *, char *, struct lxc_conf *);
+static int config_network_veth_pair(const char *, char *, struct lxc_conf *);
+static int config_network_macvlan_mode(const char *, char *, struct lxc_conf *);
 static int config_network_hwaddr(const char *, char *, struct lxc_conf *);
+static int config_network_vlan_id(const char *, char *, struct lxc_conf *);
 static int config_network_mtu(const char *, char *, struct lxc_conf *);
 static int config_network_ipv4(const char *, char *, struct lxc_conf *);
 static int config_network_ipv6(const char *, char *, struct lxc_conf *);
+static int config_cap_drop(const char *, char *, struct lxc_conf *);
 
 typedef int (*config_cb)(const char *, char *, struct lxc_conf *);
 
@@ -63,20 +69,25 @@ struct config {
 
 static struct config config[] = {
 
-	{ "lxc.pts",            config_pts            },
-	{ "lxc.tty",            config_tty            },
-	{ "lxc.cgroup",         config_cgroup         },
-	{ "lxc.mount",          config_mount          },
-	{ "lxc.rootfs",         config_rootfs         },
-	{ "lxc.utsname",        config_utsname        },
-	{ "lxc.network.type",   config_network_type   },
-	{ "lxc.network.flags",  config_network_flags  },
-	{ "lxc.network.link",   config_network_link   },
-	{ "lxc.network.name",   config_network_name   },
-	{ "lxc.network.hwaddr", config_network_hwaddr },
-	{ "lxc.network.mtu",    config_network_mtu    },
-	{ "lxc.network.ipv4",   config_network_ipv4   },
-	{ "lxc.network.ipv6",   config_network_ipv6   },
+	{ "lxc.pts",                  config_pts                  },
+	{ "lxc.tty",                  config_tty                  },
+	{ "lxc.cgroup",               config_cgroup               },
+	{ "lxc.mount",                config_mount                },
+	{ "lxc.rootfs",               config_rootfs               },
+	{ "lxc.pivotdir",             config_pivotdir             },
+	{ "lxc.utsname",              config_utsname              },
+	{ "lxc.network.type",         config_network_type         },
+	{ "lxc.network.flags",        config_network_flags        },
+	{ "lxc.network.link",         config_network_link         },
+	{ "lxc.network.name",         config_network_name         },
+	{ "lxc.network.macvlan.mode", config_network_macvlan_mode },
+	{ "lxc.network.veth.pair",    config_network_veth_pair    },
+	{ "lxc.network.hwaddr",       config_network_hwaddr       },
+	{ "lxc.network.mtu",          config_network_mtu          },
+	{ "lxc.network.vlan.id",      config_network_vlan_id      },
+	{ "lxc.network.ipv4",         config_network_ipv4         },
+	{ "lxc.network.ipv6",         config_network_ipv6         },
+	{ "lxc.cap.drop",             config_cap_drop             },
 };
 
 static const size_t config_size = sizeof(config)/sizeof(struct config);
@@ -92,7 +103,8 @@ static struct config *getconfig(const char *key)
 	return NULL;
 }
 
-static int config_network_type(const char *key, char *value, struct lxc_conf *lxc_conf)
+static int config_network_type(const char *key, char *value,
+			       struct lxc_conf *lxc_conf)
 {
 	struct lxc_list *network = &lxc_conf->network;
 	struct lxc_netdev *netdev;
@@ -123,6 +135,8 @@ static int config_network_type(const char *key, char *value, struct lxc_conf *lx
 		netdev->type = VETH;
 	else if (!strcmp(value, "macvlan"))
 		netdev->type = MACVLAN;
+	else if (!strcmp(value, "vlan"))
+		netdev->type = VLAN;
 	else if (!strcmp(value, "phys"))
 		netdev->type = PHYS;
 	else if (!strcmp(value, "empty"))
@@ -183,6 +197,42 @@ static int network_ifname(char **valuep, char *value)
 	return 0;
 }
 
+#ifndef MACVLAN_MODE_PRIVATE
+#  define MACVLAN_MODE_PRIVATE 1
+#endif
+
+#ifndef MACVLAN_MODE_VEPA
+#  define MACVLAN_MODE_VEPA 2
+#endif
+
+#ifndef MACVLAN_MODE_BRIDGE
+#  define MACVLAN_MODE_BRIDGE 4
+#endif
+
+static int macvlan_mode(int *valuep, char *value)
+{
+	struct mc_mode {
+		char *name;
+		int mode;
+	} m[] = {
+		{ "private", MACVLAN_MODE_PRIVATE },
+		{ "vepa", MACVLAN_MODE_VEPA },
+		{ "bridge", MACVLAN_MODE_BRIDGE },
+	};
+
+	int i;
+
+	for (i = 0; i < sizeof(m)/sizeof(m[0]); i++) {
+		if (strcmp(m[i].name, value))
+			continue;
+
+		*valuep = m[i].mode;
+		return 0;
+	}
+
+	return -1;
+}
+
 static int config_network_flags(const char *key, char *value,
 				struct lxc_conf *lxc_conf)
 {
@@ -221,6 +271,30 @@ static int config_network_name(const char *key, char *value,
 	return network_ifname(&netdev->name, value);
 }
 
+static int config_network_veth_pair(const char *key, char *value,
+				    struct lxc_conf *lxc_conf)
+{
+	struct lxc_netdev *netdev;
+
+	netdev = network_netdev(key, value, &lxc_conf->network);
+	if (!netdev)
+		return -1;
+
+	return network_ifname(&netdev->priv.veth_attr.pair, value);
+}
+
+static int config_network_macvlan_mode(const char *key, char *value,
+				       struct lxc_conf *lxc_conf)
+{
+	struct lxc_netdev *netdev;
+
+	netdev = network_netdev(key, value, &lxc_conf->network);
+	if (!netdev)
+		return -1;
+
+	return macvlan_mode(&netdev->priv.macvlan_attr.mode, value);
+}
+
 static int config_network_hwaddr(const char *key, char *value,
 				 struct lxc_conf *lxc_conf)
 {
@@ -235,6 +309,21 @@ static int config_network_hwaddr(const char *key, char *value,
 		SYSERROR("failed to dup string '%s'", value);
 		return -1;
 	}
+
+	return 0;
+}
+
+static int config_network_vlan_id(const char *key, char *value,
+			       struct lxc_conf *lxc_conf)
+{
+	struct lxc_netdev *netdev;
+
+	netdev = network_netdev(key, value, &lxc_conf->network);
+	if (!netdev)
+		return -1;
+
+	if (get_u16(&netdev->priv.vlan_attr.vid, value, 0))
+		return -1;
 
 	return 0;
 }
@@ -325,7 +414,8 @@ static int config_network_ipv4(const char *key, char *value,
 	return 0;
 }
 
-static int config_network_ipv6(const char *key, char *value, struct lxc_conf *lxc_conf)
+static int config_network_ipv6(const char *key, char *value,
+			       struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
 	struct lxc_inet6dev *inet6dev;
@@ -478,6 +568,53 @@ static int config_mount(const char *key, char *value, struct lxc_conf *lxc_conf)
 	return 0;
 }
 
+static int config_cap_drop(const char *key, char *value,
+			   struct lxc_conf *lxc_conf)
+{
+	char *dropcaps, *sptr, *token;
+	struct lxc_list *droplist;
+	int ret = -1;
+
+	if (!strlen(value))
+		return -1;
+
+	dropcaps = strdup(value);
+	if (!dropcaps) {
+		SYSERROR("failed to dup '%s'", value);
+		return -1;
+	}
+
+	/* in case several capability drop is specified in a single line
+	 * split these caps in a single element for the list */
+	for (;;) {
+                token = strtok_r(dropcaps, " \t", &sptr);
+                if (!token) {
+			ret = 0;
+                        break;
+		}
+		dropcaps = NULL;
+
+		droplist = malloc(sizeof(*droplist));
+		if (!droplist) {
+			SYSERROR("failed to allocate drop list");
+			break;
+		}
+
+		droplist->elem = strdup(token);
+		if (!droplist->elem) {
+			SYSERROR("failed to dup '%s'", token);
+			free(droplist);
+			break;
+		}
+
+		lxc_list_add_tail(&lxc_conf->caps, droplist);
+        }
+
+	free(dropcaps);
+
+	return ret;
+}
+
 static int config_rootfs(const char *key, char *value, struct lxc_conf *lxc_conf)
 {
 	if (strlen(value) >= MAXPATHLEN) {
@@ -487,6 +624,22 @@ static int config_rootfs(const char *key, char *value, struct lxc_conf *lxc_conf
 
 	lxc_conf->rootfs = strdup(value);
 	if (!lxc_conf->rootfs) {
+		SYSERROR("failed to duplicate string %s", value);
+		return -1;
+	}
+
+	return 0;
+}
+
+static int config_pivotdir(const char *key, char *value, struct lxc_conf *lxc_conf)
+{
+	if (strlen(value) >= MAXPATHLEN) {
+		ERROR("%s path is too long", value);
+		return -1;
+	}
+
+	lxc_conf->pivotdir = strdup(value);
+	if (!lxc_conf->pivotdir) {
 		SYSERROR("failed to duplicate string %s", value);
 		return -1;
 	}
@@ -516,7 +669,7 @@ static int config_utsname(const char *key, char *value, struct lxc_conf *lxc_con
 	return 0;
 }
 
-static int parse_line(void *buffer, void *data)
+static int parse_line(char *buffer, void *data)
 {
 	struct config *config;
 	char *line = buffer;
@@ -555,10 +708,44 @@ static int parse_line(void *buffer, void *data)
 	return config->cb(key, value, data);
 }
 
+int lxc_config_readline(char *buffer, struct lxc_conf *conf)
+{
+	return parse_line(buffer, conf);
+}
+
 int lxc_config_read(const char *file, struct lxc_conf *conf)
 {
-	char buffer[MAXPATHLEN];
+	return lxc_file_for_each_line(file, parse_line, conf);
+}
 
-	return lxc_file_for_each_line(file, parse_line, buffer,
-				      sizeof(buffer), conf);
+int lxc_config_define_add(struct lxc_list *defines, char* arg)
+{
+	struct lxc_list *dent;
+
+	dent = malloc(sizeof(struct lxc_list));
+	if (!dent)
+		return -1;
+
+	dent->elem = arg;
+	lxc_list_add_tail(defines, dent);
+	return 0;
+}
+
+int lxc_config_define_load(struct lxc_list *defines, struct lxc_conf *conf)
+{
+	struct lxc_list *it;
+	int ret = 0;
+
+	lxc_list_for_each(it, defines) {
+		ret = lxc_config_readline(it->elem, conf);
+		if (ret)
+			break;
+	}
+
+	lxc_list_for_each(it, defines) {
+		lxc_list_del(it);
+		free(it);
+	}
+
+	return ret;
 }

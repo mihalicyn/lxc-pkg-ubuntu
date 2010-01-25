@@ -1,7 +1,7 @@
 /*
  * lxc: linux Container library
  *
- * (C) Copyright IBM Corp. 2007, 2008
+ * (C) Copyright IBM Corp. 2007, 2010
  *
  * Authors:
  * Daniel Lezcano <dlezcano at fr.ibm.com>
@@ -35,7 +35,7 @@
 #include "arguments.h"
 #include "config.h"
 
-lxc_log_define(lxc_checkpoint, lxc);
+lxc_log_define(lxc_checkpoint_ui, lxc_checkpoint);
 
 static int my_checker(const struct lxc_arguments* args)
 {
@@ -112,12 +112,10 @@ int main(int argc, char *argv[])
 		return ret;
 
 	ret = lxc_checkpoint(my_args.name, my_args.statefile, my_args.flags);
-	if (ret) {
+	if (ret)
 		ERROR("failed to checkpoint '%s'", my_args.name);
-		return ret;
-	}
-
-	INFO("'%s' checkpointed", my_args.name);
+	else
+		INFO("'%s' checkpointed", my_args.name);
 
 	return ret;
 }

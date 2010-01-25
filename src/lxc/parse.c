@@ -20,8 +20,10 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
-#include <string.h>
+#define _GNU_SOURCE
 #include <stdio.h>
+#undef _GNU_SOURCE
+#include <string.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <dirent.h>
@@ -43,7 +45,7 @@ int lxc_dir_for_each(const char *name, const char *directory,
 		     lxc_dir_cb callback, void *data)
 {
 	struct dirent **namelist;
-	int n;
+	int n, ret = 0;
 
 	n = scandir(directory, &namelist, dir_filter, alphasort);
 	if (n < 0) {
@@ -52,22 +54,24 @@ int lxc_dir_for_each(const char *name, const char *directory,
 	}
 
 	while (n--) {
-		if (callback(name, directory, namelist[n]->d_name, data)) {
+		if (!ret &&
+		    callback(name, directory, namelist[n]->d_name, data)) {
 			ERROR("callback failed");
-			free(namelist[n]);
-			return -1;
+			ret = -1;
 		}
 		free(namelist[n]);
 	}
+	free(namelist);
 
-	return 0;
+	return ret;
 }
 
-int lxc_file_for_each_line(const char *file, lxc_file_cb callback,
-			   char *buffer, size_t len, void* data)
+int lxc_file_for_each_line(const char *file, lxc_file_cb callback, void *data)
 {
 	FILE *f;
 	int err = 0;
+	char *line = NULL;
+	size_t len = 0;
 
 	f = fopen(file, "r");
 	if (!f) {
@@ -75,14 +79,16 @@ int lxc_file_for_each_line(const char *file, lxc_file_cb callback,
 		return -1;
 	}
 
-	while (fgets(buffer, len, f)) {
-		err = callback(buffer, data);
+	while (getline(&line, &len, f) != -1) {
+		err = callback(line, data);
 		if (err) {
-			ERROR("failed to process '%s'", buffer);
-			goto out;
+			ERROR("failed to process '%s'", line);
+			break;
 		}
 	}
-out:
+
+	if (line)
+		free(line);
 	fclose(f);
 	return err;
 }

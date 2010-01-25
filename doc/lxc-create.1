@@ -3,14 +3,15 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "LXC-CREATE" "1" "23 November 2009" "" ""
+.TH "LXC-CREATE" "1" "22 January 2010" "" ""
 
 .SH NAME
 lxc-create \- creates a container
 .SH SYNOPSIS
 
 \fBlxc-create \fI-n name\fB
-[-f config_file]\fR
+[-f config_file]
+[-t template]\fR
 
 .SH "DESCRIPTION"
 .PP
@@ -33,6 +34,12 @@ isolation: processes, sysv ipc and mount points.
 \fB   -f \fIconfig_file\fB \fR
 Specify the configuration file to configure the virtualization
 and isolation functionalities for the container.
+.TP
+\fB   -t \fItemplate\fB \fR
+'template' is the short name of an existing 'lxc-template'
+script that is called by lxc-create.
+eg: lxc-debian, lxc-busybox ...
+Refer to those exemples for details of expecting script structure.
 .SH "DIAGNOSTIC"
 .TP
 \fBThe container already exists\fR

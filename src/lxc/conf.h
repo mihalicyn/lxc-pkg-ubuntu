@@ -33,6 +33,7 @@ enum {
 	VETH,
 	MACVLAN,
 	PHYS,
+	VLAN,
 	MAXCONFTYPE,
 };
 
@@ -69,6 +70,28 @@ struct lxc_inet6dev {
 struct lxc_route6 {
 	struct in6_addr addr;
 };
+
+struct ifla_veth {
+	char *pair; /* pair name */
+};
+
+struct ifla_vlan {
+	uint   flags;
+	uint   fmask;
+	ushort   vid;
+	ushort   pad;
+};
+
+struct ifla_macvlan {
+	int mode; /* private, vepa, bridge */
+};
+
+union netdev_p {
+	struct ifla_veth veth_attr;
+	struct ifla_vlan vlan_attr;
+	struct ifla_macvlan macvlan_attr;
+};
+
 /*
  * Defines a structure to configure a network device
  * @link   : lxc.network.link, name of bridge or host iface to attach if any
@@ -85,6 +108,7 @@ struct lxc_netdev {
 	char *name;
 	char *hwaddr;
 	char *mtu;
+	union netdev_p priv;
 	struct lxc_list ipv4;
 	struct lxc_list ipv6;
 };
@@ -133,6 +157,7 @@ struct lxc_tty_info {
  */
 struct lxc_conf {
 	char *rootfs;
+	char *pivotdir;
 	char *fstab;
 	int tty;
 	int pts;
@@ -140,6 +165,7 @@ struct lxc_conf {
 	struct lxc_list cgroup;
 	struct lxc_list network;
 	struct lxc_list mount_list;
+	struct lxc_list caps;
 	struct lxc_tty_info tty_info;
 	char console[MAXPATHLEN];
 };
@@ -147,7 +173,7 @@ struct lxc_conf {
 /*
  * Initialize the lxc configuration structure
  */
-extern int lxc_conf_init(struct lxc_conf *conf);
+extern struct lxc_conf *lxc_conf_init(void);
 
 extern int lxc_create_network(struct lxc_list *networks);
 extern int lxc_assign_network(struct lxc_list *networks, pid_t pid);
@@ -163,14 +189,4 @@ struct lxc_handler;
 
 extern int lxc_setup(const char *name, struct lxc_conf *lxc_conf);
 
-extern int conf_has(const char *name, const char *info);
-
-#define conf_has_fstab(__name)   conf_has(__name, "fstab")
-#define conf_has_rootfs(__name)  conf_has(__name, "rootfs")
-#define conf_has_utsname(__name) conf_has(__name, "utsname")
-#define conf_has_network(__name) conf_has(__name, "network")
-#define conf_has_console(__name) conf_has(__name, "console")
-#define conf_has_cgroup(__name)  conf_has(__name, "cgroup")
-#define conf_has_tty(__name)     conf_has(__name, "tty")
-#define conf_has_pts(__name)     conf_has(__name, "pts")
 #endif

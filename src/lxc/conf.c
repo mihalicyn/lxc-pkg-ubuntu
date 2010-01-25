@@ -38,6 +38,8 @@
 #include <sys/socket.h>
 #include <sys/mount.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
+#include <sys/capability.h>
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -65,6 +67,24 @@ lxc_log_define(lxc_conf, lxc);
 #define MS_REC 16384
 #endif
 
+#ifndef CAP_SETFCAP
+#define CAP_SETFCAP 31
+#endif
+
+#ifndef CAP_MAC_OVERRIDE
+#define CAP_MAC_OVERRIDE 32
+#endif
+
+#ifndef CAP_MAC_ADMIN
+#define CAP_MAC_ADMIN 33
+#endif
+
+#ifndef PR_CAPBSET_DROP
+#define PR_CAPBSET_DROP 24
+#endif
+
+extern int pivot_root(const char * new_root, const char * put_old);
+
 typedef int (*instanciate_cb)(struct lxc_netdev *);
 
 struct mount_opt {
@@ -73,14 +93,21 @@ struct mount_opt {
 	int flag;
 };
 
+struct caps_opt {
+	char *name;
+	int value;
+};
+
 static int instanciate_veth(struct lxc_netdev *);
 static int instanciate_macvlan(struct lxc_netdev *);
+static int instanciate_vlan(struct lxc_netdev *);
 static int instanciate_phys(struct lxc_netdev *);
 static int instanciate_empty(struct lxc_netdev *);
 
 static  instanciate_cb netdev_conf[MAXCONFTYPE + 1] = {
 	[VETH]    = instanciate_veth,
 	[MACVLAN] = instanciate_macvlan,
+	[VLAN]    = instanciate_vlan,
 	[PHYS]    = instanciate_phys,
 	[EMPTY]   = instanciate_empty,
 };
@@ -109,7 +136,45 @@ static struct mount_opt mount_opt[] = {
 	{ NULL,         0, 0              },
 };
 
-static int configure_find_fstype_cb(void* buffer, void *data)
+static struct caps_opt caps_opt[] = {
+	{ "chown",             CAP_CHOWN 	     },
+	{ "dac_override",      CAP_DAC_OVERRIDE      },
+	{ "dac_read_search",   CAP_DAC_READ_SEARCH   },
+	{ "fowner",            CAP_FOWNER            },
+	{ "fsetid",            CAP_FSETID            },
+	{ "kill",              CAP_KILL              },
+	{ "setgid",            CAP_SETGID            },
+	{ "setuid",            CAP_SETUID            },
+	{ "setpcap",           CAP_SETPCAP           },
+	{ "linux_immutable",   CAP_LINUX_IMMUTABLE   },
+	{ "net_bind_service",  CAP_NET_BIND_SERVICE  },
+	{ "net_broadcast",     CAP_NET_BROADCAST     },
+	{ "net_admin",         CAP_NET_ADMIN         },
+	{ "net_raw",           CAP_NET_RAW           },
+	{ "ipc_lock",          CAP_IPC_LOCK          },
+	{ "ipc_owner",         CAP_IPC_OWNER         },
+	{ "sys_module",        CAP_SYS_MODULE        },
+	{ "sys_rawio",         CAP_SYS_RAWIO         },
+	{ "sys_chroot",        CAP_SYS_CHROOT        },
+	{ "sys_ptrace",        CAP_SYS_PTRACE        },
+	{ "sys_pacct",         CAP_SYS_PACCT         },
+	{ "sys_admin",         CAP_SYS_ADMIN         },
+	{ "sys_boot",          CAP_SYS_BOOT          },
+	{ "sys_nice",          CAP_SYS_NICE          },
+	{ "sys_resource",      CAP_SYS_RESOURCE      },
+	{ "sys_time",          CAP_SYS_TIME          },
+	{ "sys_tty_config",    CAP_SYS_TTY_CONFIG    },
+	{ "mknod",             CAP_MKNOD             },
+	{ "lease",             CAP_LEASE             },
+	{ "audit_write",       CAP_AUDIT_WRITE       },
+	{ "audit_control",     CAP_AUDIT_CONTROL     },
+	{ "setfcap",           CAP_SETFCAP           },
+	{ "mac_override",      CAP_MAC_OVERRIDE      },
+	{ "mac_admin",         CAP_MAC_ADMIN         },
+};
+
+
+static int configure_find_fstype_cb(char* buffer, void *data)
 {
 	struct cbarg {
 		const char *rootfs;
@@ -142,7 +207,6 @@ static int configure_find_fstype_cb(void* buffer, void *data)
 static int configure_find_fstype(const char *rootfs, char *fstype, int mntopt)
 {
 	int i, found;
-	char buffer[MAXPATHLEN];
 
 	struct cbarg {
 		const char *rootfs;
@@ -178,7 +242,7 @@ static int configure_find_fstype(const char *rootfs, char *fstype, int mntopt)
 
 		found = lxc_file_for_each_line(fsfile[i],
 					       configure_find_fstype_cb,
-					       buffer, sizeof(buffer), &cbarg);
+					       &cbarg);
 
 		if (found < 0) {
 			SYSERROR("failed to read '%s'", fsfile[i]);
@@ -334,7 +398,176 @@ static int setup_tty(const char *rootfs, const struct lxc_tty_info *tty_info)
 	return 0;
 }
 
-static int setup_rootfs(const char *rootfs)
+static int setup_rootfs_pivot_root_cb(char *buffer, void *data)
+{
+	struct lxc_list	*mountlist, *listentry, *iterator;
+	char *pivotdir, *mountpoint, *mountentry;
+	int found;
+	void **cbparm;
+
+	mountentry = buffer;
+	cbparm = (void **)data;
+
+	mountlist = cbparm[0];
+	pivotdir  = cbparm[1];
+
+	/* parse entry, first field is mountname, ignore */
+	mountpoint = strtok(mountentry, " ");
+	if (!mountpoint)
+		return -1;
+
+	/* second field is mountpoint */
+	mountpoint = strtok(NULL, " ");
+	if (!mountpoint)
+		return -1;
+
+	/* only consider mountpoints below old root fs */
+	if (strncmp(mountpoint, pivotdir, strlen(pivotdir)))
+		return 0;
+
+	/* filter duplicate mountpoints */
+	found = 0;
+	lxc_list_for_each(iterator, mountlist) {
+		if (!strcmp(iterator->elem, mountpoint)) {
+			found = 1;
+			break;
+		}
+	}
+	if (found)
+		return 0;
+
+	/* add entry to list */
+	listentry = malloc(sizeof(*listentry));
+	if (!listentry) {
+		SYSERROR("malloc for mountpoint listentry failed");
+		return -1;
+	}
+
+	listentry->elem = strdup(mountpoint);
+	if (!listentry->elem) {
+		SYSERROR("strdup failed");
+		return -1;
+	}
+	lxc_list_add_tail(mountlist, listentry);
+
+	return 0;
+}
+
+
+static int setup_rootfs_pivot_root(const char *rootfs, const char *pivotdir)
+{
+	char path[MAXPATHLEN];
+	void *cbparm[2];
+	struct lxc_list mountlist, *iterator;
+	int ok, still_mounted, last_still_mounted;
+	int pivotdir_is_temp = 0;
+
+	/* change into new root fs */
+	if (chdir(rootfs)) {
+		SYSERROR("can't chroot to new rootfs '%s'", rootfs);
+		return -1;
+	}
+
+	/* create temporary mountpoint if none specified */
+	if (!pivotdir) {
+
+		snprintf(path, sizeof(path), "./lxc-oldrootfs-XXXXXX" );
+		if (!mkdtemp(path)) {
+			SYSERROR("can't make temporary mountpoint");
+			return -1;
+		}
+
+		pivotdir = strdup(&path[1]); /* get rid of leading dot */
+		if (!pivotdir) {
+			SYSERROR("strdup failed");
+			return -1;
+		}
+
+		pivotdir_is_temp = 1;
+	}
+	else {
+		snprintf(path, sizeof(path), ".%s", pivotdir);
+	}
+
+	DEBUG("temporary mountpoint for old rootfs is '%s'", path);
+
+	/* pivot_root into our new root fs */
+
+	if (pivot_root(".", path)) {
+		SYSERROR("pivot_root syscall failed");
+		return -1;
+	}
+
+	if (chdir("/")) {
+		SYSERROR("can't chroot to / after pivot_root");
+		return -1;
+	}
+
+	DEBUG("pivot_root syscall to '%s' successful", pivotdir);
+
+	/* read and parse /proc/mounts in old root fs */
+	lxc_list_init(&mountlist);
+
+	snprintf(path, sizeof(path), "%s/", pivotdir);
+	cbparm[0] = &mountlist;
+	cbparm[1] = strdup(path);
+
+	if (!cbparm[1]) {
+		SYSERROR("strdup failed");
+		return -1;
+	}
+
+	snprintf(path, sizeof(path), "/%s/proc/mounts", pivotdir);
+	ok = lxc_file_for_each_line(path, setup_rootfs_pivot_root_cb, &cbparm);
+	if (ok < 0) {
+		SYSERROR("failed to read or parse mount list '%s'", path);
+		return -1;
+	}
+
+	/* umount filesystems until none left or list no longer shrinks */
+	still_mounted = 0;
+	do {
+		last_still_mounted = still_mounted;
+		still_mounted = 0;
+
+		lxc_list_for_each(iterator, &mountlist) {
+
+			if (!umount(iterator->elem)) {
+				DEBUG("umounted '%s'", (char *)iterator->elem);
+				lxc_list_del(iterator);
+				continue;
+			}
+
+			still_mounted++;
+		}
+
+	} while (still_mounted > 0 && still_mounted != last_still_mounted);
+
+
+	lxc_list_for_each(iterator, &mountlist)
+		WARN("failed to unmount '%s'", (char *)iterator->elem);
+
+	/* umount old root fs */
+	if (umount(pivotdir)) {
+		SYSERROR("could not unmount old rootfs");
+		return -1;
+	}
+	DEBUG("umounted '%s'", pivotdir);
+
+	/* remove temporary mount point */
+	if (pivotdir_is_temp) {
+		if (rmdir(pivotdir)) {
+			SYSERROR("can't remove temporary mountpoint");
+			return -1;
+		}
+
+	}
+
+	INFO("pivoted to '%s'", rootfs);
+	return 0;
+}
+
+static int setup_rootfs(const char *rootfs, const char *pivotdir)
 {
 	char *tmpname;
 	int ret = -1;
@@ -358,17 +591,10 @@ static int setup_rootfs(const char *rootfs)
 		goto out;
 	}
 
-	if (chroot(tmpname)) {
-		SYSERROR("failed to set chroot %s", tmpname);
+	if (setup_rootfs_pivot_root(tmpname, pivotdir)) {
+		ERROR("failed to pivot_root to '%s'", rootfs);
 		goto out;
 	}
-
-	if (chdir(getenv("HOME")) && chdir("/")) {
-		SYSERROR("failed to change to home directory");
-		goto out;
-	}
-
-	INFO("chrooted to '%s'", rootfs);
 
 	ret = 0;
 out:
@@ -609,7 +835,7 @@ static int setup_mount_entries(struct lxc_list *mount)
 
 	lxc_list_for_each(iterator, mount) {
 		mount_entry = iterator->elem;
-		fprintf(file, "%s", mount_entry);
+		fprintf(file, "%s\n", mount_entry);
 	}
 
 	rewind(file);
@@ -618,6 +844,46 @@ static int setup_mount_entries(struct lxc_list *mount)
 
 	fclose(file);
 	return ret;
+}
+
+static int setup_caps(struct lxc_list *caps)
+{
+	struct lxc_list *iterator;
+	char *drop_entry;
+	int i, capid;
+
+	lxc_list_for_each(iterator, caps) {
+
+		drop_entry = iterator->elem;
+
+		capid = -1;
+
+		for (i = 0; i < sizeof(caps_opt)/sizeof(caps_opt[0]); i++) {
+
+			if (strcmp(drop_entry, caps_opt[i].name))
+				continue;
+
+			capid = caps_opt[i].value;
+			break;
+		}
+
+	        if (capid < 0) {
+			ERROR("unknown capability %s", drop_entry);
+			return -1;
+		}
+
+		DEBUG("drop capability '%s' (%d)", drop_entry, capid);
+
+		if (prctl(PR_CAPBSET_DROP, capid, 0, 0, 0)) {
+                       SYSERROR("failed to remove %s capability", drop_entry);
+                       return -1;
+                }
+
+	}
+
+	DEBUG("capabilities has been setup");
+
+	return 0;
 }
 
 static int setup_hw_addr(char *hwaddr, const char *ifname)
@@ -790,53 +1056,46 @@ static int setup_network(struct lxc_list *network)
 	return 0;
 }
 
-int conf_has(const char *name, const char *info)
+struct lxc_conf *lxc_conf_init(void)
 {
-	int ret = 0;
-	char path[MAXPATHLEN];
-	struct stat st;
+	struct lxc_conf *new;
 
-	snprintf(path, MAXPATHLEN, LXCPATH "/%s/%s", name, info);
-
-	if (!stat(path, &st) || !lstat(path, &st)) {
-		ret = 1;
-		goto out;
+	new = 	malloc(sizeof(*new));
+	if (!new) {
+		ERROR("lxc_conf_init : %m");
+		return NULL;
 	}
+	memset(new, 0, sizeof(*new));
 
-	if (errno == ENOENT) {
-		ret = 0;
-		goto out;
-	}
+	new->rootfs = NULL;
+	new->pivotdir = NULL;
+	new->fstab = NULL;
+	new->utsname = NULL;
+	new->tty = 0;
+	new->pts = 0;
+	new->console[0] = '\0';
+	lxc_list_init(&new->cgroup);
+	lxc_list_init(&new->network);
+	lxc_list_init(&new->mount_list);
+	lxc_list_init(&new->caps);
 
-	SYSERROR("failed to stat %s info", info);
-out:
-	return ret;
-}
-
-int lxc_conf_init(struct lxc_conf *conf)
-{
-	conf->rootfs = NULL;
-	conf->fstab = NULL;
-	conf->utsname = NULL;
-	conf->tty = 0;
-	conf->pts = 0;
-	conf->console[0] = '\0';
-	lxc_list_init(&conf->cgroup);
-	lxc_list_init(&conf->network);
-	lxc_list_init(&conf->mount_list);
-	return 0;
+	return new;
 }
 
 static int instanciate_veth(struct lxc_netdev *netdev)
 {
-	char veth1[IFNAMSIZ];
+	char veth1buf[IFNAMSIZ], *veth1;
 	char veth2[IFNAMSIZ];
-	int ret = -1;
 
-	snprintf(veth1, sizeof(veth1), "vethXXXXXX");
+	if (netdev->priv.veth_attr.pair)
+		veth1 = netdev->priv.veth_attr.pair;
+	else {
+		snprintf(veth1buf, sizeof(veth1buf), "vethXXXXXX");
+		mktemp(veth1buf);
+		veth1 = veth1buf;
+	}
+
 	snprintf(veth2, sizeof(veth2), "vethXXXXXX");
-
-	mktemp(veth1);
 	mktemp(veth2);
 
 	if (!strlen(veth1) || !strlen(veth2)) {
@@ -846,19 +1105,14 @@ static int instanciate_veth(struct lxc_netdev *netdev)
 
 	if (lxc_veth_create(veth1, veth2)) {
 		ERROR("failed to create %s-%s", veth1, veth2);
-		goto out;
+		return -1;
 	}
 
 	if (netdev->mtu) {
-		if (lxc_device_set_mtu(veth1, atoi(netdev->mtu))) {
-			ERROR("failed to set mtu '%s' for '%s'",
-			      netdev->mtu, veth1);
-			goto out_delete;
-		}
-
-		if (lxc_device_set_mtu(veth2, atoi(netdev->mtu))) {
-			ERROR("failed to set mtu '%s' for '%s'",
-			      netdev->mtu, veth2);
+		if (lxc_device_set_mtu(veth1, atoi(netdev->mtu)) ||
+		    lxc_device_set_mtu(veth2, atoi(netdev->mtu))) {
+			ERROR("failed to set mtu '%s' for %s-%s",
+			      netdev->mtu, veth1, veth2);
 			goto out_delete;
 		}
 	}
@@ -885,13 +1139,11 @@ static int instanciate_veth(struct lxc_netdev *netdev)
 	DEBUG("instanciated veth '%s/%s', index is '%d'",
 	      veth1, veth2, netdev->ifindex);
 
-	ret = 0;
-out:
-	return ret;
+	return 0;
 
 out_delete:
 	lxc_device_delete(veth1);
-	goto out;
+	return -1;
 }
 
 static int instanciate_macvlan(struct lxc_netdev *netdev)
@@ -912,7 +1164,8 @@ static int instanciate_macvlan(struct lxc_netdev *netdev)
 		return -1;
 	}
 
-	if (lxc_macvlan_create(netdev->link, peer)) {
+	if (lxc_macvlan_create(netdev->link, peer,
+			       netdev->priv.macvlan_attr.mode)) {
 		ERROR("failed to create macvlan interface '%s' on '%s'",
 		      peer, netdev->link);
 		return -1;
@@ -925,7 +1178,39 @@ static int instanciate_macvlan(struct lxc_netdev *netdev)
 		return -1;
 	}
 
-	DEBUG("instanciated macvlan '%s', index is '%d'", peer, netdev->ifindex);
+	DEBUG("instanciated macvlan '%s', index is '%d' and mode '%d'",
+	      peer, netdev->ifindex, netdev->priv.macvlan_attr.mode);
+
+	return 0;
+}
+
+/* XXX: merge with instanciate_macvlan */
+static int instanciate_vlan(struct lxc_netdev *netdev)
+{
+	char peer[IFNAMSIZ];
+
+	if (!netdev->link) {
+		ERROR("no link specified for vlan netdev");
+		return -1;
+	}
+
+	snprintf(peer, sizeof(peer), "vlan%d", netdev->priv.vlan_attr.vid);
+
+	if (lxc_vlan_create(netdev->link, peer, netdev->priv.vlan_attr.vid)) {
+		ERROR("failed to create vlan interface '%s' on '%s'",
+		      peer, netdev->link);
+		return -1;
+	}
+
+	netdev->ifindex = if_nametoindex(peer);
+	if (!netdev->ifindex) {
+		ERROR("failed to retrieve the ifindex for %s", peer);
+		lxc_device_delete(peer);
+		return -1;
+	}
+
+	DEBUG("instanciated vlan '%s', ifindex is '%d'", " vlan1000",
+	      netdev->ifindex);
 
 	return 0;
 }
@@ -1002,7 +1287,7 @@ int lxc_create_tty(const char *name, struct lxc_conf *conf)
 		return 0;
 
 	tty_info->pty_info =
-		malloc(sizeof(*tty_info->pty_info)*tty_info->nbtty);
+		malloc(sizeof(*tty_info->pty_info)*conf->tty);
 	if (!tty_info->pty_info) {
 		SYSERROR("failed to allocate pty_info");
 		return -1;
@@ -1086,13 +1371,18 @@ int lxc_setup(const char *name, struct lxc_conf *lxc_conf)
 		return -1;
 	}
 
-	if (setup_rootfs(lxc_conf->rootfs)) {
+	if (setup_rootfs(lxc_conf->rootfs, lxc_conf->pivotdir)) {
 		ERROR("failed to set rootfs for '%s'", name);
 		return -1;
 	}
 
 	if (setup_pts(lxc_conf->pts)) {
 		ERROR("failed to setup the new pts instance");
+		return -1;
+	}
+
+	if (setup_caps(&lxc_conf->caps)) {
+		ERROR("failed to drop capabilities");
 		return -1;
 	}
 

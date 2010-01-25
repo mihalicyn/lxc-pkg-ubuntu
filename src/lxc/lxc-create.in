@@ -26,21 +26,28 @@
 #
 
 usage() {
-    echo "usage: $0 -n <name> [-f configuration]"
+    echo "usage: lxc-create -n <name> [-f configuration] [-t template] [-h]"
 }
 
-if [ "$(id -u)" != "0" ]; then
-   echo "This command has to be run as root"
-   exit 1
-fi
+help() {
+    usage
+    echo
+    echo "creates a lxc system object."
+    echo
+    echo "Options:"
+    echo "name         : name of the container"
+    echo "configuration: lxc configuration"
+    echo "template     : lxc-template is an accessible template script"
+}
 
-shortoptions='n:f:'
-longoptions='name:,config:'
+shortoptions='hn:f:t:'
+longoptions='help,name:,config:,template:'
 lxc_path=@LXCPATH@
+bindir=@BINDIR@
 
 getopt=$(getopt -o $shortoptions --longoptions  $longoptions -- "$@")
 if [ $? != 0 ]; then
-    usage $0
+    usage
     exit 1;
 fi
 
@@ -48,6 +55,10 @@ eval set -- "$getopt"
 
 while true; do
         case "$1" in
+	    -h|--help)
+		help
+		exit 1
+		;;
 	    -n|--name)
 		shift
 		lxc_name=$1
@@ -58,25 +69,45 @@ while true; do
 		lxc_config=$1
 		shift
 		;;
+	    -t|--template)
+		shift
+		lxc_template=$1
+		shift
+		;;
             --)
 		shift
 		break;;
             *)
 		echo $1
-		usage $0
+		usage
 		exit 1
 		;;
         esac
 done
 
-if [ ! -r $lxc_path ]; then
+if [ -z "$lxc_path" ]; then
     echo "no configuration path defined !"
+    exit 1
+fi
+
+if [ ! -r $lxc_path ]; then
+    echo "configuration path '$lxc_path' not found"
     exit 1
 fi
 
 if [ -z "$lxc_name" ]; then
     echo "no container name specified"
-    usage $0
+    usage
+    exit 1
+fi
+
+if [ "$(id -u)" != "0" ]; then
+   echo "This command has to be run as root"
+   exit 1
+fi
+
+if [ ! -r $lxc_path ]; then
+    echo "no configuration path defined !"
     exit 1
 fi
 
@@ -84,6 +115,8 @@ if [ -d "$lxc_path/$lxc_name" ]; then
     echo "'$lxc_name' already exists"
     exit 1
 fi
+
+trap "${bindir}/lxc-destroy -n $lxc_name; echo aborted; exit 1" SIGHUP SIGINT SIGTERM
 
 mkdir -p $lxc_path/$lxc_name
 
@@ -97,3 +130,50 @@ else
 
     cp $lxc_config $lxc_path/$lxc_name/config
 fi
+
+if [ ! -z $lxc_template ]; then
+
+    type ${bindir}/lxc-$lxc_template >/dev/null
+    if [ $? -ne 0 ]; then
+	echo "unknown template '$lxc_template'"
+	${bindir}/lxc-destroy -n $lxc_name
+	exit 1
+    fi
+
+    if [ -z "$lxc_config" ]; then
+	echo
+	echo "Warning:"
+	echo "-------"
+	echo "Usually the template option is called with a configuration"
+	echo "file option too, mostly to configure the network."
+	echo "eg. lxc-create -n foo -f lxc.conf -t debian"
+	echo "The configuration file is often:"
+	echo
+	echo "lxc.network.type=macvlan"
+	echo "lxc.network.link=eth0"
+	echo "lxc.network.flags=up"
+	echo
+	echo "or alternatively:"
+	echo
+	echo "lxc.network.type=veth"
+	echo "lxc.network.link=br0"
+	echo "lxc.network.flags=up"
+	echo
+	echo "For more information look at lxc.conf (5)"
+	echo
+	echo "At this point, I assume you know what you do."
+	echo "Press <enter> to continue ..."
+	read dummy
+    fi
+
+    ${bindir}/lxc-$lxc_template --path=$lxc_path/$lxc_name --name=$lxc_name
+    if [ $? -ne 0 ]; then
+	echo "failed to execute template '$lxc_template'"
+	${bindir}/lxc-destroy -n $lxc_name
+	exit 1
+    fi
+
+    echo "'$lxc_template' template installed"
+fi
+
+echo "'$lxc_name' created"

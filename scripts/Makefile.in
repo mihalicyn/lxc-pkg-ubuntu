@@ -34,8 +34,8 @@ build_triplet = @build@
 host_triplet = @host@
 subdir = scripts
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
-	$(srcdir)/lxc-debian.in $(srcdir)/lxc-fedora.in \
-	$(srcdir)/lxc-sshd.in
+	$(srcdir)/lxc-busybox.in $(srcdir)/lxc-debian.in \
+	$(srcdir)/lxc-fedora.in $(srcdir)/lxc-sshd.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acinclude.m4 \
 	$(top_srcdir)/configure.ac
@@ -43,7 +43,7 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/src/config.h
-CONFIG_CLEAN_FILES = lxc-debian lxc-fedora lxc-sshd
+CONFIG_CLEAN_FILES = lxc-debian lxc-busybox lxc-fedora lxc-sshd
 am__installdirs = "$(DESTDIR)$(bindir)"
 binSCRIPT_INSTALL = $(INSTALL_SCRIPT)
 SCRIPTS = $(bin_SCRIPTS)
@@ -158,6 +158,7 @@ top_srcdir = @top_srcdir@
 bin_SCRIPTS = \
 	lxc-debian \
 	lxc-fedora \
+	lxc-busybox \
 	lxc-sshd
 
 all: all-am
@@ -193,6 +194,8 @@ $(top_srcdir)/configure:  $(am__configure_deps)
 $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 lxc-debian: $(top_builddir)/config.status $(srcdir)/lxc-debian.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+lxc-busybox: $(top_builddir)/config.status $(srcdir)/lxc-busybox.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-fedora: $(top_builddir)/config.status $(srcdir)/lxc-fedora.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@

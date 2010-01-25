@@ -34,10 +34,11 @@ build_triplet = @build@
 host_triplet = @host@
 subdir = doc/examples
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
-	$(srcdir)/lxc-complex-config.in \
+	$(srcdir)/lxc-complex.conf.in \
 	$(srcdir)/lxc-empty-netns.conf.in \
 	$(srcdir)/lxc-macvlan.conf.in $(srcdir)/lxc-no-netns.conf.in \
-	$(srcdir)/lxc-phys.conf.in $(srcdir)/lxc-veth.conf.in
+	$(srcdir)/lxc-phys.conf.in $(srcdir)/lxc-veth.conf.in \
+	$(srcdir)/lxc-vlan.conf.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acinclude.m4 \
 	$(top_srcdir)/configure.ac
@@ -45,9 +46,9 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/src/config.h
-CONFIG_CLEAN_FILES = lxc-macvlan.conf lxc-no-netns.conf \
+CONFIG_CLEAN_FILES = lxc-macvlan.conf lxc-vlan.conf lxc-no-netns.conf \
 	lxc-empty-netns.conf lxc-phys.conf lxc-veth.conf \
-	lxc-complex-config
+	lxc-complex.conf
 SOURCES =
 DIST_SOURCES =
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
@@ -169,19 +170,21 @@ EXTRA_DIST = $(pkgexamples_DATA)
 @ENABLE_EXAMPLES_TRUE@pkgexamplesdir = $(docdir)/examples
 @ENABLE_EXAMPLES_TRUE@pkgexamples_DATA = \
 @ENABLE_EXAMPLES_TRUE@	lxc-macvlan.conf \
+@ENABLE_EXAMPLES_TRUE@	lxc-vlan.conf \
 @ENABLE_EXAMPLES_TRUE@	lxc-no-netns.conf \
 @ENABLE_EXAMPLES_TRUE@	lxc-empty-netns.conf \
 @ENABLE_EXAMPLES_TRUE@	lxc-phys.conf \
 @ENABLE_EXAMPLES_TRUE@	lxc-veth.conf \
-@ENABLE_EXAMPLES_TRUE@	lxc-complex-config
+@ENABLE_EXAMPLES_TRUE@	lxc-complex.conf
 
 noinst_DATA = \
 	lxc-macvlan.conf.in \
+	lxc-vlan.conf.in \
 	lxc-empty-netns.conf.in \
 	lxc-no-netns.conf.in \
 	lxc-phys.conf.in \
 	lxc-veth.conf.in \
-	lxc-complex-config.in
+	lxc-complex.conf.in
 
 all: all-am
 
@@ -217,6 +220,8 @@ $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 lxc-macvlan.conf: $(top_builddir)/config.status $(srcdir)/lxc-macvlan.conf.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+lxc-vlan.conf: $(top_builddir)/config.status $(srcdir)/lxc-vlan.conf.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-no-netns.conf: $(top_builddir)/config.status $(srcdir)/lxc-no-netns.conf.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-empty-netns.conf: $(top_builddir)/config.status $(srcdir)/lxc-empty-netns.conf.in
@@ -225,7 +230,7 @@ lxc-phys.conf: $(top_builddir)/config.status $(srcdir)/lxc-phys.conf.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-veth.conf: $(top_builddir)/config.status $(srcdir)/lxc-veth.conf.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
-lxc-complex-config: $(top_builddir)/config.status $(srcdir)/lxc-complex-config.in
+lxc-complex.conf: $(top_builddir)/config.status $(srcdir)/lxc-complex.conf.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 install-pkgexamplesDATA: $(pkgexamples_DATA)
 	@$(NORMAL_INSTALL)

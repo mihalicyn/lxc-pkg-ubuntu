@@ -158,7 +158,6 @@ int lxc_poll(const char *name, struct lxc_handler *handler)
 {
 	int sigfd = handler->sigfd;
 	int pid = handler->pid;
-	int ret = -1;
 	struct lxc_epoll_descr descr;
 
 	if (lxc_mainloop_open(&descr)) {
@@ -174,16 +173,13 @@ int lxc_poll(const char *name, struct lxc_handler *handler)
 	if (lxc_command_mainloop_add(name, &descr, handler))
 		goto out_mainloop_open;
 
-	ret = lxc_mainloop(&descr);
-
-out:
-	return ret;
+	return lxc_mainloop(&descr);
 
 out_mainloop_open:
 	lxc_mainloop_close(&descr);
 out_sigfd:
 	close(sigfd);
-	goto out;
+	return -1;
 }
 
 static int fdname(int fd, char *name, size_t size)
@@ -230,7 +226,7 @@ static int console_init(char *console, size_t size)
 	return 0;
 }
 
-struct lxc_handler *lxc_init(const char *name, const char *rcfile)
+struct lxc_handler *lxc_init(const char *name, struct lxc_conf *conf)
 {
 	struct lxc_handler *handler;
 
@@ -240,36 +236,20 @@ struct lxc_handler *lxc_init(const char *name, const char *rcfile)
 
 	memset(handler, 0, sizeof(*handler));
 
+	handler->conf = conf;
+
 	/* Begin the set the state to STARTING*/
 	if (lxc_set_state(name, handler, STARTING)) {
 		ERROR("failed to set state '%s'", lxc_state2str(STARTING));
 		goto out_free;
 	}
 
-	if (lxc_conf_init(&handler->conf)) {
-		ERROR("failed to initialize the configuration");
-		goto out_aborting;
-	}
-
-	if (rcfile) {
-		if (access(rcfile, F_OK)) {
-			ERROR("failed to access '%s'", rcfile);
-			goto out_aborting;
-		}
-
-		if (lxc_config_read(rcfile, &handler->conf)) {
-			ERROR("failed to read '%s'", rcfile);
-			goto out_aborting;
-		}
-	}
-
-	if (console_init(handler->conf.console,
-			 sizeof(handler->conf.console))) {
+	if (console_init(conf->console, sizeof(conf->console))) {
 		ERROR("failed to initialize the console");
 		goto out_aborting;
 	}
 
-	if (lxc_create_tty(name, &handler->conf)) {
+	if (lxc_create_tty(name, conf)) {
 		ERROR("failed to create the ttys");
 		goto out_aborting;
 	}
@@ -287,20 +267,16 @@ struct lxc_handler *lxc_init(const char *name, const char *rcfile)
 	LXC_TTY_ADD_HANDLER(SIGINT);
 	LXC_TTY_ADD_HANDLER(SIGQUIT);
 
-out:
-	if (handler)
-		INFO("'%s' is initialized", name);
-
+	INFO("'%s' is initialized", name);
 	return handler;
 
 out_delete_tty:
-	lxc_delete_tty(&handler->conf.tty_info);
+	lxc_delete_tty(&conf->tty_info);
 out_aborting:
 	lxc_set_state(name, handler, ABORTING);
 out_free:
 	free(handler);
-	handler = NULL;
-	goto out;
+	return NULL;
 }
 
 void lxc_fini(const char *name, struct lxc_handler *handler)
@@ -312,10 +288,8 @@ void lxc_fini(const char *name, struct lxc_handler *handler)
 	lxc_set_state(name, handler, STOPPED);
 	lxc_unlink_nsgroup(name);
 
-	if (handler) {
-		lxc_delete_tty(&handler->conf.tty_info);
-		free(handler);
-	}
+	lxc_delete_tty(&handler->conf->tty_info);
+	free(handler);
 
 	LXC_TTY_DEL_HANDLER(SIGQUIT);
 	LXC_TTY_DEL_HANDLER(SIGINT);
@@ -345,7 +319,7 @@ static int do_start(void *arg)
 
 	if (sigprocmask(SIG_SETMASK, &handler->oldmask, NULL)) {
 		SYSERROR("failed to set sigprocmask");
-		goto out_child;
+		return -1;
 	}
 
 	close(sv[1]);
@@ -356,29 +330,29 @@ static int do_start(void *arg)
 	/* Tell our father he can begin to configure the container */
 	if (write(sv[0], &sync, sizeof(sync)) < 0) {
 		SYSERROR("failed to write socket");
-		goto out_child;
+		return -1;
 	}
 
 	/* Wait for the father to finish the configuration */
 	if (read(sv[0], &sync, sizeof(sync)) < 0) {
 		SYSERROR("failed to read socket");
-		goto out_child;
+		return -1;
 	}
 
 	/* Setup the container, ip, names, utsname, ... */
-	if (lxc_setup(name, &handler->conf)) {
+	if (lxc_setup(name, handler->conf)) {
 		ERROR("failed to setup the container");
 		goto out_warn_father;
 	}
 
 	if (prctl(PR_CAPBSET_DROP, CAP_SYS_BOOT, 0, 0, 0)) {
 		SYSERROR("failed to remove CAP_SYS_BOOT capability");
-		goto out_child;
+		return -1;
 	}
 
 	if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0)) {
 		SYSERROR("failed to set pdeath signal");
-		goto out_child;
+		return -1;
 	}
 
 	NOTICE("exec'ing '%s'", argv[0]);
@@ -390,7 +364,6 @@ out_warn_father:
 	/* If the exec fails, tell that to our father */
 	if (write(sv[0], &err, sizeof(err)) < 0)
 		SYSERROR("failed to write the socket");
-out_child:
 	return -1;
 }
 
@@ -410,18 +383,18 @@ int lxc_spawn(const char *name, struct lxc_handler *handler, char *const argv[])
 	/* Synchro socketpair */
 	if (socketpair(AF_LOCAL, SOCK_STREAM, 0, sv)) {
 		SYSERROR("failed to create communication socketpair");
-		goto out;
+		return -1;
 	}
 
 	clone_flags = CLONE_NEWUTS|CLONE_NEWPID|CLONE_NEWIPC|CLONE_NEWNS;
-	if (!lxc_list_empty(&handler->conf.network)) {
+	if (!lxc_list_empty(&handler->conf->network)) {
 
 		clone_flags |= CLONE_NEWNET;
 
 		/* that should be done before the clone because we will
 		 * fill the netdev index and use them in the child
 		 */
-		if (lxc_create_network(&handler->conf.network)) {
+		if (lxc_create_network(&handler->conf->network)) {
 			ERROR("failed to create the network");
 			goto out_close;
 		}
@@ -447,7 +420,7 @@ int lxc_spawn(const char *name, struct lxc_handler *handler, char *const argv[])
 
 	/* Create the network configuration */
 	if (clone_flags & CLONE_NEWNET) {
-		if (lxc_assign_network(&handler->conf.network, handler->pid)) {
+		if (lxc_assign_network(&handler->conf->network, handler->pid)) {
 			ERROR("failed to create the configured network");
 			goto out_abort;
 		}
@@ -478,21 +451,21 @@ int lxc_spawn(const char *name, struct lxc_handler *handler, char *const argv[])
 out_close:
 	close(sv[0]);
 	close(sv[1]);
-out:
 	return err;
 
 out_abort:
 	lxc_abort(name, handler);
-	goto out_close;
+	close(sv[1]);
+	return -1;
 }
 
-int lxc_start(const char *name, char *const argv[], const char *rcfile)
+int lxc_start(const char *name, char *const argv[], struct lxc_conf *conf)
 {
 	struct lxc_handler *handler;
 	int err = -1;
 	int status;
 
-	handler = lxc_init(name, rcfile);
+	handler = lxc_init(name, conf);
 	if (!handler) {
 		ERROR("failed to initialize the container");
 		return -1;
@@ -501,7 +474,7 @@ int lxc_start(const char *name, char *const argv[], const char *rcfile)
 	err = lxc_spawn(name, handler, argv);
 	if (err) {
 		ERROR("failed to spawn '%s'", argv[0]);
-		goto out;
+		goto out_fini;
 	}
 
 	err = lxc_close_all_inherited_fd();
@@ -520,11 +493,11 @@ int lxc_start(const char *name, char *const argv[], const char *rcfile)
 		continue;
 
 	err =  lxc_error_set_and_log(handler->pid, status);
-out:
+out_fini:
 	lxc_fini(name, handler);
 	return err;
 
 out_abort:
 	lxc_abort(name, handler);
-	goto out;
+	goto out_fini;
 }

@@ -63,12 +63,20 @@
 # define IFLA_INFO_KIND 1
 #endif
 
+#ifndef IFLA_VLAN_ID
+# define IFLA_VLAN_ID 1
+#endif
+
 #ifndef IFLA_INFO_DATA
 #  define IFLA_INFO_DATA 2
 #endif
 
 #ifndef VETH_INFO_PEER
 # define VETH_INFO_PEER 1
+#endif
+
+#ifndef IFLA_MACVLAN_MODE
+# define IFLA_MACVLAN_MODE 1
 #endif
 
 struct link_req {
@@ -348,11 +356,11 @@ int lxc_veth_create(const char *name1, const char *name2)
 	link_req = (struct link_req *)nlmsg;
 	link_req->ifinfomsg.ifi_family = AF_UNSPEC;
 	nlmsg->nlmsghdr.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg));
-	nlmsg->nlmsghdr.nlmsg_flags = 
+	nlmsg->nlmsghdr.nlmsg_flags =
 		NLM_F_REQUEST|NLM_F_CREATE|NLM_F_EXCL|NLM_F_ACK;
 	nlmsg->nlmsghdr.nlmsg_type = RTM_NEWLINK;
 
- 	nest1 = nla_begin_nested(nlmsg, IFLA_LINKINFO);
+	nest1 = nla_begin_nested(nlmsg, IFLA_LINKINFO);
 	if (!nest1)
 		goto out;
 
@@ -392,12 +400,88 @@ out:
 	return err;
 }
 
-int lxc_macvlan_create(const char *master, const char *name)
+/* XXX: merge with lxc_macvlan_create */
+int lxc_vlan_create(const char *master, const char *name, ushort vlanid)
 {
 	struct nl_handler nlh;
 	struct nlmsg *nlmsg = NULL, *answer = NULL;
 	struct link_req *link_req;
-	struct rtattr *nest;
+	struct rtattr *nest, *nest2;
+	int lindex, len, err = -1;
+
+	if (netlink_open(&nlh, NETLINK_ROUTE))
+		return -1;
+
+	len = strlen(master);
+	if (len == 1 || len > IFNAMSIZ)
+		goto err3;
+
+	len = strlen(name);
+	if (len == 1 || len > IFNAMSIZ)
+		goto err3;
+
+	nlmsg = nlmsg_alloc(NLMSG_GOOD_SIZE);
+	if (!nlmsg)
+		goto err3;
+
+	answer = nlmsg_alloc(NLMSG_GOOD_SIZE);
+	if (!answer)
+		goto err2;
+
+	lindex = if_nametoindex(master);
+	if (!lindex)
+		goto err1;
+
+	link_req = (struct link_req *)nlmsg;
+	link_req->ifinfomsg.ifi_family = AF_UNSPEC;
+	nlmsg->nlmsghdr.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg));
+	nlmsg->nlmsghdr.nlmsg_flags =
+		NLM_F_REQUEST|NLM_F_CREATE|NLM_F_EXCL|NLM_F_ACK;
+	nlmsg->nlmsghdr.nlmsg_type = RTM_NEWLINK;
+
+	nest = nla_begin_nested(nlmsg, IFLA_LINKINFO);
+	if (!nest)
+		goto err1;
+
+	if (nla_put_string(nlmsg, IFLA_INFO_KIND, "vlan"))
+		goto err1;
+
+	nest2 = nla_begin_nested(nlmsg, IFLA_INFO_DATA);
+	if (!nest2)
+		goto err1;
+
+	if (nla_put_u16(nlmsg, IFLA_VLAN_ID, vlanid))
+		goto err1;
+
+	nla_end_nested(nlmsg, nest2);
+
+	nla_end_nested(nlmsg, nest);
+
+	if (nla_put_u32(nlmsg, IFLA_LINK, lindex))
+		goto err1;
+
+	if (nla_put_string(nlmsg, IFLA_IFNAME, name))
+		goto err1;
+
+	if (netlink_transaction(&nlh, nlmsg, answer))
+		goto err1;
+
+	err = 0;
+err1:
+	nlmsg_free(answer);
+err2:
+	nlmsg_free(nlmsg);
+err3:
+	netlink_close(&nlh);
+	return err;
+}
+
+int lxc_macvlan_create(const char *master, const char *name, int mode)
+{
+	struct nl_handler nlh;
+	struct nlmsg *nlmsg = NULL, *answer = NULL;
+	struct link_req *link_req;
+	struct rtattr *nest, *nest2;
 	int index, len, err = -1;
 
 	if (netlink_open(&nlh, NETLINK_ROUTE))
@@ -430,12 +514,23 @@ int lxc_macvlan_create(const char *master, const char *name)
 		NLM_F_REQUEST|NLM_F_CREATE|NLM_F_EXCL|NLM_F_ACK;
 	nlmsg->nlmsghdr.nlmsg_type = RTM_NEWLINK;
 
- 	nest = nla_begin_nested(nlmsg, IFLA_LINKINFO);
+	nest = nla_begin_nested(nlmsg, IFLA_LINKINFO);
 	if (!nest)
 		goto out;
 
 	if (nla_put_string(nlmsg, IFLA_INFO_KIND, "macvlan"))
 		goto out;
+
+	if (mode) {
+		nest2 = nla_begin_nested(nlmsg, IFLA_INFO_DATA);
+		if (!nest2)
+			goto out;
+
+		if (nla_put_u32(nlmsg, IFLA_MACVLAN_MODE, mode))
+			goto out;
+
+		nla_end_nested(nlmsg, nest2);
+	}
 
 	nla_end_nested(nlmsg, nest);
 
@@ -478,7 +573,7 @@ static int ip_forward_set(const char *ifname, int family, int flag)
 	if (family != AF_INET && family != AF_INET6)
 		return -1;
 
-	snprintf(path, MAXPATHLEN, "/proc/sys/net/%s/conf/%s/forwarding", 
+	snprintf(path, MAXPATHLEN, "/proc/sys/net/%s/conf/%s/forwarding",
 		 family == AF_INET?"ipv4":"ipv6" , ifname);
 
 	return proc_sys_net_write(path, flag?"1":"0");
@@ -501,8 +596,8 @@ static int neigh_proxy_set(const char *ifname, int family, int flag)
 	if (family != AF_INET && family != AF_INET6)
 		return -1;
 
-	sprintf(path, "/proc/sys/net/%s/conf/%s/%s", 
-		family == AF_INET?"ipv4":"ipv6" , ifname, 
+	sprintf(path, "/proc/sys/net/%s/conf/%s/%s",
+		family == AF_INET?"ipv4":"ipv6" , ifname,
 		family == AF_INET?"proxy_arp":"proxy_ndp");
 
 	return proc_sys_net_write(path, flag?"1":"0");
@@ -603,10 +698,10 @@ int lxc_ip_addr_add(int family, int ifindex, void *addr, int prefix)
 	if (nla_put_buffer(nlmsg, IFA_ADDRESS, addr, addrlen))
 		goto out;
 
-/* 	if (in_bcast.s_addr != INADDR_ANY) */
-/* 		if (nla_put_buffer(nlmsg, IFA_BROADCAST, &in_bcast, */
-/* 				   sizeof(in_bcast))) */
-/* 			goto out; */
+/*	if (in_bcast.s_addr != INADDR_ANY) */
+/*		if (nla_put_buffer(nlmsg, IFA_BROADCAST, &in_bcast, */
+/*				   sizeof(in_bcast))) */
+/*			goto out; */
 
 	if (netlink_transaction(&nlh, nlmsg, answer))
 		goto out;
@@ -619,7 +714,7 @@ out:
 	return err;
 }
 
-static int bridge_add_del_interface(const char *bridge, 
+static int bridge_add_del_interface(const char *bridge,
 				    const char *ifname, int detach)
 {
 	int fd, index, err;
