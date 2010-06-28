@@ -29,12 +29,12 @@
 #include <lxc/list.h>
 
 enum {
-	EMPTY,
-	VETH,
-	MACVLAN,
-	PHYS,
-	VLAN,
-	MAXCONFTYPE,
+	LXC_NET_EMPTY,
+	LXC_NET_VETH,
+	LXC_NET_MACVLAN,
+	LXC_NET_PHYS,
+	LXC_NET_VLAN,
+	LXC_NET_MAXCONFTYPE,
 };
 
 /*
@@ -62,7 +62,7 @@ struct lxc_route {
  */
 struct lxc_inet6dev {
 	struct in6_addr addr;
-	struct in6_addr bcast;
+	struct in6_addr mcast;
 	struct in6_addr acast;
 	int prefix;
 };
@@ -149,25 +149,59 @@ struct lxc_tty_info {
 };
 
 /*
+ * Defines the structure to store the console information
+ * @peer   : the file descriptor put/get console traffic
+ * @name   : the file name of the slave pty
+ */
+struct lxc_console {
+	int slave;
+	int master;
+	int peer;
+	char *path;
+	char name[MAXPATHLEN];
+	struct termios *tios;
+};
+
+/*
+ * Defines a structure to store the rootfs location, the
+ * optionals pivot_root, rootfs mount paths
+ * @rootfs     : a path to the rootfs
+ * @pivot_root : a path to a pivot_root location to be used
+ */
+struct lxc_rootfs {
+	char *path;
+	char *mount;
+	char *pivot;
+};
+
+/*
  * Defines the global container configuration
- * @rootfs  : the root directory to run the container
- * @mount   : the list of mount points
- * @network : the network configuration
- * @utsname : the container utsname
+ * @rootfs     : root directory to run the container
+ * @pivotdir   : pivotdir path, if not set default will be used
+ * @mount      : list of mount points
+ * @tty        : numbers of tty
+ * @pts        : new pts instance
+ * @mount_list : list of mount point (alternative to fstab file)
+ * @network    : network configuration
+ * @utsname    : container utsname
+ * @fstab      : path to a fstab file format
+ * @caps       : list of the capabilities
+ * @tty_info   : tty data
+ * @console    : console data
  */
 struct lxc_conf {
-	char *rootfs;
-	char *pivotdir;
 	char *fstab;
 	int tty;
 	int pts;
+	int reboot;
 	struct utsname *utsname;
 	struct lxc_list cgroup;
 	struct lxc_list network;
 	struct lxc_list mount_list;
 	struct lxc_list caps;
 	struct lxc_tty_info tty_info;
-	char console[MAXPATHLEN];
+	struct lxc_console console;
+	struct lxc_rootfs rootfs;
 };
 
 /*
@@ -176,6 +210,7 @@ struct lxc_conf {
 extern struct lxc_conf *lxc_conf_init(void);
 
 extern int lxc_create_network(struct lxc_list *networks);
+extern void lxc_delete_network(struct lxc_list *networks);
 extern int lxc_assign_network(struct lxc_list *networks, pid_t pid);
 
 extern int lxc_create_tty(const char *name, struct lxc_conf *conf);

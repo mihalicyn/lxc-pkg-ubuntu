@@ -3,7 +3,7 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "LXC-START" "1" "22 January 2010" "" ""
+.TH "LXC-START" "1" "24 June 2010" "" ""
 
 .SH NAME
 lxc-start \- run an application inside a container.
@@ -16,14 +16,20 @@ config_file] [-s KEY=VAL]
 
 .SH "DESCRIPTION"
 .PP
-\fBlxc-start\fR runs the specified command inside
-the container specified by name. It will setup the container
-according the configuration previously defined with the
-lxc-create command or with the configuration file parameter and
-execute the command inside the container. If no configuration is
-defined, the default isolation is used. The orphan process group
+\fBlxc-start\fR runs the specified
+\fIcommand\fR inside the container
+specified by \fIname\fR\&.
+.PP
+It will setup the container
+according to the configuration previously defined with the
+lxc-create command or with the configuration file parameter.
+If no configuration is
+defined, the default isolation is used.
+.PP
+The orphan process group
 and daemon are not supported by this command, use
 the \fBlxc-execute\fR command instead.
+.PP
 If no command is specified, \fBlxc-start\fR will
 use the default
 \fB"/sbin/init"\fR command to run a system
@@ -35,11 +41,15 @@ Run the container as a daemon. As the container has no
 more tty, if an error occurs nothing will be displayed,
 the log file can be used to check the error.
 .TP
-\fB   -f \fIconfig_file\fB \fR
+\fB   -f, --rcfile \fIconfig_file\fB \fR
 Specify the configuration file to configure the virtualization
 and isolation functionalities for the container.
+
+This configuration file if present will be used even if there is
+already a configuration file present in the previously created
+container (via lxc-create).
 .TP
-\fB   -s \fIKEY=VAL\fB \fR
+\fB   -s, --define \fIKEY=VAL\fB \fR
 Assign value \fIVAL\fR to configuration
 variable \fIKEY\fR\&. This overrides any
 assignment done in \fIconfig_file\fR\&.
@@ -68,6 +78,10 @@ FATAL, CRIT,
 WARN, ERROR,
 NOTICE, INFO,
 DEBUG\&.
+
+Note that this option is setting the priority of the events
+log in the alternate log file. It do not have effect on the
+ERROR events log on stderr.
 .TP
 \fB-n, --name=\fINAME\fB\fR
 Use container identifier \fINAME\fR\&.
@@ -78,10 +92,6 @@ The container identifier format is an alphanumeric string.
 The specified container is already running an
 application. You should stop it before reuse this
 container or create a new one.
-.TP
-\fBThe container was not found\fR
-The specified container was not created before with
-the \fBlxc-create\fR
 .SH "SEE ALSO"
 .PP
 \fBlxc\fR(1),
@@ -90,6 +100,7 @@ the \fBlxc-create\fR
 \fBlxc-start\fR(1),
 \fBlxc-stop\fR(1),
 \fBlxc-execute\fR(1),
+\fBlxc-kill\fR(1),
 \fBlxc-console\fR(1),
 \fBlxc-monitor\fR(1),
 \fBlxc-wait\fR(1),

@@ -3,7 +3,7 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "LXC-DESTROY" "1" "22 January 2010" "" ""
+.TH "LXC-DESTROY" "1" "24 June 2010" "" ""
 
 .SH NAME
 lxc-destroy \- destroy a container.
@@ -14,10 +14,8 @@ name\fB\fR
 
 .SH "DESCRIPTION"
 .PP
-\fBlxc-destroy\fR destroys the directory where is
-stored the configuration and all the data contained in this
-directory. After the destruction the container is no longer
-available and should be recreated.
+\fBlxc-destroy\fR destroys the system object
+previously created by the \fBlxc-create\fR command.
 .SH "DIAGNOSTIC"
 .TP
 \fBThe container was not found\fR
@@ -33,6 +31,7 @@ command to list the available containers on the system.
 \fBlxc-start\fR(1),
 \fBlxc-stop\fR(1),
 \fBlxc-execute\fR(1),
+\fBlxc-kill\fR(1),
 \fBlxc-console\fR(1),
 \fBlxc-monitor\fR(1),
 \fBlxc-wait\fR(1),

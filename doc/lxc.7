@@ -3,7 +3,7 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "LXC" "7" "22 January 2010" "Version 0.6.5" ""
+.TH "LXC" "7" "24 June 2010" "Version 0.7.1" ""
 
 .SH NAME
 lxc \- linux containers
@@ -35,7 +35,7 @@ manage a container with simple command lines and complete enough
 to be used for other purposes.
 .SH "REQUIREMENTS"
 .PP
-The \fBlxc\fR relies on a set of functionalies
+The \fBlxc\fR relies on a set of functionalities
 provided by the kernel which needs to be active. Depending of
 the missing functionalities the \fBlxc\fR will
 work with a restricted number of functionalities or will simply
@@ -99,10 +99,12 @@ the mount point with the \fBlxc\fR name, eg:
 lxc /cgroup4lxc\fR
 .SH "FUNCTIONAL SPECIFICATION"
 .PP
-A container is an object where the configuration is
-persistent. The application will be launched inside this
-container and it will use the configuration which was previously
-created or specified in parameter of the command.
+A container is an object isolating some resources of the host,
+for the application or system running in it.
+.PP
+The application / system will be launched inside a
+container specified by a configuration that is either
+initially created or passed as parameter of the starting commands.
 .PP
 How to run an application in a container ?
 .PP
@@ -229,20 +231,18 @@ pass through the aborting state.
 
       
 .fi
-.SS "VOLATILE CONTAINERS"
-.PP
-The container can be directly started with a
-configuration file in parameter without creating them before.
 .SS "CONFIGURATION"
 .PP
 The container is configured through a configuration
 file, the format of the configuration file is described in 
 \fB\fIlxc.conf\fB\fR(5)
-.SS "CREATING / DESTROYING THE CONTAINERS"
+.SS "CREATING / DESTROYING CONTAINER  (PERSISTENT CONTAINER)"
 .PP
-The container is created via the \fBlxc-create\fR
-command. It takes a container name as parameter and an
-optional configuration file. The name is used by the different
+A persistent container object can be
+created via the \fBlxc-create\fR
+command. It takes a container name as parameter and
+optional configuration file and template.
+The name is used by the different
 commands to refer to this
 container. The \fBlxc-destroy\fR command will
 destroy the container object.
@@ -252,48 +252,58 @@ destroy the container object.
 	  lxc-destroy -n foo
 	
 .fi
-.SS "STARTING / STOPPING A CONTAINER"
+.SS "VOLATILE CONTAINER"
+.PP
+It is not mandatory to create a container object
+before to start it.
+The container can be directly started with a
+configuration file as parameter.
+.SS "STARTING / STOPPING CONTAINER"
 .PP
 When the container has been created, it is ready to run an
-application / system. When the application has to be destroyed,
-the container can be stopped, that will kill all the processes
-of the container. If the container was not created before
+application / system.
+This is the purpose of the \fBlxc-execute\fR and
+\fBlxc-start\fR commands.
+If the container was not created before
 starting the application, the container will use the
-configuration file passed as parameter to the command, otherwise
-it will use the default isolation.
+configuration file passed as parameter to the command,
+and if there is no such parameter either, then
+it will use a default isolation.
+If the application is ended, the container will be stopped also,
+but if needed the \fBlxc-stop\fR command can
+be used to kill the still running application.
 .PP
 Running an application inside a container is not exactly the
-same thing as running a system. For this reason, there is two
-commands to run an application into a container:
+same thing as running a system. For this reason, there are two
+different commands to run an application into a container:
 
 .nf
 	  lxc-execute -n foo [-f config] /bin/bash
-	  lxc-start -n foo [/bin/bash]
+	  lxc-start -n foo [-f config] [/bin/bash]
 	
 .fi
 .PP
 \fBlxc-execute\fR command will run the
-specified command into a container but it will mount /proc
-and autocreate/autodestroy the container if it does not
-exist. It will furthermore create an intermediate
-process, \fBlxc-init\fR, which is in charge to
-launch the specified command, that allows to support daemons
-in the container. In other words, in the
-container \fBlxc-init\fR has the pid 1 and the
+specified command into the container via an intermediate
+process, \fBlxc-init\fR\&.
+This lxc-init after launching  the specified command,
+will wait for its end and all other reparented processes.
+(that allows to support daemons in the container).
+In other words, in the
+container, \fBlxc-init\fR has the pid 1 and the
 first process of the application has the pid 2.
 .PP
-\fBlxc-start\fR command will run the specified
-command into the container doing nothing else than using the
-configuration specified by \fBlxc-create\fR\&.
+\fBlxc-start\fR command will run directly the specified
+command into the container.
 The pid of the first process is 1. If no command is
 specified \fBlxc-start\fR will
 run \fI/sbin/init\fR\&.
 .PP
 To summarize, \fBlxc-execute\fR is for running
-an application and \fBlxc-start\fR is for
+an application and \fBlxc-start\fR is better suited for
 running a system.
 .PP
-If the application is no longer responding, inaccessible or is
+If the application is no longer responding, is inaccessible or is
 not able to finish by itself, a
 wild \fBlxc-stop\fR command will kill all the
 processes in the container without pity.
@@ -314,7 +324,7 @@ without login again.
 	  lxc-console -n foo -t 3
 	
 .fi
-.SS "FREEZE / UNFREEZE A CONTAINER"
+.SS "FREEZE / UNFREEZE CONTAINER"
 .PP
 Sometime, it is useful to stop all the processes belonging to
 a container, eg. for job scheduling. The commands:
@@ -329,16 +339,16 @@ will put all the processes in an uninteruptible state and
 	  lxc-unfreeze -n foo
 	
 .fi
-will resume all the tasks.
+will resume them.
 .PP
 This feature is enabled if the cgroup freezer is enabled in the
 kernel.
-.SS "GETTING INFORMATION ABOUT THE CONTAINER"
+.SS "GETTING INFORMATION ABOUT CONTAINER"
 .PP
 When there are a lot of containers, it is hard to follow
 what has been created or destroyed, what is running or what are
 the pids running into a specific container. For this reason, the
-following commands give this information:
+following commands may be usefull:
 
 .nf
 	  lxc-ls
@@ -414,7 +424,7 @@ the container 'foo'.
 	  lxc-netstat -n foo -tano
 	
 .fi
-.SS "MONITORING THE CONTAINERS"
+.SS "MONITORING CONTAINER"
 .PP
 It is sometime useful to track the states of a container,
 for example to monitor it or just to wait for a specific
@@ -440,10 +450,10 @@ For a container 'foo' starting, doing some work and exiting,
 the output will be in the form:
 
 .nf
-	  'foo' changed state to [STARTING]
-	  'foo' changed state to [RUNNING]
-	  'foo' changed state to [STOPPING]
-	  'foo' changed state to [STOPPED]
+\&'foo' changed state to [STARTING]
+\&'foo' changed state to [RUNNING]
+\&'foo' changed state to [STOPPING]
+\&'foo' changed state to [STOPPED]
 	
 .fi
 .PP
@@ -471,7 +481,7 @@ to the background.
 
 	
 .fi
-.SS "SETTING THE CONTROL GROUP FOR A CONTAINER"
+.SS "SETTING THE CONTROL GROUP FOR CONTAINER"
 .PP
 The container is tied with the control groups, when a
 container is started a control group is created and associated
@@ -509,6 +519,7 @@ the frozen version.
 \fBlxc-start\fR(1),
 \fBlxc-stop\fR(1),
 \fBlxc-execute\fR(1),
+\fBlxc-kill\fR(1),
 \fBlxc-console\fR(1),
 \fBlxc-monitor\fR(1),
 \fBlxc-wait\fR(1),

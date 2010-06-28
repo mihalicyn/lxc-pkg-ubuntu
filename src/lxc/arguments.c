@@ -207,10 +207,6 @@ extern char **lxc_arguments_dup(const char *file, struct lxc_arguments *args)
 	char **argv;
 	int opt, nbargs = args->argc + 2;
 
-	if (args->log_file)
-		nbargs += 2;
-	if (args->log_priority)
-		nbargs += 2;
 	if (args->quiet)
 		nbargs += 1;
 
@@ -221,16 +217,6 @@ extern char **lxc_arguments_dup(const char *file, struct lxc_arguments *args)
 	nbargs = 0;
 
 	argv[nbargs++] = strdup(file);
-
-	if (args->log_file) {
-		argv[nbargs++] = "--logfile";
-		argv[nbargs++] = strdup(args->log_file);
-	}
-
-	if (args->log_priority) {
-		argv[nbargs++] = "--logpriority";
-		argv[nbargs++] = strdup(args->log_priority);
-	}
 
 	if (args->quiet)
 		argv[nbargs++] = "--quiet";
@@ -243,4 +229,24 @@ extern char **lxc_arguments_dup(const char *file, struct lxc_arguments *args)
 	argv[nbargs] = NULL;
 
 	return argv;
+}
+
+int lxc_arguments_str_to_int(struct lxc_arguments *args, const char *str)
+{
+	long val;
+	char *endptr;
+
+	errno = 0;
+	val = strtol(str, &endptr, 10);
+	if (errno) {
+		lxc_error(args, "invalid statefd '%s' : %m", str);
+		return -1;
+	}
+
+	if (*endptr) {
+		lxc_error(args, "invalid digit for statefd '%s'", str);
+		return -1;
+	}
+
+	return (int)val;
 }

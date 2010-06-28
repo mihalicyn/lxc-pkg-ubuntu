@@ -36,6 +36,7 @@
 #include <sys/param.h>
 #include <sys/file.h>
 #include <sys/mount.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/prctl.h>
 #include <sys/types.h>
@@ -44,9 +45,32 @@
 #include <sys/un.h>
 #include <sys/poll.h>
 
-#ifdef HAVE_SYS_SIGNALFD_H 
+#ifdef HAVE_SYS_SIGNALFD_H
 #  include <sys/signalfd.h>
 #else
+/* assume kernel headers are too old */
+#include <stdint.h>
+struct signalfd_siginfo
+{
+	uint32_t ssi_signo;
+	int32_t ssi_errno;
+	int32_t ssi_code;
+	uint32_t ssi_pid;
+	uint32_t ssi_uid;
+	int32_t ssi_fd;
+	uint32_t ssi_tid;
+	uint32_t ssi_band;
+	uint32_t ssi_overrun;
+	uint32_t ssi_trapno;
+	int32_t ssi_status;
+	int32_t ssi_int;
+	uint64_t ssi_ptr;
+	uint64_t ssi_utime;
+	uint64_t ssi_stime;
+	uint64_t ssi_addr;
+	uint8_t __pad[48];
+};
+
 #  ifndef __NR_signalfd4
 /* assume kernel headers are too old */
 #    if __i386__
@@ -88,24 +112,83 @@ int signalfd(int fd, const sigset_t *mask, int flags)
 #define PR_CAPBSET_DROP 24
 #endif
 
-#include <lxc/log.h>
-#include <lxc/conf.h>
-#include <lxc/confile.h>
-#include <lxc/start.h>
-#include <lxc/utils.h>
-#include <lxc/cgroup.h>
-#include <lxc/monitor.h>
-
+#include "start.h"
+#include "conf.h"
+#include "cgroup.h"
+#include "log.h"
+#include "cgroup.h"
 #include "error.h"
 #include "af_unix.h"
 #include "mainloop.h"
+#include "utils.h"
+#include "utmp.h"
+#include "monitor.h"
 #include "commands.h"
-
+#include "console.h"
+#include "sync.h"
 
 lxc_log_define(lxc_start, lxc);
 
 LXC_TTY_HANDLER(SIGINT);
 LXC_TTY_HANDLER(SIGQUIT);
+
+static int match_fd(int fd)
+{
+	return (fd == 0 || fd == 1 || fd == 2);
+}
+
+int lxc_check_inherited(int fd_to_ignore)
+{
+	struct dirent dirent, *direntp;
+	int fd, fddir;
+	DIR *dir;
+	int ret = 0;
+
+	dir = opendir("/proc/self/fd");
+	if (!dir) {
+		WARN("failed to open directory: %m");
+		return -1;
+	}
+
+	fddir = dirfd(dir);
+
+	while (!readdir_r(dir, &dirent, &direntp)) {
+		char procpath[64];
+		char path[PATH_MAX];
+
+		if (!direntp)
+			break;
+
+		if (!strcmp(direntp->d_name, "."))
+			continue;
+
+		if (!strcmp(direntp->d_name, ".."))
+			continue;
+
+		fd = atoi(direntp->d_name);
+
+		if (fd == fddir || fd == lxc_log_fd || fd == fd_to_ignore)
+			continue;
+
+		if (match_fd(fd))
+			continue;
+		/*
+		 * found inherited fd
+		 */
+		ret = -1;
+
+		snprintf(procpath, sizeof(procpath), "/proc/self/fd/%d", fd);
+
+		if (readlink(procpath, path, sizeof(path)) == -1)
+			ERROR("readlink(%s) failed : %m", procpath);
+		else
+			ERROR("inherited fd %d on %s", fd, path);
+	}
+
+	if (closedir(dir))
+		ERROR("failed to close directory");
+	return ret;
+}
 
 static int setup_sigchld_fd(sigset_t *oldmask)
 {
@@ -139,12 +222,63 @@ static int setup_sigchld_fd(sigset_t *oldmask)
 	return fd;
 }
 
-static int sigchld_handler(int fd, void *data, 
+static int sigchld_handler(int fd, void *data,
 			   struct lxc_epoll_descr *descr)
 {
-	DEBUG("child exited");
+	struct signalfd_siginfo siginfo;
+	int ret;
+	pid_t *pid = data;
 
+	ret = read(fd, &siginfo, sizeof(siginfo));
+	if (ret < 0) {
+		ERROR("failed to read sigchld info");
+		return -1;
+	}
+
+	if (ret != sizeof(siginfo)) {
+		ERROR("unexpected siginfo size");
+		return -1;
+	}
+
+	if (siginfo.ssi_code == CLD_STOPPED ||
+	    siginfo.ssi_code == CLD_CONTINUED) {
+		INFO("container init process was stopped/continued");
+		return 0;
+	}
+
+	/* more robustness, protect ourself from a SIGCHLD sent
+	 * by a process different from the container init
+	 */
+	if (siginfo.ssi_pid != *pid) {
+		WARN("invalid pid for SIGCHLD");
+		return 0;
+	}
+
+	DEBUG("container init process exited");
 	return 1;
+}
+
+int lxc_pid_callback(int fd, struct lxc_request *request,
+		     struct lxc_handler *handler)
+{
+	struct lxc_answer answer;
+	int ret;
+
+	answer.pid = handler->pid;
+	answer.ret = 0;
+
+	ret = send(fd, &answer, sizeof(answer), 0);
+	if (ret < 0) {
+		WARN("failed to send answer to the peer");
+		return -1;
+	}
+
+	if (ret != sizeof(answer)) {
+		ERROR("partial answer sent");
+		return -1;
+	}
+
+	return 0;
 }
 
 int lxc_set_state(const char *name, struct lxc_handler *handler, lxc_state_t state)
@@ -170,8 +304,20 @@ int lxc_poll(const char *name, struct lxc_handler *handler)
 		goto out_mainloop_open;
 	}
 
-	if (lxc_command_mainloop_add(name, &descr, handler))
+	if (lxc_console_mainloop_add(&descr, handler)) {
+		ERROR("failed to add console handler to mainloop");
 		goto out_mainloop_open;
+	}
+
+	if (lxc_command_mainloop_add(name, &descr, handler)) {
+		ERROR("failed to add command handler to mainloop");
+		goto out_mainloop_open;
+	}
+
+	if (lxc_utmp_mainloop_add(&descr, handler)) {
+		ERROR("failed to add utmp handler to mainloop");
+		goto out_mainloop_open;
+	}
 
 	return lxc_mainloop(&descr);
 
@@ -180,50 +326,6 @@ out_mainloop_open:
 out_sigfd:
 	close(sigfd);
 	return -1;
-}
-
-static int fdname(int fd, char *name, size_t size)
-{
-	char path[MAXPATHLEN];
-	ssize_t len;
-
-	snprintf(path, MAXPATHLEN, "/proc/self/fd/%d", fd);
-
-	len = readlink(path, name, size);
-	if (len >  0)
-		path[len] = '\0';
-
-	return (len <= 0) ? -1 : 0;
-}
-
-static int console_init(char *console, size_t size)
-{
-	struct stat stat;
-	int i;
-
-	for (i = 0; i < 3; i++) {
-		if (!isatty(i))
-			continue;
-
-		if (ttyname_r(i, console, size)) {
-			SYSERROR("failed to retrieve tty name");
-			return -1;
-		}
-
-		return 0;
-	}
-
-	if (!fstat(0, &stat)) {
-		if (S_ISREG(stat.st_mode) || S_ISCHR(stat.st_mode) ||
-		    S_ISFIFO(stat.st_mode) || S_ISLNK(stat.st_mode))
-			return fdname(0, console, size);
-	}
-
-	console[0] = '\0';
-
-	DEBUG("console initialized");
-
-	return 0;
 }
 
 struct lxc_handler *lxc_init(const char *name, struct lxc_conf *conf)
@@ -238,20 +340,26 @@ struct lxc_handler *lxc_init(const char *name, struct lxc_conf *conf)
 
 	handler->conf = conf;
 
-	/* Begin the set the state to STARTING*/
-	if (lxc_set_state(name, handler, STARTING)) {
-		ERROR("failed to set state '%s'", lxc_state2str(STARTING));
+	handler->name = strdup(name);
+	if (!handler->name) {
+		ERROR("failed to allocate memory");
 		goto out_free;
 	}
 
-	if (console_init(conf->console, sizeof(conf->console))) {
-		ERROR("failed to initialize the console");
-		goto out_aborting;
+	/* Begin the set the state to STARTING*/
+	if (lxc_set_state(name, handler, STARTING)) {
+		ERROR("failed to set state '%s'", lxc_state2str(STARTING));
+		goto out_free_name;
 	}
 
 	if (lxc_create_tty(name, conf)) {
 		ERROR("failed to create the ttys");
 		goto out_aborting;
+	}
+
+	if (lxc_create_console(conf)) {
+		ERROR("failed to create console");
+		goto out_delete_tty;
 	}
 
 	/* the signal fd has to be created before forking otherwise
@@ -260,20 +368,21 @@ struct lxc_handler *lxc_init(const char *name, struct lxc_conf *conf)
 	handler->sigfd = setup_sigchld_fd(&handler->oldmask);
 	if (handler->sigfd < 0) {
 		ERROR("failed to set sigchild fd handler");
-		goto out_delete_tty;
+		goto out_delete_console;
 	}
-
-	/* Avoid signals from terminal */
-	LXC_TTY_ADD_HANDLER(SIGINT);
-	LXC_TTY_ADD_HANDLER(SIGQUIT);
 
 	INFO("'%s' is initialized", name);
 	return handler;
 
+out_delete_console:
+	lxc_delete_console(&conf->console);
 out_delete_tty:
 	lxc_delete_tty(&conf->tty_info);
 out_aborting:
 	lxc_set_state(name, handler, ABORTING);
+out_free_name:
+	free(handler->name);
+	handler->name = NULL;
 out_free:
 	free(handler);
 	return NULL;
@@ -286,61 +395,43 @@ void lxc_fini(const char *name, struct lxc_handler *handler)
 	 */
 	lxc_set_state(name, handler, STOPPING);
 	lxc_set_state(name, handler, STOPPED);
-	lxc_unlink_nsgroup(name);
 
+	/* reset mask set by setup_sigchld_fd */
+	if (sigprocmask(SIG_SETMASK, &handler->oldmask, NULL))
+		WARN("failed to restore sigprocmask");
+
+	lxc_delete_console(&handler->conf->console);
 	lxc_delete_tty(&handler->conf->tty_info);
+	free(handler->name);
 	free(handler);
-
-	LXC_TTY_DEL_HANDLER(SIGQUIT);
-	LXC_TTY_DEL_HANDLER(SIGINT);
 }
 
 void lxc_abort(const char *name, struct lxc_handler *handler)
 {
 	lxc_set_state(name, handler, ABORTING);
-	kill(handler->pid, SIGKILL);
+	if (handler->pid > 0)
+		kill(handler->pid, SIGKILL);
 }
 
-struct start_arg {
-	const char *name;
-	char *const *argv;
-	struct lxc_handler *handler;
-	int *sv;
-};
-
-static int do_start(void *arg)
+static int do_start(void *data)
 {
-	struct start_arg *start_arg = arg;
-	struct lxc_handler *handler = start_arg->handler;
-	const char *name = start_arg->name;
-	char *const *argv = start_arg->argv;
-	int *sv = start_arg->sv;
-	int err = -1, sync;
+	struct lxc_handler *handler = data;
 
 	if (sigprocmask(SIG_SETMASK, &handler->oldmask, NULL)) {
 		SYSERROR("failed to set sigprocmask");
 		return -1;
 	}
 
-	close(sv[1]);
+	lxc_sync_fini_parent(handler);
 
-	/* Be sure we don't inherit this after the exec */
-	fcntl(sv[0], F_SETFD, FD_CLOEXEC);
-
-	/* Tell our father he can begin to configure the container */
-	if (write(sv[0], &sync, sizeof(sync)) < 0) {
-		SYSERROR("failed to write socket");
+	/* Tell the parent task it can begin to configure the
+	 * container and wait for it to finish
+	 */
+	if (lxc_sync_barrier_parent(handler, LXC_SYNC_CONFIGURE))
 		return -1;
-	}
-
-	/* Wait for the father to finish the configuration */
-	if (read(sv[0], &sync, sizeof(sync)) < 0) {
-		SYSERROR("failed to read socket");
-		return -1;
-	}
 
 	/* Setup the container, ip, names, utsname, ... */
-	if (lxc_setup(name, handler->conf)) {
+	if (lxc_setup(handler->name, handler->conf)) {
 		ERROR("failed to setup the container");
 		goto out_warn_father;
 	}
@@ -355,36 +446,26 @@ static int do_start(void *arg)
 		return -1;
 	}
 
-	NOTICE("exec'ing '%s'", argv[0]);
+	close(handler->sigfd);
 
-	execvp(argv[0], argv);
-	SYSERROR("failed to exec %s", argv[0]);
+	/* after this call, we are in error because this
+	 * ops should not return as it execs */
+	if (handler->ops->start(handler, handler->data))
+		return -1;
 
 out_warn_father:
-	/* If the exec fails, tell that to our father */
-	if (write(sv[0], &err, sizeof(err)) < 0)
-		SYSERROR("failed to write the socket");
+	lxc_sync_wake_parent(handler, LXC_SYNC_POST_CONFIGURE);
 	return -1;
 }
 
-int lxc_spawn(const char *name, struct lxc_handler *handler, char *const argv[])
+int lxc_spawn(struct lxc_handler *handler)
 {
-	int sv[2];
 	int clone_flags;
-	int err = -1, sync;
+	int failed_before_rename = 0;
+	const char *name = handler->name;
 
-	struct start_arg start_arg = {
-		.name = name,
-		.argv = argv,
-		.handler = handler,
-		.sv = sv,
-	};
-
-	/* Synchro socketpair */
-	if (socketpair(AF_LOCAL, SOCK_STREAM, 0, sv)) {
-		SYSERROR("failed to create communication socketpair");
+	if (lxc_sync_init(handler))
 		return -1;
-	}
 
 	clone_flags = CLONE_NEWUTS|CLONE_NEWPID|CLONE_NEWIPC|CLONE_NEWNS;
 	if (!lxc_list_empty(&handler->conf->network)) {
@@ -396,47 +477,46 @@ int lxc_spawn(const char *name, struct lxc_handler *handler, char *const argv[])
 		 */
 		if (lxc_create_network(&handler->conf->network)) {
 			ERROR("failed to create the network");
-			goto out_close;
+			lxc_sync_fini(handler);
+			return -1;
 		}
 	}
 
+
 	/* Create a process in a new set of namespaces */
-	handler->pid = lxc_clone(do_start, &start_arg, clone_flags);
+	handler->pid = lxc_clone(do_start, handler, clone_flags);
 	if (handler->pid < 0) {
 		SYSERROR("failed to fork into a new namespace");
-		goto out_close;
+		goto out_delete_net;
 	}
 
-	close(sv[0]);
-	
-	/* Wait for the child to be ready */
-	if (read(sv[1], &sync, sizeof(sync)) < 0) {
-		SYSERROR("failed to read the socket");
-		goto out_abort;
-	}
+	lxc_sync_fini_child(handler);
+
+	if (lxc_sync_wait_child(handler, LXC_SYNC_CONFIGURE))
+		failed_before_rename = 1;
 
 	if (lxc_rename_nsgroup(name, handler))
-		goto out_abort;
+		goto out_delete_net;
+
+	if (failed_before_rename)
+		goto out_delete_net;
 
 	/* Create the network configuration */
 	if (clone_flags & CLONE_NEWNET) {
 		if (lxc_assign_network(&handler->conf->network, handler->pid)) {
 			ERROR("failed to create the configured network");
-			goto out_abort;
+			goto out_delete_net;
 		}
 	}
 
-	/* Tell the child to continue its initialization */
-	if (write(sv[1], &sync, sizeof(sync)) < 0) {
-		SYSERROR("failed to write the socket");
-		goto out_abort;
-	}
+	/* Tell the child to continue its initialization and wait for
+	 * it to exec or return an error
+	 */
+	if (lxc_sync_barrier_child(handler, LXC_SYNC_POST_CONFIGURE))
+		return -1;
 
-	/* Wait for the child to exec or returning an error */
-	if (read(sv[1], &sync, sizeof(sync)) < 0) {
-		ERROR("failed to read the socket");
+	if (handler->ops->post_start(handler, handler->data))
 		goto out_abort;
-	}
 
 	if (lxc_set_state(name, handler, RUNNING)) {
 		ERROR("failed to set state to %s",
@@ -444,22 +524,20 @@ int lxc_spawn(const char *name, struct lxc_handler *handler, char *const argv[])
 		goto out_abort;
 	}
 
-	err = 0;
+	lxc_sync_fini(handler);
+	return 0;
 
-	NOTICE("'%s' started with pid '%d'", argv[0], handler->pid);
-
-out_close:
-	close(sv[0]);
-	close(sv[1]);
-	return err;
-
+out_delete_net:
+	if (clone_flags & CLONE_NEWNET)
+		lxc_delete_network(&handler->conf->network);
 out_abort:
 	lxc_abort(name, handler);
-	close(sv[1]);
+	lxc_sync_fini(handler);
 	return -1;
 }
 
-int lxc_start(const char *name, char *const argv[], struct lxc_conf *conf)
+int __lxc_start(const char *name, struct lxc_conf *conf,
+		struct lxc_operations* ops, void *data)
 {
 	struct lxc_handler *handler;
 	int err = -1;
@@ -470,18 +548,18 @@ int lxc_start(const char *name, char *const argv[], struct lxc_conf *conf)
 		ERROR("failed to initialize the container");
 		return -1;
 	}
+	handler->ops = ops;
+	handler->data = data;
 
-	err = lxc_spawn(name, handler, argv);
+	err = lxc_spawn(handler);
 	if (err) {
-		ERROR("failed to spawn '%s'", argv[0]);
+		ERROR("failed to spawn '%s'", name);
 		goto out_fini;
 	}
 
-	err = lxc_close_all_inherited_fd();
-	if (err) {
-		ERROR("unable to close inherited fds");
-		goto out_abort;
-	}
+	/* Avoid signals from terminal */
+	LXC_TTY_ADD_HANDLER(SIGINT);
+	LXC_TTY_ADD_HANDLER(SIGQUIT);
 
 	err = lxc_poll(name, handler);
 	if (err) {
@@ -494,10 +572,53 @@ int lxc_start(const char *name, char *const argv[], struct lxc_conf *conf)
 
 	err =  lxc_error_set_and_log(handler->pid, status);
 out_fini:
+	LXC_TTY_DEL_HANDLER(SIGQUIT);
+	LXC_TTY_DEL_HANDLER(SIGINT);
+	lxc_unlink_nsgroup(name);
 	lxc_fini(name, handler);
 	return err;
 
 out_abort:
 	lxc_abort(name, handler);
 	goto out_fini;
+}
+
+struct start_args {
+	char *const *argv;
+};
+
+static int start(struct lxc_handler *handler, void* data)
+{
+	struct start_args *arg = data;
+
+	NOTICE("exec'ing '%s'", arg->argv[0]);
+
+	execvp(arg->argv[0], arg->argv);
+	SYSERROR("failed to exec %s", arg->argv[0]);
+	return 0;
+}
+
+static int post_start(struct lxc_handler *handler, void* data)
+{
+	struct start_args *arg = data;
+
+	NOTICE("'%s' started with pid '%d'", arg->argv[0], handler->pid);
+	return 0;
+}
+
+static struct lxc_operations start_ops = {
+	.start = start,
+	.post_start = post_start
+};
+
+int lxc_start(const char *name, char *const argv[], struct lxc_conf *conf)
+{
+	struct start_args start_arg = {
+		.argv = argv,
+	};
+
+	if (lxc_check_inherited(-1))
+		return -1;
+
+	return __lxc_start(name, conf, &start_ops, &start_arg);
 }

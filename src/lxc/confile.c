@@ -25,6 +25,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <pty.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/utsname.h>
@@ -45,6 +48,7 @@ static int config_tty(const char *, char *, struct lxc_conf *);
 static int config_cgroup(const char *, char *, struct lxc_conf *);
 static int config_mount(const char *, char *, struct lxc_conf *);
 static int config_rootfs(const char *, char *, struct lxc_conf *);
+static int config_rootfs_mount(const char *, char *, struct lxc_conf *);
 static int config_pivotdir(const char *, char *, struct lxc_conf *);
 static int config_utsname(const char *, char *, struct lxc_conf *);
 static int config_network_type(const char *, char *, struct lxc_conf *);
@@ -59,6 +63,7 @@ static int config_network_mtu(const char *, char *, struct lxc_conf *);
 static int config_network_ipv4(const char *, char *, struct lxc_conf *);
 static int config_network_ipv6(const char *, char *, struct lxc_conf *);
 static int config_cap_drop(const char *, char *, struct lxc_conf *);
+static int config_console(const char *, char *, struct lxc_conf *);
 
 typedef int (*config_cb)(const char *, char *, struct lxc_conf *);
 
@@ -73,6 +78,7 @@ static struct config config[] = {
 	{ "lxc.tty",                  config_tty                  },
 	{ "lxc.cgroup",               config_cgroup               },
 	{ "lxc.mount",                config_mount                },
+	{ "lxc.rootfs.mount",         config_rootfs_mount         },
 	{ "lxc.rootfs",               config_rootfs               },
 	{ "lxc.pivotdir",             config_pivotdir             },
 	{ "lxc.utsname",              config_utsname              },
@@ -88,6 +94,7 @@ static struct config config[] = {
 	{ "lxc.network.ipv4",         config_network_ipv4         },
 	{ "lxc.network.ipv6",         config_network_ipv6         },
 	{ "lxc.cap.drop",             config_cap_drop             },
+	{ "lxc.console",              config_console              },
 };
 
 static const size_t config_size = sizeof(config)/sizeof(struct config);
@@ -132,15 +139,15 @@ static int config_network_type(const char *key, char *value,
 	lxc_list_add(network, list);
 
 	if (!strcmp(value, "veth"))
-		netdev->type = VETH;
+		netdev->type = LXC_NET_VETH;
 	else if (!strcmp(value, "macvlan"))
-		netdev->type = MACVLAN;
+		netdev->type = LXC_NET_MACVLAN;
 	else if (!strcmp(value, "vlan"))
-		netdev->type = VLAN;
+		netdev->type = LXC_NET_VLAN;
 	else if (!strcmp(value, "phys"))
-		netdev->type = PHYS;
+		netdev->type = LXC_NET_PHYS;
 	else if (!strcmp(value, "empty"))
-		netdev->type = EMPTY;
+		netdev->type = LXC_NET_EMPTY;
 	else {
 		ERROR("invalid network type %s", value);
 		return -1;
@@ -398,16 +405,23 @@ static int config_network_ipv4(const char *key, char *value,
 		return -1;
 	}
 
-	if (bcast)
-		if (!inet_pton(AF_INET, bcast, &inetdev->bcast)) {
-			SYSERROR("invalid ipv4 address: %s", value);
-			return -1;
-		}
+	if (bcast && !inet_pton(AF_INET, bcast, &inetdev->bcast)) {
+		SYSERROR("invalid ipv4 broadcast address: %s", value);
+		return -1;
+	}
 
 	/* no prefix specified, determine it from the network class */
 	inetdev->prefix = prefix ? atoi(prefix) :
 		config_ip_prefix(&inetdev->addr);
 
+	/* if no broadcast address, let compute one from the
+	 * prefix and address
+	 */
+	if (!bcast) {
+		inetdev->bcast.s_addr =
+			htonl(INADDR_BROADCAST << (32 - inetdev->prefix));
+		inetdev->bcast.s_addr &= inetdev->addr.s_addr;
+	}
 
 	lxc_list_add(&netdev->ipv4, list);
 
@@ -615,6 +629,22 @@ static int config_cap_drop(const char *key, char *value,
 	return ret;
 }
 
+static int config_console(const char *key, char *value,
+			  struct lxc_conf *lxc_conf)
+{
+	char *path;
+
+	path = strdup(value);
+	if (!path) {
+		SYSERROR("failed to strdup '%s': %m", value);
+		return -1;
+	}
+
+	lxc_conf->console.path = path;
+
+	return 0;
+}
+
 static int config_rootfs(const char *key, char *value, struct lxc_conf *lxc_conf)
 {
 	if (strlen(value) >= MAXPATHLEN) {
@@ -622,9 +652,25 @@ static int config_rootfs(const char *key, char *value, struct lxc_conf *lxc_conf
 		return -1;
 	}
 
-	lxc_conf->rootfs = strdup(value);
-	if (!lxc_conf->rootfs) {
+	lxc_conf->rootfs.path = strdup(value);
+	if (!lxc_conf->rootfs.path) {
 		SYSERROR("failed to duplicate string %s", value);
+		return -1;
+	}
+
+	return 0;
+}
+
+static int config_rootfs_mount(const char *key, char *value, struct lxc_conf *lxc_conf)
+{
+	if (strlen(value) >= MAXPATHLEN) {
+		ERROR("%s path is too long", value);
+		return -1;
+	}
+
+	lxc_conf->rootfs.mount = strdup(value);
+	if (!lxc_conf->rootfs.mount) {
+		SYSERROR("failed to duplicate string '%s'", value);
 		return -1;
 	}
 
@@ -638,8 +684,8 @@ static int config_pivotdir(const char *key, char *value, struct lxc_conf *lxc_co
 		return -1;
 	}
 
-	lxc_conf->pivotdir = strdup(value);
-	if (!lxc_conf->pivotdir) {
+	lxc_conf->rootfs.pivot = strdup(value);
+	if (!lxc_conf->rootfs.pivot) {
 		SYSERROR("failed to duplicate string %s", value);
 		return -1;
 	}
@@ -672,22 +718,35 @@ static int config_utsname(const char *key, char *value, struct lxc_conf *lxc_con
 static int parse_line(char *buffer, void *data)
 {
 	struct config *config;
-	char *line = buffer;
+	char *line, *linep;
 	char *dot;
 	char *key;
 	char *value;
+	int ret = -1;
 
-	if (lxc_is_line_empty(line))
+	if (lxc_is_line_empty(buffer))
 		return 0;
+
+	/* we have to dup the buffer otherwise, at the re-exec for
+	 * reboot we modified the original string on the stack by
+	 * replacing '=' by '\0' below
+	 */
+	linep = line = strdup(buffer);
+	if (!line) {
+		SYSERROR("failed to allocate memory for '%s'", buffer);
+		return -1;
+	}
 
 	line += lxc_char_left_gc(line, strlen(line));
-	if (line[0] == '#')
-		return 0;
+	if (line[0] == '#') {
+		ret = 0;
+		goto out;
+	}
 
 	dot = strstr(line, "=");
 	if (!dot) {
 		ERROR("invalid configuration line: %s", line);
-		return -1;
+		goto out;
 	}
 
 	*dot = '\0';
@@ -702,10 +761,14 @@ static int parse_line(char *buffer, void *data)
 	config = getconfig(key);
 	if (!config) {
 		ERROR("unknow key %s", key);
-		return -1;
+		goto out;
 	}
 
-	return config->cb(key, value, data);
+	ret = config->cb(key, value, data);
+
+out:
+	free(linep);
+	return ret;
 }
 
 int lxc_config_readline(char *buffer, struct lxc_conf *conf)

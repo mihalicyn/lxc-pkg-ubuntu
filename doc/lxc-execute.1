@@ -3,7 +3,7 @@
 .\" <http://shell.ipoline.com/~elmert/comp/docbook2X/> 
 .\" Please send any bug reports, improvements, comments, patches, 
 .\" etc. to Steve Cheng <steve@ggi-project.org>.
-.TH "LXC-EXECUTE" "1" "22 January 2010" "" ""
+.TH "LXC-EXECUTE" "1" "24 June 2010" "" ""
 
 .SH NAME
 lxc-execute \- run an application inside a container.
@@ -12,28 +12,48 @@ lxc-execute \- run an application inside a container.
 \fBlxc-execute \fI-n name\fB
 [-f config_file] [-s KEY=VAL
 ]
-\fIcommand\fB
-\fR
+\fIcommand\fB\fR
 
 .SH "DESCRIPTION"
 .PP
-\fBlxc-execute\fR runs
-the \fIcommand\fR inside the container
-specified by \fIname\fR\&. This command
-should be used to launch an application, eg. sshd or bash.
+\fBlxc-execute\fR runs the specified
+\fIcommand\fR inside the container
+specified by \fIname\fR\&.
+.PP
+It will setup the container
+according to the configuration previously defined with the
+lxc-create command or with the configuration file parameter.
+If no configuration is
+defined, the default isolation is used.
 .PP
 This command is mainly used when you want to quickly launch an
-application in an isolated environment. It will create an
-intermediate process allowing you application to daemonize in
-the pid namespace and will mount the proc filesystem to complete
-the pid isolation.
+application in an isolated environment.
+.PP
+\fBlxc-execute\fR command will run the
+specified command into the container via an intermediate
+process, \fBlxc-init\fR\&.
+This lxc-init after launching  the specified command,
+will wait for its end and all other reparented processes.
+(that allows to support daemons in the container).
+In other words, in the
+container, \fBlxc-init\fR has the pid 1 and the
+first process of the application has the pid 2.
+.PP
+The above \fBlxc-init\fR is designed to forward received
+signals to the started command.
+So \fBlxc-kill\fR (1) sent signal is received
+by the user specified command (pid 2 in the container).
 .SH "OPTIONS"
 .TP
-\fB   -f \fIconfig_file\fB \fR
+\fB   -f, --rcfile \fIconfig_file\fB \fR
 Specify the configuration file to configure the virtualization
 and isolation functionalities for the container.
+
+This configuration file if present will be used even if there is
+already a configuration file present in the previously created
+container (via lxc-create).
 .TP
-\fB   -s \fIKEY=VAL\fB \fR
+\fB   -s, --define \fIKEY=VAL\fB \fR
 Assign value \fIVAL\fR to configuration
 variable \fIKEY\fR\&. This overrides any
 assignment done in \fIconfig_file\fR\&.
@@ -62,6 +82,10 @@ FATAL, CRIT,
 WARN, ERROR,
 NOTICE, INFO,
 DEBUG\&.
+
+Note that this option is setting the priority of the events
+log in the alternate log file. It do not have effect on the
+ERROR events log on stderr.
 .TP
 \fB-n, --name=\fINAME\fB\fR
 Use container identifier \fINAME\fR\&.
@@ -80,6 +104,7 @@ container or create a new one.
 \fBlxc-start\fR(1),
 \fBlxc-stop\fR(1),
 \fBlxc-execute\fR(1),
+\fBlxc-kill\fR(1),
 \fBlxc-console\fR(1),
 \fBlxc-monitor\fR(1),
 \fBlxc-wait\fR(1),

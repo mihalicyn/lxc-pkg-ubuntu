@@ -44,9 +44,10 @@ struct lxc_arguments {
 	int quiet;
 	int daemonize;
 	const char *rcfile;
-	const char *statefile;
 
-	/* for lxc-checkpoint */
+	/* for lxc-checkpoint/restart */
+	const char *statefile;
+	int statefd;
 	int flags;
 
 	/* for lxc-console */
@@ -77,6 +78,7 @@ extern int lxc_arguments_parse(struct lxc_arguments *args,
 			       int argc, char *const argv[]);
 
 extern char **lxc_arguments_dup(const char *file, struct lxc_arguments *args);
+extern int lxc_arguments_str_to_int(struct lxc_arguments *args, const char *str);
 
 extern const char *lxc_strerror(int errnum);
 

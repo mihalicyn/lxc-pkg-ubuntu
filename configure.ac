@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT([lxc], [0.6.5])
+AC_INIT([lxc], [0.7.1])
 
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_AUX_DIR([config])
@@ -35,7 +35,6 @@ AS_AC_EXPAND(PREFIX, $prefix)
 AS_AC_EXPAND(LIBDIR, $libdir)
 AS_AC_EXPAND(BINDIR, $bindir)
 AS_AC_EXPAND(INCLUDEDIR, $includedir)
-AS_AC_EXPAND(LIBEXECDIR, $libexecdir)
 AS_AC_EXPAND(SYSCONFDIR, $sysconfdir)
 AS_AC_EXPAND(DATADIR, $datadir)
 AS_AC_EXPAND(LOCALSTATEDIR, $localstatedir)
@@ -47,22 +46,43 @@ AC_ARG_WITH([config-path],
 		[lxc configuration repository path]
 	)], [], [with_config_path="${localstatedir}/lib/lxc"])
 
+AC_ARG_WITH([rootfs-path],
+	[AC_HELP_STRING(
+		[--with-rootfs-path=dir],
+		[lxc rootfs mount point]
+	)], [], [with_rootfs_path="${libdir}/lxc/rootfs"])
+
 AS_AC_EXPAND(LXC_GENERATE_DATE, "$(date)")
+
 AS_AC_EXPAND(LXCPATH, "${with_config_path}")
+AS_AC_EXPAND(LXCROOTFSMOUNT, "${with_rootfs_path}")
+AS_AC_EXPAND(LXCINITDIR, $libdir/lxc)
+AS_AC_EXPAND(LXCTEMPLATEDIR, $libdir/lxc/templates)
 AH_TEMPLATE([LXCPATH], [lxc configuration repository])
-AH_TEMPLATE([LXCLIBEXECDIR], [lxc executable library path])
+AH_TEMPLATE([LXCINITDIR], [lxc-init directory location])
+AH_TEMPLATE([LXCROOTFSMOUNT], [lxc default rootfs mount point])
 AC_DEFINE_UNQUOTED(LXCPATH, "$LXCPATH")
-AC_DEFINE_UNQUOTED(LXCLIBEXECDIR, "$LIBEXECDIR")
+AC_DEFINE_UNQUOTED(LXCINITDIR, "$LXCINITDIR")
+AC_DEFINE_UNQUOTED(LXCROOTFSMOUNT, "$LXCROOTFSMOUNT")
 
 AC_CHECK_HEADERS([linux/netlink.h linux/genetlink.h],
-                 [],
-                 AC_MSG_ERROR([netlink headers not found. Please install the linux kernel headers.]),
-                 [#include <sys/socket.h>
+				  [],
+				  AC_MSG_ERROR([netlink headers not found. Please install the linux kernel headers.]),
+				  [#include <sys/socket.h>
 		 ])
 
 AC_CHECK_HEADERS([sys/capability.h], [], AC_MSG_ERROR([please install libcap-devel.]),
 [#include <sys/types.h>
 #include <sys/capability.h>])
+AC_CHECK_LIB(cap,cap_set_proc,caplib=yes,caplib=no)
+AC_MSG_CHECKING([linux capabilities])
+if test "x$caplib" = "xyes" ; then
+   CAP_LIBS="-lcap"
+   AC_MSG_RESULT([$CAP_LIBS])
+else
+   AC_MSG_ERROR([not found])
+fi
+AC_SUBST([CAP_LIBS])
 
 # Some systems lack PR_CAPBSET_DROP definition => HAVE_DECL_PR_CAPBSET_DROP
 AC_CHECK_DECLS([PR_CAPBSET_DROP], [], [], [#include <sys/prctl.h>])
@@ -76,16 +96,18 @@ if test "x$GCC" = "xyes"; then
 fi
 
 AC_CONFIG_FILES([
-        Makefile
+	Makefile
 	lxc.pc
 	lxc.spec
-        config/Makefile
+	config/Makefile
 
-        doc/Makefile
+	doc/Makefile
 	doc/lxc-create.sgml
 	doc/lxc-destroy.sgml
 	doc/lxc-execute.sgml
 	doc/lxc-start.sgml
+	doc/lxc-checkpoint.sgml
+	doc/lxc-restart.sgml
 	doc/lxc-stop.sgml
 	doc/lxc-console.sgml
 	doc/lxc-freeze.sgml
@@ -95,10 +117,13 @@ AC_CONFIG_FILES([
 	doc/lxc-ls.sgml
 	doc/lxc-ps.sgml
 	doc/lxc-cgroup.sgml
+	doc/lxc-kill.sgml
 	doc/lxc.conf.sgml
 	doc/lxc.sgml
 	doc/common_options.sgml
 	doc/see_also.sgml
+
+	doc/rootfs/Makefile
 
 	doc/examples/Makefile
 	doc/examples/lxc-macvlan.conf
@@ -109,13 +134,14 @@ AC_CONFIG_FILES([
 	doc/examples/lxc-veth.conf
 	doc/examples/lxc-complex.conf
 
-	scripts/Makefile
-	scripts/lxc-debian
-	scripts/lxc-busybox
-	scripts/lxc-fedora
-	scripts/lxc-sshd
+	templates/Makefile
+	templates/lxc-debian
+	templates/lxc-ubuntu
+	templates/lxc-busybox
+	templates/lxc-fedora
+	templates/lxc-sshd
 
-        src/Makefile
+	src/Makefile
 	src/lxc/Makefile
 	src/lxc/lxc-ps
 	src/lxc/lxc-ls

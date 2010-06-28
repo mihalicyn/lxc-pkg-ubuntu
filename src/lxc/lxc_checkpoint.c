@@ -21,12 +21,14 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 #define _GNU_SOURCE
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <fcntl.h>
 
 #include <lxc/lxc.h>
 #include <lxc/log.h>
@@ -39,8 +41,13 @@ lxc_log_define(lxc_checkpoint_ui, lxc_checkpoint);
 
 static int my_checker(const struct lxc_arguments* args)
 {
-	if (!args->statefile) {
+	if ((!args->statefile) && (args->statefd == -1)) {
 		lxc_error(args, "no statefile specified");
+		return -1;
+	}
+
+	if ((args->statefile) && (args->statefd != -1)) {
+		lxc_error(args, "--statefile AND --statefd abnormally set");
 		return -1;
 	}
 
@@ -52,7 +59,16 @@ static int my_parser(struct lxc_arguments* args, int c, char* arg)
 	switch (c) {
 	case 'k': args->flags = LXC_FLAG_HALT; break;
 	case 'p': args->flags = LXC_FLAG_PAUSE; break;
-	case 'd': args->statefile = arg; break;
+	case 'S': args->statefile = arg; break;
+	case 'd': {
+			int fd;
+			fd = lxc_arguments_str_to_int(args, arg);
+			if (fd < 0)
+				return -1;
+
+			args->statefd = fd;
+			break;
+		}
 	}
 	return 0;
 }
@@ -60,43 +76,36 @@ static int my_parser(struct lxc_arguments* args, int c, char* arg)
 static const struct option my_longopts[] = {
 	{"kill", no_argument, 0, 'k'},
 	{"pause", no_argument, 0, 'p'},
-	{"directory", required_argument, 0, 'd'},
+	{"statefile", required_argument, 0, 'S'},
+	{"statefd", required_argument, 0, 'd'},
 	LXC_COMMON_OPTIONS
 };
 
 static struct lxc_arguments my_args = {
 	.progname = "lxc-checkpoint",
 	.help     = "\
---name=NAME --directory STATEFILE\n\
+--name=NAME --statefile FILE\n\
 \n\
-lxc-checkpoint checkpoints in STATEFILE the NAME container\n\
+lxc-checkpoint checkpoints in FILE the NAME container\n\
 \n\
 Options :\n\
   -n, --name=NAME      NAME for name of the container\n\
   -k, --kill           stop the container after checkpoint\n\
   -p, --pause          don't unfreeze the container after the checkpoint\n\
-  -d, --directory=STATEFILE where to store the statefile\n",
+  -S, --statefile=FILE write the container state into this file, or\n\
+  -d, --statefd=FD write the container state into this file descriptor\n",
 
 	.options  = my_longopts,
 	.parser   = my_parser,
 	.checker  = my_checker,
 
-	.rcfile   = NULL,
+	.statefd  = -1,
 };
-
-static int create_statefile(const char *dir)
-{
-	if (mkdir(dir, 0700) == -1 && errno != EEXIST) {
-		ERROR("'%s' creation error : %m", dir);
-		return -1;
-	}
-
-	return 0;
-}
 
 int main(int argc, char *argv[])
 {
 	int ret;
+	int sfd = -1;
 
 	ret = lxc_arguments_parse(&my_args, argc, argv);
 	if (ret)
@@ -107,15 +116,28 @@ int main(int argc, char *argv[])
 	if (ret)
 		return ret;
 
-	ret = create_statefile(my_args.statefile);
-	if (ret)
-		return ret;
+	if (my_args.statefd != -1)
+		sfd = my_args.statefd;
 
-	ret = lxc_checkpoint(my_args.name, my_args.statefile, my_args.flags);
+#define OPEN_WRITE_MODE O_CREAT | O_RDWR | O_EXCL | O_CLOEXEC | O_LARGEFILE
+	if (my_args.statefile) {
+		sfd = open(my_args.statefile, OPEN_WRITE_MODE, 0600);
+		if (sfd < 0) {
+			ERROR("'%s' open failure : %m", my_args.statefile);
+			return sfd;
+		}
+	}
+
+	ret = lxc_checkpoint(my_args.name, sfd, my_args.flags);
+
+	assert(ret == 0 || ret == -1);
+
 	if (ret)
 		ERROR("failed to checkpoint '%s'", my_args.name);
 	else
 		INFO("'%s' checkpointed", my_args.name);
 
+	if (my_args.statefile)
+		close(sfd);
 	return ret;
 }

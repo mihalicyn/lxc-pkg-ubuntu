@@ -1,5 +1,6 @@
 pkginclude_HEADERS = \
 		start.h \
+		console.h \
 		error.h \
 		monitor.h \
 		utils.h \
@@ -18,7 +19,7 @@ so_PROGRAMS = liblxc.so
 liblxc_so_SOURCES = \
 	arguments.c arguments.h \
 	commands.c commands.h \
-	start.c \
+	start.c start.h \
 	stop.c \
 	monitor.c monitor.h \
 	console.c \
@@ -30,6 +31,7 @@ liblxc_so_SOURCES = \
 	cgroup.c cgroup.h \
 	lxc.h \
 	utils.c utils.h \
+	sync.c sync.h \
 	namespace.h namespace.c \
 	conf.c conf.h \
 	confile.c confile.h \
@@ -43,7 +45,9 @@ liblxc_so_SOURCES = \
         genl.c genl.h \
 	\
 	mainloop.c mainloop.h \
-	af_unix.c af_unix.h
+	af_unix.c af_unix.h \
+	\
+	utmp.c utmp.h
 
 AM_CFLAGS=-I$(top_srcdir)/src
 
@@ -66,6 +70,7 @@ bin_SCRIPTS = \
 	lxc-destroy
 
 bin_PROGRAMS = \
+	lxc-attach \
 	lxc-unshare \
 	lxc-stop \
 	lxc-start \
@@ -78,14 +83,16 @@ bin_PROGRAMS = \
 	lxc-cgroup \
 	lxc-unfreeze \
 	lxc-checkpoint \
-	lxc-restart
+	lxc-restart \
+	lxc-kill
 
-libexec_PROGRAMS = \
+pkglib_PROGRAMS = \
 	lxc-init
 
 AM_LDFLAGS=-Wl,-E -Wl,-rpath -Wl,$(libdir)
 LDADD=liblxc.so
 
+lxc_attach_SOURCES = lxc_attach.c
 lxc_cgroup_SOURCES = lxc_cgroup.c
 lxc_checkpoint_SOURCES = lxc_checkpoint.c
 lxc_console_SOURCES = lxc_console.c
@@ -93,6 +100,7 @@ lxc_execute_SOURCES = lxc_execute.c
 lxc_freeze_SOURCES = lxc_freeze.c
 lxc_info_SOURCES = lxc_info.c
 lxc_init_SOURCES = lxc_init.c
+lxc_init_LDADD = $(LDADD) @CAP_LIBS@
 lxc_monitor_SOURCES = lxc_monitor.c
 lxc_restart_SOURCES = lxc_restart.c
 lxc_start_SOURCES = lxc_start.c
@@ -100,6 +108,7 @@ lxc_stop_SOURCES = lxc_stop.c
 lxc_unfreeze_SOURCES = lxc_unfreeze.c
 lxc_unshare_SOURCES = lxc_unshare.c
 lxc_wait_SOURCES = lxc_wait.c
+lxc_kill_SOURCES = lxc_kill.c
 
 install-exec-local: install-soPROGRAMS
 	mv $(DESTDIR)$(libdir)/liblxc.so $(DESTDIR)$(libdir)/liblxc.so.$(VERSION)

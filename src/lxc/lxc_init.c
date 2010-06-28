@@ -30,49 +30,72 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/capability.h>
 #define _GNU_SOURCE
 #include <getopt.h>
 
-#include <lxc/lxc.h>
 #include <lxc/log.h>
-#include <lxc/utils.h>
 #include <lxc/error.h>
+#include "utils.h"
 
 lxc_log_define(lxc_init, lxc);
 
-static char const *log_file;
-static char const *log_priority;
 static int quiet;
 
 static struct option options[] = {
-	{ "logfile", required_argument, 0, 'o' },
-	{ "logpriority", required_argument, 0, 'l' },
 	{ "quiet", no_argument, &quiet, 1 },
 	{ 0, 0, 0, 0 },
 };
 
+static	int was_interrupted = 0;
+
+static int cap_reset(void)
+{
+	cap_t cap = cap_init();
+	int ret = 0;
+
+	if (!cap) {
+		ERROR("cap_init() failed : %m");
+		return -1;
+	}
+
+	if (cap_set_proc(cap)) {
+		ERROR("cap_set_proc() failed : %m");
+		ret = -1;
+	}
+
+	cap_free(cap);
+	return ret;
+}
+
 int main(int argc, char *argv[])
 {
+
+	void interrupt_handler(int sig)
+	{
+		if (!was_interrupted)
+			was_interrupted = sig;
+	}
+
 	pid_t pid;
 	int nbargs = 0;
 	int err = -1;
 	char **aargv;
+	sigset_t mask, omask;
+	int i;
 
 	while (1) {
 		int ret = getopt_long_only(argc, argv, "", options, NULL);
 		if (ret == -1) {
 			break;
 		}
-		switch (ret) {
-		case 'o':	log_file = optarg; break;
-		case 'l':	log_priority = optarg; break;
-		case '?':
+		if  (ret == '?')
 			exit(err);
-		}
+
 		nbargs++;
 	}
 
-	if (lxc_log_init(log_file, log_priority, basename(argv[0]), quiet))
+	if (lxc_log_init(NULL, 0, basename(argv[0]), quiet))
 		exit(err);
 
 	if (!argv[optind]) {
@@ -83,34 +106,58 @@ int main(int argc, char *argv[])
 	aargv = &argv[optind];
 	argc -= nbargs;
 
+	sigfillset(&mask);
+	sigprocmask(SIG_SETMASK, &mask, &omask);
+
+	for (i = 1; i < NSIG; i++) {
+		struct sigaction act;
+
+		sigfillset(&act.sa_mask);
+		act.sa_flags = 0;
+		act.sa_handler = interrupt_handler;
+		sigaction(i, &act, NULL);
+	}
+
+	if (lxc_setup_fs())
+		exit(err);
+
+	if (cap_reset())
+		exit(err);
+
 	pid = fork();
-	
+
 	if (pid < 0)
 		exit(err);
 
 	if (!pid) {
-		
-		if (lxc_setup_fs())
-			exit(err);
+
+		for (i = 1; i < NSIG; i++)
+			signal(i, SIG_DFL);
+		sigprocmask(SIG_SETMASK, &omask, NULL);
 
 		NOTICE("about to exec '%s'", aargv[0]);
 
 		execvp(aargv[0], aargv);
-		ERROR("failed to exec: '%s' : %s", aargv[0], strerror(errno));
+		ERROR("failed to exec: '%s' : %m", aargv[0]);
 		exit(err);
 	}
 
-	err = lxc_close_all_inherited_fd();
-	if (err) {
-		ERROR("unable to close inherited fds");
-		goto out;
-	}
+	sigprocmask(SIG_SETMASK, &omask, NULL);
+
+	/* no need of other inherited fds but stderr */
+	close(fileno(stdin));
+	close(fileno(stdout));
 
 	err = 0;
 	for (;;) {
 		int status;
 		int orphan = 0;
 		pid_t waited_pid;
+
+		if (was_interrupted) {
+			kill(pid, was_interrupted);
+			was_interrupted = 0;
+		}
 
 		waited_pid = wait(&status);
 		if (waited_pid < 0) {
@@ -134,4 +181,3 @@ int main(int argc, char *argv[])
 out:
 	return err;
 }
-

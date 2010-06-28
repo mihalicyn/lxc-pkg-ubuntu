@@ -22,8 +22,11 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <errno.h>
+#include <pty.h>
 #include <sys/types.h>
 #include <sys/un.h>
 
@@ -32,6 +35,7 @@
 #include <lxc/start.h> 	/* for struct lxc_handler */
 
 #include "commands.h"
+#include "mainloop.h"
 #include "af_unix.h"
 
 lxc_log_define(lxc_console, lxc);
@@ -95,7 +99,7 @@ extern void lxc_console_remove_fd(int fd, struct lxc_tty_info *tty_info)
 }
 
 extern int lxc_console_callback(int fd, struct lxc_request *request,
-			struct lxc_handler *handler)
+				struct lxc_handler *handler)
 {
 	int ttynum = request->data;
 	struct lxc_tty_info *tty_info = &handler->conf->tty_info;
@@ -135,3 +139,177 @@ out_close:
 	return 1;
 }
 
+static get_default_console(char **console)
+{
+	int fd;
+
+	if (!access("/dev/tty", F_OK)) {
+		fd = open("/dev/tty", O_RDWR);
+		if (fd > 0) {
+			close(fd);
+			*console = strdup("/dev/tty");
+			goto out;
+		}
+	}
+
+	if (!access("/dev/null", F_OK)) {
+		*console = strdup("/dev/null");
+		goto out;
+	}
+
+	ERROR("No suitable default console");
+out:
+	return *console ? 0 : -1;
+}
+
+int lxc_create_console(struct lxc_conf *conf)
+{
+	struct termios tios;
+	struct lxc_console *console = &conf->console;
+	int fd;
+
+	if (!conf->rootfs.path)
+		return 0;
+
+	if (!console->path && get_default_console(&console->path)) {
+		ERROR("failed to get default console");
+		return -1;
+	}
+
+	if (openpty(&console->master, &console->slave,
+		    console->name, NULL, NULL)) {
+		SYSERROR("failed to allocate a pty");
+		return -1;
+	}
+
+	if (fcntl(console->master, F_SETFD, FD_CLOEXEC)) {
+		SYSERROR("failed to set console master to close-on-exec");
+		goto err;
+	}
+
+	if (fcntl(console->slave, F_SETFD, FD_CLOEXEC)) {
+		SYSERROR("failed to set console slave to close-on-exec");
+		goto err;
+	}
+
+	fd = open(console->path, O_CLOEXEC | O_RDWR | O_CREAT | O_APPEND, 0600);
+	if (fd < 0) {
+		SYSERROR("failed to open '%s'", console->path);
+		goto err;
+	}
+
+	DEBUG("using '%s' as console", console->path);
+
+	console->peer = fd;
+
+	if (!isatty(console->peer))
+		return 0;
+
+	console->tios = malloc(sizeof(tios));
+	if (!console->tios) {
+		SYSERROR("failed to allocate memory");
+		goto err;
+	}
+
+	/* Get termios */
+	if (tcgetattr(console->peer, console->tios)) {
+		SYSERROR("failed to get current terminal settings");
+		goto err_free;
+	}
+
+	tios = *console->tios;
+
+	/* Remove the echo characters and signal reception, the echo
+	 * will be done below with master proxying */
+	tios.c_iflag &= ~IGNBRK;
+	tios.c_iflag &= BRKINT;
+	tios.c_lflag &= ~(ECHO|ICANON|ISIG);
+	tios.c_cc[VMIN] = 1;
+	tios.c_cc[VTIME] = 0;
+
+	/* Set new attributes */
+	if (tcsetattr(console->peer, TCSAFLUSH, &tios)) {
+		ERROR("failed to set new terminal settings");
+		goto err_free;
+	}
+
+	return 0;
+
+err_free:
+	free(console->tios);
+err:
+	close(console->master);
+	close(console->slave);
+	return -1;
+}
+
+void lxc_delete_console(const struct lxc_console *console)
+{
+	if (console->tios &&
+	    tcsetattr(console->peer, TCSAFLUSH, console->tios))
+		WARN("failed to set old terminal settings");
+	close(console->master);
+	close(console->slave);
+}
+
+static int console_handler(int fd, void *data, struct lxc_epoll_descr *descr)
+{
+	struct lxc_console *console = (struct lxc_console *)data;
+	char buf[1024];
+	int r;
+
+	r = read(fd, buf, sizeof(buf));
+	if (r < 0) {
+		SYSERROR("failed to read");
+		return 1;
+	}
+
+	if (!r) {
+		INFO("console client has exited");
+		lxc_mainloop_del_handler(descr, fd);
+		close(fd);
+		return 0;
+	}
+
+	/* no output for the console, do nothing */
+	if (console->peer == -1)
+		return 0;
+
+	if (console->peer == fd)
+		r = write(console->master, buf, r);
+	else
+		r = write(console->peer, buf, r);
+
+	return 0;
+}
+
+int lxc_console_mainloop_add(struct lxc_epoll_descr *descr,
+			     struct lxc_handler *handler)
+{
+	struct lxc_conf *conf = handler->conf;
+	struct lxc_console *console = &conf->console;
+
+	if (!conf->rootfs.path) {
+		INFO("no rootfs, no console.");
+		return 0;
+	}
+
+	if (!console->path) {
+		INFO("no console specified");
+		return 0;
+	}
+
+	if (lxc_mainloop_add_handler(descr, console->master,
+				     console_handler, console)) {
+		ERROR("failed to add to mainloop console handler for '%d'",
+		      console->master);
+		return -1;
+	}
+
+	if (console->peer != -1 &&
+	    lxc_mainloop_add_handler(descr, console->peer,
+				     console_handler, console))
+		WARN("console input disabled");
+
+	return 0;
+}

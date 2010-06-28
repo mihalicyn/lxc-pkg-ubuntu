@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <signal.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/poll.h>
@@ -92,28 +93,53 @@ extern int lxc_command(const char *name, struct lxc_command *command,
 					sizeof(command->request));
 	if (ret < 0) {
 		SYSERROR("failed to send request to '@%s'", offset);
-		goto out_close;
+		goto out;
 	}
 
 	if (ret != sizeof(command->request)) {
 		SYSERROR("message partially sent to '@%s'", offset);
-		goto out_close;
+		goto out;
 	}
 
 	ret = receive_answer(sock, &command->answer);
-	if (ret < 0)
-		goto out_close;
 out:
-	return ret;
-out_close:
 	close(sock);
-	goto out;
+	return ret;
+}
+
+pid_t get_init_pid(const char *name)
+{
+	struct lxc_command command = {
+		.request = { .type = LXC_COMMAND_PID },
+	};
+
+	int ret, stopped = 0;
+
+	ret = lxc_command(name, &command, &stopped);
+	if (ret < 0 && stopped) {
+		ERROR("'%s' is not running", name);
+		return -1;
+	}
+
+	if (ret < 0) {
+		ERROR("failed to send command");
+		return -1;
+	}
+
+	if (command.answer.ret) {
+		ERROR("failed to retrieve the init pid: %s",
+		      strerror(-command.answer.ret));
+		return -1;
+	}
+
+	return command.answer.pid;
 }
 
 extern void lxc_console_remove_fd(int, struct lxc_tty_info *);
 extern int  lxc_console_callback(int, struct lxc_request *, struct lxc_handler *);
 extern int  lxc_stop_callback(int, struct lxc_request *, struct lxc_handler *);
 extern int  lxc_state_callback(int, struct lxc_request *, struct lxc_handler *);
+extern int  lxc_pid_callback(int, struct lxc_request *, struct lxc_handler *);
 
 static int trigger_command(int fd, struct lxc_request *request,
 			   struct lxc_handler *handler)
@@ -124,6 +150,7 @@ static int trigger_command(int fd, struct lxc_request *request,
 		[LXC_COMMAND_TTY]   = lxc_console_callback,
 		[LXC_COMMAND_STOP]  = lxc_stop_callback,
 		[LXC_COMMAND_STATE] = lxc_state_callback,
+		[LXC_COMMAND_PID]   = lxc_pid_callback,
 	};
 
 	if (request->type < 0 || request->type >= LXC_COMMAND_MAX)
@@ -147,7 +174,7 @@ static int command_handler(int fd, void *data, struct lxc_epoll_descr *descr)
 	struct lxc_handler *handler = data;
 
 	ret = lxc_af_unix_rcv_credential(fd, &request, sizeof(request));
-	if (ret < 0 && ret == -EACCES) {
+	if (ret == -EACCES) {
 		/* we don't care for the peer, just send and close */
 		struct lxc_answer answer = { .ret = ret };
 		send(fd, &answer, sizeof(answer), 0);
@@ -194,7 +221,8 @@ static int incoming_command_handler(int fd, void *data,
 		return -1;
 	}
 
-	if (setsockopt(connection, SOL_SOCKET, SO_PASSCRED, &opt, sizeof(opt))) {
+	if (setsockopt(connection, SOL_SOCKET,
+		       SO_PASSCRED, &opt, sizeof(opt))) {
 		SYSERROR("failed to enable credential on socket");
 		goto out_close;
 	}
@@ -213,7 +241,8 @@ out_close:
 	goto out;
 }
 
-extern int lxc_command_mainloop_add(const char *name, struct lxc_epoll_descr *descr,
+extern int lxc_command_mainloop_add(const char *name,
+				    struct lxc_epoll_descr *descr,
 				    struct lxc_handler *handler)
 {
 	int ret, fd;
@@ -228,7 +257,14 @@ extern int lxc_command_mainloop_add(const char *name, struct lxc_epoll_descr *de
 		return -1;
 	}
 
-	ret = lxc_mainloop_add_handler(descr, fd, incoming_command_handler, handler);
+	if (fcntl(fd, F_SETFD, FD_CLOEXEC)) {
+		SYSERROR("failed to set sigfd to close-on-exec");
+		close(fd);
+		return -1;
+	}
+
+	ret = lxc_mainloop_add_handler(descr, fd, incoming_command_handler,
+				       handler);
 	if (ret) {
 		ERROR("failed to add handler for command socket");
 		close(fd);

@@ -27,6 +27,7 @@ enum {
 	LXC_COMMAND_TTY,
 	LXC_COMMAND_STOP,
 	LXC_COMMAND_STATE,
+	LXC_COMMAND_PID,
 	LXC_COMMAND_MAX,
 };
 
@@ -38,6 +39,7 @@ struct lxc_request {
 struct lxc_answer {
 	int fd;
 	int ret; /* 0 on success, -errno on failure */
+	pid_t pid;
 };
 
 struct lxc_command {
@@ -45,6 +47,7 @@ struct lxc_command {
 	struct lxc_answer answer;
 };
 
+extern pid_t get_init_pid(const char *name);
 extern int lxc_command(const char *name, struct lxc_command *command,
 			int *stopped);
 

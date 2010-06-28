@@ -13,7 +13,7 @@
 
 # This library is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # Lesser General Public License for more details.
 
 # You should have received a copy of the GNU Lesser General Public
@@ -49,29 +49,6 @@ EOF
     mkdir -p $rootfs/selinux
     echo 0 > $rootfs/selinux/enforce
 
-    # by default setup root password with no password
-    cat <<EOF > $rootfs/etc/ssh/sshd_config
-Port 22
-Protocol 2
-HostKey /etc/ssh/ssh_host_rsa_key
-HostKey /etc/ssh/ssh_host_dsa_key
-UsePrivilegeSeparation yes
-KeyRegenerationInterval 3600
-ServerKeyBits 768
-SyslogFacility AUTH
-LogLevel INFO
-LoginGraceTime 120
-PermitRootLogin yes
-StrictModes yes
-RSAAuthentication yes
-PubkeyAuthentication yes
-IgnoreRhosts yes
-RhostsRSAAuthentication no
-HostbasedAuthentication no
-PermitEmptyPasswords yes
-ChallengeResponseAuthentication no
-EOF
-
     # configure the network using the dhcp
     cat <<EOF > $rootfs/etc/network/interfaces
 auto lo
@@ -87,12 +64,23 @@ $hostname
 EOF
 
     # reconfigure some services
-    chroot $rootfs /usr/sbin/dpkg-reconfigure locales
+    if [ -z "$LANG" ]; then
+	chroot $rootfs locale-gen en_US.UTF-8
+	chroot $rootfs update-locale LANG=en_US.UTF-8
+    else
+	chroot $rootfs locale-gen $LANG
+	chroot $rootfs update-locale LANG=$LANG
+    fi
 
     # remove pointless services in a container
     chroot $rootfs /usr/sbin/update-rc.d -f umountfs remove
     chroot $rootfs /usr/sbin/update-rc.d -f hwclock.sh remove
     chroot $rootfs /usr/sbin/update-rc.d -f hwclockfirst.sh remove
+
+    echo "root:root" | chroot $rootfs chpasswd
+    echo "Root password is 'root', please change !"
+
+    return 0
 }
 
 download_debian()
@@ -215,6 +203,11 @@ lxc.cgroup.devices.allow = c 136:* rwm
 lxc.cgroup.devices.allow = c 5:2 rwm
 # rtc
 lxc.cgroup.devices.allow = c 254:0 rwm
+
+# mounts point
+lxc.mount.entry=proc $rootfs/proc proc nodev,noexec,nosuid 0 0
+lxc.mount.entry=devpts $rootfs/dev/pts devpts defaults 0 0
+lxc.mount.entry=sysfs $rootfs/sys sysfs defaults  0 0
 EOF
 
     if [ $? -ne 0 ]; then
@@ -235,7 +228,7 @@ clean()
 
     # lock, so we won't purge while someone is creating a repository
     (
-	flock -n -x 200 
+	flock -n -x 200
 	if [ $? != 0 ]; then
 	    echo "Cache repository is busy."
 	    exit 1
@@ -294,7 +287,7 @@ fi
 if [ "$(id -u)" != "0" ]; then
     echo "This script should be run as 'root'"
     exit 1
-fi 
+fi
 
 rootfs=$path/rootfs
 

@@ -51,10 +51,10 @@
 #include "error.h"
 #include "parse.h"
 #include "config.h"
-
-#include <lxc/conf.h>
-#include <lxc/log.h>
-#include <lxc/lxc.h>	/* for lxc_cgroup_set() */
+#include "utils.h"
+#include "conf.h"
+#include "log.h"
+#include "lxc.h"	/* for lxc_cgroup_set() */
 
 lxc_log_define(lxc_conf, lxc);
 
@@ -65,6 +65,10 @@ lxc_log_define(lxc_conf, lxc);
 
 #ifndef MS_REC
 #define MS_REC 16384
+#endif
+
+#ifndef MNT_DETACH
+#define MNT_DETACH 2
 #endif
 
 #ifndef CAP_SETFCAP
@@ -104,12 +108,12 @@ static int instanciate_vlan(struct lxc_netdev *);
 static int instanciate_phys(struct lxc_netdev *);
 static int instanciate_empty(struct lxc_netdev *);
 
-static  instanciate_cb netdev_conf[MAXCONFTYPE + 1] = {
-	[VETH]    = instanciate_veth,
-	[MACVLAN] = instanciate_macvlan,
-	[VLAN]    = instanciate_vlan,
-	[PHYS]    = instanciate_phys,
-	[EMPTY]   = instanciate_empty,
+static  instanciate_cb netdev_conf[LXC_NET_MAXCONFTYPE + 1] = {
+	[LXC_NET_VETH]    = instanciate_veth,
+	[LXC_NET_MACVLAN] = instanciate_macvlan,
+	[LXC_NET_VLAN]    = instanciate_vlan,
+	[LXC_NET_PHYS]    = instanciate_phys,
+	[LXC_NET_EMPTY]   = instanciate_empty,
 };
 
 static struct mount_opt mount_opt[] = {
@@ -166,14 +170,18 @@ static struct caps_opt caps_opt[] = {
 	{ "sys_tty_config",    CAP_SYS_TTY_CONFIG    },
 	{ "mknod",             CAP_MKNOD             },
 	{ "lease",             CAP_LEASE             },
+#ifdef CAP_AUDIT_WRITE
 	{ "audit_write",       CAP_AUDIT_WRITE       },
+#endif
+#ifdef CAP_AUDIT_CONTROL
 	{ "audit_control",     CAP_AUDIT_CONTROL     },
+#endif
 	{ "setfcap",           CAP_SETFCAP           },
 	{ "mac_override",      CAP_MAC_OVERRIDE      },
 	{ "mac_admin",         CAP_MAC_ADMIN         },
 };
 
-
+#if 0 /* will be reactivated with image mounting support */
 static int configure_find_fstype_cb(char* buffer, void *data)
 {
 	struct cbarg {
@@ -354,6 +362,7 @@ static int configure_rootfs(const char *name, const char *rootfs)
 	ERROR("unsupported rootfs type for '%s'", absrootfs);
 	return -1;
 }
+#endif
 
 static int setup_utsname(struct utsname *utsname)
 {
@@ -370,7 +379,8 @@ static int setup_utsname(struct utsname *utsname)
 	return 0;
 }
 
-static int setup_tty(const char *rootfs, const struct lxc_tty_info *tty_info)
+static int setup_tty(const struct lxc_rootfs *rootfs,
+		     const struct lxc_tty_info *tty_info)
 {
 	char path[MAXPATHLEN];
 	int i;
@@ -380,7 +390,7 @@ static int setup_tty(const char *rootfs, const struct lxc_tty_info *tty_info)
 		struct lxc_pty_info *pty_info = &tty_info->pty_info[i];
 
 		snprintf(path, sizeof(path), "%s/dev/tty%d",
-			 rootfs ? rootfs : "", i + 1);
+			 rootfs->path ? rootfs->path : "", i + 1);
 
 		/* At this point I can not use the "access" function
 		 * to check the file is present or not because it fails
@@ -453,72 +463,30 @@ static int setup_rootfs_pivot_root_cb(char *buffer, void *data)
 	return 0;
 }
 
-
-static int setup_rootfs_pivot_root(const char *rootfs, const char *pivotdir)
+static int umount_oldrootfs(const char *oldrootfs)
 {
 	char path[MAXPATHLEN];
 	void *cbparm[2];
 	struct lxc_list mountlist, *iterator;
 	int ok, still_mounted, last_still_mounted;
-	int pivotdir_is_temp = 0;
-
-	/* change into new root fs */
-	if (chdir(rootfs)) {
-		SYSERROR("can't chroot to new rootfs '%s'", rootfs);
-		return -1;
-	}
-
-	/* create temporary mountpoint if none specified */
-	if (!pivotdir) {
-
-		snprintf(path, sizeof(path), "./lxc-oldrootfs-XXXXXX" );
-		if (!mkdtemp(path)) {
-			SYSERROR("can't make temporary mountpoint");
-			return -1;
-		}
-
-		pivotdir = strdup(&path[1]); /* get rid of leading dot */
-		if (!pivotdir) {
-			SYSERROR("strdup failed");
-			return -1;
-		}
-
-		pivotdir_is_temp = 1;
-	}
-	else {
-		snprintf(path, sizeof(path), ".%s", pivotdir);
-	}
-
-	DEBUG("temporary mountpoint for old rootfs is '%s'", path);
-
-	/* pivot_root into our new root fs */
-
-	if (pivot_root(".", path)) {
-		SYSERROR("pivot_root syscall failed");
-		return -1;
-	}
-
-	if (chdir("/")) {
-		SYSERROR("can't chroot to / after pivot_root");
-		return -1;
-	}
-
-	DEBUG("pivot_root syscall to '%s' successful", pivotdir);
 
 	/* read and parse /proc/mounts in old root fs */
 	lxc_list_init(&mountlist);
 
-	snprintf(path, sizeof(path), "%s/", pivotdir);
+	/* oldrootfs is on the top tree directory now */
+	snprintf(path, sizeof(path), "/%s", oldrootfs);
 	cbparm[0] = &mountlist;
-	cbparm[1] = strdup(path);
 
+	cbparm[1] = strdup(path);
 	if (!cbparm[1]) {
 		SYSERROR("strdup failed");
 		return -1;
 	}
 
-	snprintf(path, sizeof(path), "/%s/proc/mounts", pivotdir);
-	ok = lxc_file_for_each_line(path, setup_rootfs_pivot_root_cb, &cbparm);
+	snprintf(path, sizeof(path), "%s/proc/mounts", oldrootfs);
+
+	ok = lxc_file_for_each_line(path,
+				    setup_rootfs_pivot_root_cb, &cbparm);
 	if (ok < 0) {
 		SYSERROR("failed to read or parse mount list '%s'", path);
 		return -1;
@@ -532,6 +500,7 @@ static int setup_rootfs_pivot_root(const char *rootfs, const char *pivotdir)
 
 		lxc_list_for_each(iterator, &mountlist) {
 
+			/* umount normally */
 			if (!umount(iterator->elem)) {
 				DEBUG("umounted '%s'", (char *)iterator->elem);
 				lxc_list_del(iterator);
@@ -544,62 +513,112 @@ static int setup_rootfs_pivot_root(const char *rootfs, const char *pivotdir)
 	} while (still_mounted > 0 && still_mounted != last_still_mounted);
 
 
-	lxc_list_for_each(iterator, &mountlist)
-		WARN("failed to unmount '%s'", (char *)iterator->elem);
+	lxc_list_for_each(iterator, &mountlist) {
 
-	/* umount old root fs */
-	if (umount(pivotdir)) {
-		SYSERROR("could not unmount old rootfs");
-		return -1;
-	}
-	DEBUG("umounted '%s'", pivotdir);
-
-	/* remove temporary mount point */
-	if (pivotdir_is_temp) {
-		if (rmdir(pivotdir)) {
-			SYSERROR("can't remove temporary mountpoint");
-			return -1;
+		/* let's try a lazy umount */
+		if (!umount2(iterator->elem, MNT_DETACH)) {
+			INFO("lazy unmount of '%s'", (char *)iterator->elem);
+			continue;
 		}
 
+		/* be more brutal (nfs) */
+		if (!umount2(iterator->elem, MNT_FORCE)) {
+			INFO("forced unmount of '%s'", (char *)iterator->elem);
+			continue;
+		}
+
+		WARN("failed to unmount '%s'", (char *)iterator->elem);
 	}
 
-	INFO("pivoted to '%s'", rootfs);
 	return 0;
 }
 
-static int setup_rootfs(const char *rootfs, const char *pivotdir)
+static int setup_rootfs_pivot_root(const char *rootfs, const char *pivotdir)
 {
-	char *tmpname;
-	int ret = -1;
+	char path[MAXPATHLEN];
+	int remove_pivotdir = 0;
 
-	if (!rootfs)
+	/* change into new root fs */
+	if (chdir(rootfs)) {
+		SYSERROR("can't chdir to new rootfs '%s'", rootfs);
+		return -1;
+	}
+
+	if (!pivotdir)
+		pivotdir = "mnt";
+
+	/* compute the full path to pivotdir under rootfs */
+	snprintf(path, sizeof(path), "%s/%s", rootfs, pivotdir);
+
+	if (access(path, F_OK)) {
+
+		if (mkdir_p(path, 0755)) {
+			SYSERROR("failed to create pivotdir '%s'", path);
+			return -1;
+		}
+
+		remove_pivotdir = 1;
+		DEBUG("created '%s' directory", path);
+	}
+
+	DEBUG("mountpoint for old rootfs is '%s'", path);
+
+	/* pivot_root into our new root fs */
+	if (pivot_root(".", path)) {
+		SYSERROR("pivot_root syscall failed");
+		return -1;
+	}
+
+	if (chdir("/")) {
+		SYSERROR("can't chdir to / after pivot_root");
+		return -1;
+	}
+
+	DEBUG("pivot_root syscall to '%s' successful", rootfs);
+
+	/* we switch from absolute path to relative path */
+	if (umount_oldrootfs(pivotdir))
+		return -1;
+
+	/* remove temporary mount point, we don't consider the removing
+	 * as fatal */
+	if (remove_pivotdir && rmdir(pivotdir))
+		WARN("can't remove mountpoint '%s': %m", pivotdir);
+
+	INFO("pivoted to '%s'", rootfs);
+
+	return 0;
+}
+
+static int setup_rootfs(const struct lxc_rootfs *rootfs)
+{
+	char *mpath = LXCROOTFSMOUNT;
+
+	if (!rootfs->path)
 		return 0;
 
-	tmpname = tempnam("/tmp", "lxc-rootfs");
-	if (!tmpname) {
-		SYSERROR("failed to generate temporary name");
+	if (rootfs->mount)
+		mpath = rootfs->mount;
+
+	if (access(mpath, F_OK)) {
+		SYSERROR("failed to access to '%s', check it is present",
+			 mpath);
 		return -1;
 	}
 
-	if (mkdir(tmpname, 0700)) {
-		SYSERROR("failed to create temporary directory '%s'", tmpname);
+	if (mount(rootfs->path, mpath, "none", MS_BIND|MS_REC, NULL)) {
+		SYSERROR("failed to mount '%s'->'%s'", rootfs->path, mpath);
 		return -1;
 	}
 
-	if (mount(rootfs, tmpname, "none", MS_BIND|MS_REC, NULL)) {
-		SYSERROR("failed to mount '%s'->'%s'", rootfs, tmpname);
-		goto out;
+	DEBUG("mounted '%s' on '%s'", rootfs->path, mpath);
+
+	if (setup_rootfs_pivot_root(mpath, rootfs->pivot)) {
+		ERROR("failed to setup pivot root");
+		return -1;
 	}
 
-	if (setup_rootfs_pivot_root(tmpname, pivotdir)) {
-		ERROR("failed to pivot_root to '%s'", rootfs);
-		goto out;
-	}
-
-	ret = 0;
-out:
-	rmdir(tmpname);
-	return ret;
+	return 0;
 }
 
 static int setup_pts(int pts)
@@ -612,13 +631,8 @@ static int setup_pts(int pts)
 		return -1;
 	}
 
-	if (mount("devpts", "/dev/pts", "devpts", MS_MGC_VAL, "newinstance")) {
+	if (mount("devpts", "/dev/pts", "devpts", MS_MGC_VAL, "newinstance,ptmxmode=0666")) {
 		SYSERROR("failed to mount a new instance of '/dev/pts'");
-		return -1;
-	}
-
-	if (chmod("/dev/pts/ptmx", 0666)) {
-		SYSERROR("failed to set permission for '/dev/pts/ptmx'");
 		return -1;
 	}
 
@@ -641,41 +655,45 @@ out:
 	return 0;
 }
 
-static int setup_console(const char *rootfs, const char *tty)
+static int setup_console(const struct lxc_rootfs *rootfs,
+			 const struct lxc_console *console)
 {
-	char console[MAXPATHLEN];
+	char path[MAXPATHLEN];
+	struct stat s;
 
-	snprintf(console, sizeof(console), "%s/dev/console",
-		 rootfs ? rootfs : "");
+	/* We don't have a rootfs, /dev/console will be shared */
+	if (!rootfs->path)
+		return 0;
 
-	/* we have the rootfs with /dev/console but no tty
-	 * to be used as console, let's remap /dev/console
-	 * to /dev/null to avoid to log to the system console
-	 */
-	if (rootfs && !tty[0]) {
+	snprintf(path, sizeof(path), "%s/dev/console", rootfs->path);
 
-		if (!access(console, F_OK)) {
-
-			if (mount("/dev/null", console, "none", MS_BIND, 0)) {
-				SYSERROR("failed to mount '/dev/null'->'%s'",
-					 console);
-				return -1;
-			}
-		}
+	if (access(path, F_OK)) {
+		WARN("rootfs specified but no console found");
+		return 0;
 	}
 
-	if (!tty[0])
+	if (console->peer == -1) {
+		INFO("no console output required");
 		return 0;
+	}
 
-	if (access(console, R_OK|W_OK))
-		return 0;
-
-	if (mount(tty, console, "none", MS_BIND, 0)) {
-		ERROR("failed to mount the console");
+	if (stat(path, &s)) {
+		SYSERROR("failed to stat '%s'", path);
 		return -1;
 	}
 
-	INFO("console '%s' mounted to '%s'", tty, console);
+	if (chmod(console->name, s.st_mode)) {
+		SYSERROR("failed to set mode '0%o' to '%s'",
+			 s.st_mode, console->name);
+		return -1;
+	}
+
+	if (mount(console->name, path, "none", MS_BIND, 0)) {
+		ERROR("failed to mount '%s' on '%s'", console->name, path);
+		return -1;
+	}
+
+	INFO("console has been setup");
 
 	return 0;
 }
@@ -781,10 +799,26 @@ static int mount_file_entries(FILE *file)
 		}
 
 		if (mount(mntent->mnt_fsname, mntent->mnt_dir,
-			  mntent->mnt_type, mntflags, mntdata)) {
+			  mntent->mnt_type, mntflags & ~MS_REMOUNT, mntdata)) {
 			SYSERROR("failed to mount '%s' on '%s'",
 					 mntent->mnt_fsname, mntent->mnt_dir);
 			goto out;
+		}
+
+		if ((mntflags & MS_REMOUNT) == MS_REMOUNT ||
+		    ((mntflags & MS_BIND) == MS_BIND)) {
+
+			DEBUG ("remounting %s on %s to respect bind " \
+			       "or remount options",
+			       mntent->mnt_fsname, mntent->mnt_dir);
+
+			if (mount(mntent->mnt_fsname, mntent->mnt_dir,
+				  mntent->mnt_type,
+				  mntflags | MS_REMOUNT, mntdata)) {
+				SYSERROR("failed to mount '%s' on '%s'",
+					 mntent->mnt_fsname, mntent->mnt_dir);
+				goto out;
+			}
 		}
 
 		DEBUG("mounted %s on %s, type %s", mntent->mnt_fsname,
@@ -892,8 +926,10 @@ static int setup_hw_addr(char *hwaddr, const char *ifname)
 	struct ifreq ifr;
 	int ret, fd;
 
-	if (lxc_convert_mac(hwaddr, &sockaddr)) {
-		ERROR("conversion has failed");
+	ret = lxc_convert_mac(hwaddr, &sockaddr);
+	if (ret) {
+		ERROR("mac address '%s' conversion failed : %s",
+		      hwaddr, strerror(-ret));
 		return -1;
 	}
 
@@ -920,13 +956,17 @@ static int setup_ipv4_addr(struct lxc_list *ip, int ifindex)
 {
 	struct lxc_list *iterator;
 	struct lxc_inetdev *inetdev;
+	int err;
 
 	lxc_list_for_each(iterator, ip) {
 
 		inetdev = iterator->elem;
 
-		if (lxc_ip_addr_add(AF_INET, ifindex,
-				    &inetdev->addr, inetdev->prefix)) {
+		err = lxc_ipv4_addr_add(ifindex, &inetdev->addr,
+					&inetdev->bcast, inetdev->prefix);
+		if (err) {
+			ERROR("failed to setup_ipv4_addr ifindex %d : %s",
+			      ifindex, strerror(-err));
 			return -1;
 		}
 	}
@@ -938,14 +978,20 @@ static int setup_ipv6_addr(struct lxc_list *ip, int ifindex)
 {
 	struct lxc_list *iterator;
 	struct lxc_inet6dev *inet6dev;
+	int err;
 
 	lxc_list_for_each(iterator, ip) {
 
 		inet6dev = iterator->elem;
 
-		if (lxc_ip_addr_add(AF_INET6, ifindex,
-				    & inet6dev->addr, inet6dev->prefix))
+		err = lxc_ipv6_addr_add(ifindex, &inet6dev->addr,
+					&inet6dev->mcast, &inet6dev->acast,
+					inet6dev->prefix);
+		if (err) {
+			ERROR("failed to setup_ipv6_addr ifindex %d : %s",
+			      ifindex, strerror(-err));
 			return -1;
+		}
 	}
 
 	return 0;
@@ -955,12 +1001,15 @@ static int setup_netdev(struct lxc_netdev *netdev)
 {
 	char ifname[IFNAMSIZ];
 	char *current_ifname = ifname;
+	int err;
 
 	/* empty network namespace */
 	if (!netdev->ifindex) {
 		if (netdev->flags | IFF_UP) {
-			if (lxc_device_up("lo")) {
-				ERROR("failed to set the loopback up");
+			err = lxc_device_up("lo");
+			if (err) {
+				ERROR("failed to set the loopback up : %s",
+				      strerror(-err));
 				return -1;
 			}
 			return 0;
@@ -979,8 +1028,10 @@ static int setup_netdev(struct lxc_netdev *netdev)
 		netdev->name = "eth%d";
 
 	/* rename the interface name */
-	if (lxc_device_rename(ifname, netdev->name)) {
-		ERROR("failed to rename %s->%s", ifname, current_ifname);
+	err = lxc_device_rename(ifname, netdev->name);
+	if (err) {
+		ERROR("failed to rename %s->%s : %s", ifname, netdev->name,
+		      strerror(-err));
 		return -1;
 	}
 
@@ -1018,14 +1069,20 @@ static int setup_netdev(struct lxc_netdev *netdev)
 
 	/* set the network device up */
 	if (netdev->flags | IFF_UP) {
-		if (lxc_device_up(current_ifname)) {
-			ERROR("failed to set '%s' up", current_ifname);
+		int err;
+
+		err = lxc_device_up(current_ifname);
+		if (err) {
+			ERROR("failed to set '%s' up : %s", current_ifname,
+			      strerror(-err));
 			return -1;
 		}
 
 		/* the network is up, make the loopback up too */
-		if (lxc_device_up("lo")) {
-			ERROR("failed to set the loopback up");
+		err = lxc_device_up("lo");
+		if (err) {
+			ERROR("failed to set the loopback up : %s",
+			      strerror(-err));
 			return -1;
 		}
 	}
@@ -1067,13 +1124,11 @@ struct lxc_conf *lxc_conf_init(void)
 	}
 	memset(new, 0, sizeof(*new));
 
-	new->rootfs = NULL;
-	new->pivotdir = NULL;
-	new->fstab = NULL;
-	new->utsname = NULL;
-	new->tty = 0;
-	new->pts = 0;
-	new->console[0] = '\0';
+	new->console.path = NULL;
+	new->console.peer = -1;
+	new->console.master = -1;
+	new->console.slave = -1;
+	new->console.name[0] = '\0';
 	lxc_list_init(&new->cgroup);
 	lxc_list_init(&new->network);
 	lxc_list_init(&new->mount_list);
@@ -1085,42 +1140,49 @@ struct lxc_conf *lxc_conf_init(void)
 static int instanciate_veth(struct lxc_netdev *netdev)
 {
 	char veth1buf[IFNAMSIZ], *veth1;
-	char veth2[IFNAMSIZ];
+	char veth2buf[IFNAMSIZ], *veth2;
+	int err;
 
 	if (netdev->priv.veth_attr.pair)
 		veth1 = netdev->priv.veth_attr.pair;
 	else {
 		snprintf(veth1buf, sizeof(veth1buf), "vethXXXXXX");
-		mktemp(veth1buf);
-		veth1 = veth1buf;
+		veth1 = mktemp(veth1buf);
 	}
 
-	snprintf(veth2, sizeof(veth2), "vethXXXXXX");
-	mktemp(veth2);
+	snprintf(veth2buf, sizeof(veth2buf), "vethXXXXXX");
+	veth2 = mktemp(veth2buf);
 
 	if (!strlen(veth1) || !strlen(veth2)) {
 		ERROR("failed to allocate a temporary name");
 		return -1;
 	}
 
-	if (lxc_veth_create(veth1, veth2)) {
-		ERROR("failed to create %s-%s", veth1, veth2);
+	err = lxc_veth_create(veth1, veth2);
+	if (err) {
+		ERROR("failed to create %s-%s : %s", veth1, veth2,
+		      strerror(-err));
 		return -1;
 	}
 
 	if (netdev->mtu) {
-		if (lxc_device_set_mtu(veth1, atoi(netdev->mtu)) ||
-		    lxc_device_set_mtu(veth2, atoi(netdev->mtu))) {
-			ERROR("failed to set mtu '%s' for %s-%s",
-			      netdev->mtu, veth1, veth2);
+		err = lxc_device_set_mtu(veth1, atoi(netdev->mtu));
+		if (!err)
+			err = lxc_device_set_mtu(veth2, atoi(netdev->mtu));
+		if (err) {
+			ERROR("failed to set mtu '%s' for %s-%s : %s",
+			      netdev->mtu, veth1, veth2, strerror(-err));
 			goto out_delete;
 		}
 	}
 
-	if (netdev->link && lxc_bridge_attach(netdev->link, veth1)) {
-		ERROR("failed to attach '%s' to the bridge '%s'",
-			      veth1, netdev->link);
-		goto out_delete;
+	if (netdev->link) {
+		err = lxc_bridge_attach(netdev->link, veth1);
+		if (err) {
+			ERROR("failed to attach '%s' to the bridge '%s' : %s",
+				      veth1, netdev->link, strerror(-err));
+			goto out_delete;
+		}
 	}
 
 	netdev->ifindex = if_nametoindex(veth2);
@@ -1130,8 +1192,10 @@ static int instanciate_veth(struct lxc_netdev *netdev)
 	}
 
 	if (netdev->flags & IFF_UP) {
-		if (lxc_device_up(veth1)) {
-			ERROR("failed to set %s up", veth1);
+		err = lxc_device_up(veth1);
+		if (err) {
+			ERROR("failed to set %s up : %s", veth1,
+			      strerror(-err));
 			goto out_delete;
 		}
 	}
@@ -1148,26 +1212,27 @@ out_delete:
 
 static int instanciate_macvlan(struct lxc_netdev *netdev)
 {
-	char peer[IFNAMSIZ];
+	char peerbuf[IFNAMSIZ], *peer;
+	int err;
 
 	if (!netdev->link) {
 		ERROR("no link specified for macvlan netdev");
 		return -1;
 	}
 
-	snprintf(peer, sizeof(peer), "mcXXXXXX");
+	snprintf(peerbuf, sizeof(peerbuf), "mcXXXXXX");
 
-	mktemp(peer);
-
+	peer = mktemp(peerbuf);
 	if (!strlen(peer)) {
 		ERROR("failed to make a temporary name");
 		return -1;
 	}
 
-	if (lxc_macvlan_create(netdev->link, peer,
-			       netdev->priv.macvlan_attr.mode)) {
-		ERROR("failed to create macvlan interface '%s' on '%s'",
-		      peer, netdev->link);
+	err = lxc_macvlan_create(netdev->link, peer,
+				 netdev->priv.macvlan_attr.mode);
+	if (err) {
+		ERROR("failed to create macvlan interface '%s' on '%s' : %s",
+		      peer, netdev->link, strerror(-err));
 		return -1;
 	}
 
@@ -1188,6 +1253,7 @@ static int instanciate_macvlan(struct lxc_netdev *netdev)
 static int instanciate_vlan(struct lxc_netdev *netdev)
 {
 	char peer[IFNAMSIZ];
+	int err;
 
 	if (!netdev->link) {
 		ERROR("no link specified for vlan netdev");
@@ -1196,9 +1262,10 @@ static int instanciate_vlan(struct lxc_netdev *netdev)
 
 	snprintf(peer, sizeof(peer), "vlan%d", netdev->priv.vlan_attr.vid);
 
-	if (lxc_vlan_create(netdev->link, peer, netdev->priv.vlan_attr.vid)) {
-		ERROR("failed to create vlan interface '%s' on '%s'",
-		      peer, netdev->link);
+	err = lxc_vlan_create(netdev->link, peer, netdev->priv.vlan_attr.vid);
+	if (err) {
+		ERROR("failed to create vlan interface '%s' on '%s' : %s",
+		      peer, netdev->link, strerror(-err));
 		return -1;
 	}
 
@@ -1241,7 +1308,7 @@ int lxc_create_network(struct lxc_list *network)
 
 		netdev = iterator->elem;
 
-		if (netdev->type < 0 || netdev->type > MAXCONFTYPE) {
+		if (netdev->type < 0 || netdev->type > LXC_NET_MAXCONFTYPE) {
 			ERROR("invalid network configuration type '%d'",
 			      netdev->type);
 			return -1;
@@ -1256,18 +1323,36 @@ int lxc_create_network(struct lxc_list *network)
 	return 0;
 }
 
-int lxc_assign_network(struct lxc_list *network, pid_t pid)
+void lxc_delete_network(struct lxc_list *network)
 {
 	struct lxc_list *iterator;
 	struct lxc_netdev *netdev;
 
 	lxc_list_for_each(iterator, network) {
+		netdev = iterator->elem;
+		if (netdev->ifindex > 0)
+			lxc_device_delete_index(netdev->ifindex);
+	}
+}
+
+int lxc_assign_network(struct lxc_list *network, pid_t pid)
+{
+	struct lxc_list *iterator;
+	struct lxc_netdev *netdev;
+	int err;
+
+	lxc_list_for_each(iterator, network) {
 
 		netdev = iterator->elem;
 
-		if (lxc_device_move(netdev->ifindex, pid)) {
-			ERROR("failed to move '%s' to the container",
-			      netdev->link);
+		/* empty network namespace, nothing to move */
+		if (!netdev->ifindex)
+			continue;
+
+		err = lxc_device_move(netdev->ifindex, pid);
+		if (err) {
+			ERROR("failed to move '%s' to the container : %s",
+			      netdev->link, strerror(-err));
 			return -1;
 		}
 
@@ -1304,6 +1389,9 @@ int lxc_create_tty(const char *name, struct lxc_conf *conf)
 			lxc_delete_tty(tty_info);
 			return -1;
 		}
+
+		DEBUG("allocated pty '%s' (%d/%d)",
+		      pty_info->name, pty_info->master, pty_info->slave);
 
                 /* Prevent leaking the file descriptors to the container */
 		fcntl(pty_info->master, F_SETFD, FD_CLOEXEC);
@@ -1361,17 +1449,17 @@ int lxc_setup(const char *name, struct lxc_conf *lxc_conf)
 		return -1;
 	}
 
-	if (setup_console(lxc_conf->rootfs, lxc_conf->console)) {
+	if (setup_console(&lxc_conf->rootfs, &lxc_conf->console)) {
 		ERROR("failed to setup the console for '%s'", name);
 		return -1;
 	}
 
-	if (setup_tty(lxc_conf->rootfs, &lxc_conf->tty_info)) {
+	if (setup_tty(&lxc_conf->rootfs, &lxc_conf->tty_info)) {
 		ERROR("failed to setup the ttys for '%s'", name);
 		return -1;
 	}
 
-	if (setup_rootfs(lxc_conf->rootfs, lxc_conf->pivotdir)) {
+	if (setup_rootfs(&lxc_conf->rootfs)) {
 		ERROR("failed to set rootfs for '%s'", name);
 		return -1;
 	}

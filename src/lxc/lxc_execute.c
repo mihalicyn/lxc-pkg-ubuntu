@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
 			 my_args.progname, my_args.quiet))
 		return -1;
 
-	args = lxc_arguments_dup(LXCLIBEXECDIR "/lxc-init", &my_args);
+	args = lxc_arguments_dup(LXCINITDIR "/lxc-init", &my_args);
 	if (!args)
 		return -1;
 
@@ -108,7 +108,10 @@ int main(int argc, char *argv[])
 	if (my_args.rcfile)
 		rcfile = (char *)my_args.rcfile;
 	else {
-		if (!asprintf(&rcfile, LXCPATH "/%s/config", my_args.name)) {
+		int rc;
+
+		rc = asprintf(&rcfile, LXCPATH "/%s/config", my_args.name);
+		if (rc == -1) {
 			SYSERROR("failed to allocate memory");
 			return -1;
 		}
