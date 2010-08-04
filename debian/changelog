@@ -1,3 +1,15 @@
+lxc (0.7.2-1) unstable; urgency=low
+
+  * New upstream version
+  * Convert libcap dependency to versioned (closes: #571527)
+  * Bump up standards version to 3.9.0
+  * Fix too-deep /usr/lib/lxc/lxc path (closes: #587847)
+  * Add init script (closes: #573830)
+    Thanks to Przemysław Knycz <pknycz@kolnet.eu> for the base example
+  * Bump up standards version (3.9.1)
+
+ -- Guido Trotter <ultrotter@debian.org>  Wed, 04 Aug 2010 13:23:42 -0400
+
 lxc (0.7.1-1) unstable; urgency=low
 
   * New upstream version

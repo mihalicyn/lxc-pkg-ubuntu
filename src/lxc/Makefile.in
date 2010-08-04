@@ -50,7 +50,7 @@ DIST_COMMON = $(pkginclude_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/lxc-create.in $(srcdir)/lxc-destroy.in \
 	$(srcdir)/lxc-ls.in $(srcdir)/lxc-netstat.in \
 	$(srcdir)/lxc-ps.in $(srcdir)/lxc-setcap.in \
-	$(srcdir)/lxc-version.in
+	$(srcdir)/lxc-setuid.in $(srcdir)/lxc-version.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acinclude.m4 \
 	$(top_srcdir)/configure.ac
@@ -59,7 +59,7 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/src/config.h
 CONFIG_CLEAN_FILES = lxc-ps lxc-ls lxc-netstat lxc-checkconfig \
-	lxc-setcap lxc-version lxc-create lxc-destroy
+	lxc-setcap lxc-setuid lxc-version lxc-create lxc-destroy
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibdir)" \
 	"$(DESTDIR)$(sodir)" "$(DESTDIR)$(bindir)" \
@@ -77,8 +77,8 @@ am_liblxc_so_OBJECTS = liblxc_so-arguments.$(OBJEXT) \
 	liblxc_so-state.$(OBJEXT) liblxc_so-log.$(OBJEXT) \
 	liblxc_so-network.$(OBJEXT) liblxc_so-nl.$(OBJEXT) \
 	liblxc_so-rtnl.$(OBJEXT) liblxc_so-genl.$(OBJEXT) \
-	liblxc_so-mainloop.$(OBJEXT) liblxc_so-af_unix.$(OBJEXT) \
-	liblxc_so-utmp.$(OBJEXT)
+	liblxc_so-caps.$(OBJEXT) liblxc_so-mainloop.$(OBJEXT) \
+	liblxc_so-af_unix.$(OBJEXT) liblxc_so-utmp.$(OBJEXT)
 liblxc_so_OBJECTS = $(am_liblxc_so_OBJECTS)
 liblxc_so_DEPENDENCIES =
 liblxc_so_LINK = $(CCLD) $(liblxc_so_CFLAGS) $(CFLAGS) \
@@ -113,7 +113,8 @@ lxc_info_LDADD = $(LDADD)
 lxc_info_DEPENDENCIES = liblxc.so
 am_lxc_init_OBJECTS = lxc_init.$(OBJEXT)
 lxc_init_OBJECTS = $(am_lxc_init_OBJECTS)
-lxc_init_DEPENDENCIES = $(LDADD)
+lxc_init_LDADD = $(LDADD)
+lxc_init_DEPENDENCIES = liblxc.so
 am_lxc_kill_OBJECTS = lxc_kill.$(OBJEXT)
 lxc_kill_OBJECTS = $(am_lxc_kill_OBJECTS)
 lxc_kill_LDADD = $(LDADD)
@@ -313,6 +314,7 @@ pkginclude_HEADERS = \
 		monitor.h \
 		utils.h \
 		namespace.h \
+		caps.h \
 		lxc.h \
 		cgroup.h \
 		conf.h \
@@ -349,6 +351,7 @@ liblxc_so_SOURCES = \
         rtnl.c rtnl.h \
         genl.c genl.h \
 	\
+	caps.c caps.h \
 	mainloop.c mainloop.h \
 	af_unix.c af_unix.h \
 	\
@@ -367,12 +370,13 @@ bin_SCRIPTS = \
 	lxc-ls \
 	lxc-checkconfig \
 	lxc-setcap \
+	lxc-setuid \
 	lxc-version \
 	lxc-create \
 	lxc-destroy
 
 AM_LDFLAGS = -Wl,-E -Wl,-rpath -Wl,$(libdir)
-LDADD = liblxc.so
+LDADD = liblxc.so @CAP_LIBS@
 lxc_attach_SOURCES = lxc_attach.c
 lxc_cgroup_SOURCES = lxc_cgroup.c
 lxc_checkpoint_SOURCES = lxc_checkpoint.c
@@ -381,7 +385,6 @@ lxc_execute_SOURCES = lxc_execute.c
 lxc_freeze_SOURCES = lxc_freeze.c
 lxc_info_SOURCES = lxc_info.c
 lxc_init_SOURCES = lxc_init.c
-lxc_init_LDADD = $(LDADD) @CAP_LIBS@
 lxc_monitor_SOURCES = lxc_monitor.c
 lxc_restart_SOURCES = lxc_restart.c
 lxc_start_SOURCES = lxc_start.c
@@ -433,6 +436,8 @@ lxc-netstat: $(top_builddir)/config.status $(srcdir)/lxc-netstat.in
 lxc-checkconfig: $(top_builddir)/config.status $(srcdir)/lxc-checkconfig.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-setcap: $(top_builddir)/config.status $(srcdir)/lxc-setcap.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+lxc-setuid: $(top_builddir)/config.status $(srcdir)/lxc-setuid.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-version: $(top_builddir)/config.status $(srcdir)/lxc-version.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
@@ -645,6 +650,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liblxc_so-af_unix.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liblxc_so-arguments.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liblxc_so-caps.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liblxc_so-cgroup.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liblxc_so-checkpoint.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/liblxc_so-commands.Po@am__quote@
@@ -1021,6 +1027,20 @@ liblxc_so-genl.obj: genl.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='genl.c' object='liblxc_so-genl.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liblxc_so_CFLAGS) $(CFLAGS) -c -o liblxc_so-genl.obj `if test -f 'genl.c'; then $(CYGPATH_W) 'genl.c'; else $(CYGPATH_W) '$(srcdir)/genl.c'; fi`
+
+liblxc_so-caps.o: caps.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liblxc_so_CFLAGS) $(CFLAGS) -MT liblxc_so-caps.o -MD -MP -MF $(DEPDIR)/liblxc_so-caps.Tpo -c -o liblxc_so-caps.o `test -f 'caps.c' || echo '$(srcdir)/'`caps.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/liblxc_so-caps.Tpo $(DEPDIR)/liblxc_so-caps.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='caps.c' object='liblxc_so-caps.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liblxc_so_CFLAGS) $(CFLAGS) -c -o liblxc_so-caps.o `test -f 'caps.c' || echo '$(srcdir)/'`caps.c
+
+liblxc_so-caps.obj: caps.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liblxc_so_CFLAGS) $(CFLAGS) -MT liblxc_so-caps.obj -MD -MP -MF $(DEPDIR)/liblxc_so-caps.Tpo -c -o liblxc_so-caps.obj `if test -f 'caps.c'; then $(CYGPATH_W) 'caps.c'; else $(CYGPATH_W) '$(srcdir)/caps.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/liblxc_so-caps.Tpo $(DEPDIR)/liblxc_so-caps.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='caps.c' object='liblxc_so-caps.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liblxc_so_CFLAGS) $(CFLAGS) -c -o liblxc_so-caps.obj `if test -f 'caps.c'; then $(CYGPATH_W) 'caps.c'; else $(CYGPATH_W) '$(srcdir)/caps.c'; fi`
 
 liblxc_so-mainloop.o: mainloop.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(liblxc_so_CFLAGS) $(CFLAGS) -MT liblxc_so-mainloop.o -MD -MP -MF $(DEPDIR)/liblxc_so-mainloop.Tpo -c -o liblxc_so-mainloop.o `test -f 'mainloop.c' || echo '$(srcdir)/'`mainloop.c

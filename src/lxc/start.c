@@ -190,18 +190,18 @@ int lxc_check_inherited(int fd_to_ignore)
 	return ret;
 }
 
-static int setup_sigchld_fd(sigset_t *oldmask)
+static int setup_signal_fd(sigset_t *oldmask)
 {
 	sigset_t mask;
 	int fd;
 
-	if (sigprocmask(SIG_BLOCK, NULL, &mask)) {
-		SYSERROR("failed to get mask signal");
-		return -1;
-	}
-
-	if (sigaddset(&mask, SIGCHLD) || sigprocmask(SIG_BLOCK, &mask, oldmask)) {
-		SYSERROR("failed to set mask signal");
+	/* Block everything except serious error signals */
+	if (sigfillset(&mask) ||
+	    sigdelset(&mask, SIGILL) ||
+	    sigdelset(&mask, SIGSEGV) ||
+	    sigdelset(&mask, SIGBUS) ||
+	    sigprocmask(SIG_BLOCK, &mask, oldmask)) {
+		SYSERROR("failed to set signal mask");
 		return -1;
 	}
 
@@ -222,7 +222,7 @@ static int setup_sigchld_fd(sigset_t *oldmask)
 	return fd;
 }
 
-static int sigchld_handler(int fd, void *data,
+static int signal_handler(int fd, void *data,
 			   struct lxc_epoll_descr *descr)
 {
 	struct signalfd_siginfo siginfo;
@@ -231,13 +231,19 @@ static int sigchld_handler(int fd, void *data,
 
 	ret = read(fd, &siginfo, sizeof(siginfo));
 	if (ret < 0) {
-		ERROR("failed to read sigchld info");
+		ERROR("failed to read signal info");
 		return -1;
 	}
 
 	if (ret != sizeof(siginfo)) {
 		ERROR("unexpected siginfo size");
 		return -1;
+	}
+
+	if (siginfo.ssi_signo != SIGCHLD) {
+		kill(*pid, siginfo.ssi_signo);
+		INFO("forwarded signal %d to pid %d", siginfo.ssi_signo, *pid);
+		return 0;
 	}
 
 	if (siginfo.ssi_code == CLD_STOPPED ||
@@ -299,7 +305,7 @@ int lxc_poll(const char *name, struct lxc_handler *handler)
 		goto out_sigfd;
 	}
 
-	if (lxc_mainloop_add_handler(&descr, sigfd, sigchld_handler, &pid)) {
+	if (lxc_mainloop_add_handler(&descr, sigfd, signal_handler, &pid)) {
 		ERROR("failed to add handler for the signal");
 		goto out_mainloop_open;
 	}
@@ -365,7 +371,7 @@ struct lxc_handler *lxc_init(const char *name, struct lxc_conf *conf)
 	/* the signal fd has to be created before forking otherwise
 	 * if the child process exits before we setup the signal fd,
 	 * the event will be lost and the command will be stuck */
-	handler->sigfd = setup_sigchld_fd(&handler->oldmask);
+	handler->sigfd = setup_signal_fd(&handler->oldmask);
 	if (handler->sigfd < 0) {
 		ERROR("failed to set sigchild fd handler");
 		goto out_delete_console;
@@ -396,7 +402,7 @@ void lxc_fini(const char *name, struct lxc_handler *handler)
 	lxc_set_state(name, handler, STOPPING);
 	lxc_set_state(name, handler, STOPPED);
 
-	/* reset mask set by setup_sigchld_fd */
+	/* reset mask set by setup_signal_fd */
 	if (sigprocmask(SIG_SETMASK, &handler->oldmask, NULL))
 		WARN("failed to restore sigprocmask");
 
@@ -422,6 +428,17 @@ static int do_start(void *data)
 		return -1;
 	}
 
+        /* This prctl must be before the synchro, so if the parent
+	 * dies before we set the parent death signal, we will detect
+	 * its death with the synchro right after, otherwise we have
+	 * a window where the parent can exit before we set the pdeath
+	 * signal leading to a unsupervized container.
+	 */
+	if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0)) {
+		SYSERROR("failed to set pdeath signal");
+		return -1;
+	}
+
 	lxc_sync_fini_parent(handler);
 
 	/* Tell the parent task it can begin to configure the
@@ -438,11 +455,6 @@ static int do_start(void *data)
 
 	if (prctl(PR_CAPBSET_DROP, CAP_SYS_BOOT, 0, 0, 0)) {
 		SYSERROR("failed to remove CAP_SYS_BOOT capability");
-		return -1;
-	}
-
-	if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0)) {
-		SYSERROR("failed to set pdeath signal");
 		return -1;
 	}
 

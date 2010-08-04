@@ -30,12 +30,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/capability.h>
 #define _GNU_SOURCE
 #include <getopt.h>
 
-#include <lxc/log.h>
-#include <lxc/error.h>
+#include "log.h"
+#include "caps.h"
+#include "error.h"
 #include "utils.h"
 
 lxc_log_define(lxc_init, lxc);
@@ -48,25 +48,6 @@ static struct option options[] = {
 };
 
 static	int was_interrupted = 0;
-
-static int cap_reset(void)
-{
-	cap_t cap = cap_init();
-	int ret = 0;
-
-	if (!cap) {
-		ERROR("cap_init() failed : %m");
-		return -1;
-	}
-
-	if (cap_set_proc(cap)) {
-		ERROR("cap_set_proc() failed : %m");
-		ret = -1;
-	}
-
-	cap_free(cap);
-	return ret;
-}
 
 int main(int argc, char *argv[])
 {
@@ -82,7 +63,7 @@ int main(int argc, char *argv[])
 	int err = -1;
 	char **aargv;
 	sigset_t mask, omask;
-	int i;
+	int i, shutdown = 0;
 
 	while (1) {
 		int ret = getopt_long_only(argc, argv, "", options, NULL);
@@ -95,6 +76,9 @@ int main(int argc, char *argv[])
 		nbargs++;
 	}
 
+	if (lxc_caps_init())
+		exit(err);
+
 	if (lxc_log_init(NULL, 0, basename(argv[0]), quiet))
 		exit(err);
 
@@ -106,6 +90,10 @@ int main(int argc, char *argv[])
 	aargv = &argv[optind];
 	argc -= nbargs;
 
+        /*
+	 * mask all the signals so we are safe to install a
+	 * signal handler and to fork
+	 */
 	sigfillset(&mask);
 	sigprocmask(SIG_SETMASK, &mask, &omask);
 
@@ -113,6 +101,9 @@ int main(int argc, char *argv[])
 		struct sigaction act;
 
 		sigfillset(&act.sa_mask);
+		sigdelset(&mask, SIGILL);
+		sigdelset(&mask, SIGSEGV);
+		sigdelset(&mask, SIGBUS);
 		act.sa_flags = 0;
 		act.sa_handler = interrupt_handler;
 		sigaction(i, &act, NULL);
@@ -121,7 +112,7 @@ int main(int argc, char *argv[])
 	if (lxc_setup_fs())
 		exit(err);
 
-	if (cap_reset())
+	if (lxc_caps_reset())
 		exit(err);
 
 	pid = fork();
@@ -131,8 +122,10 @@ int main(int argc, char *argv[])
 
 	if (!pid) {
 
+		/* restore default signal handlers */
 		for (i = 1; i < NSIG; i++)
 			signal(i, SIG_DFL);
+
 		sigprocmask(SIG_SETMASK, &omask, NULL);
 
 		NOTICE("about to exec '%s'", aargv[0]);
@@ -142,6 +135,8 @@ int main(int argc, char *argv[])
 		exit(err);
 	}
 
+	/* let's process the signals now */
+	sigdelset(&omask, SIGALRM);
 	sigprocmask(SIG_SETMASK, &omask, NULL);
 
 	/* no need of other inherited fds but stderr */
@@ -154,24 +149,49 @@ int main(int argc, char *argv[])
 		int orphan = 0;
 		pid_t waited_pid;
 
-		if (was_interrupted) {
+		switch (was_interrupted) {
+
+		case 0:
+			break;
+
+		case SIGTERM:
+			if (!shutdown) {
+				shutdown = 1;
+				kill(-1, SIGTERM);
+				alarm(1);
+			}
+			break;
+
+		case SIGALRM:
+			kill(-1, SIGKILL);
+			break;
+
+		default:
 			kill(pid, was_interrupted);
-			was_interrupted = 0;
+			break;
 		}
 
+		was_interrupted = 0;
 		waited_pid = wait(&status);
 		if (waited_pid < 0) {
 			if (errno == ECHILD)
 				goto out;
 			if (errno == EINTR)
 				continue;
-			ERROR("failed to wait child : %s", strerror(errno));
+
+			ERROR("failed to wait child : %s",
+			      strerror(errno));
 			goto out;
 		}
 
+		/* reset timer each time a process exited */
+		if (shutdown)
+			alarm(1);
+
 		/*
-		 * keep the exit code of started application (not wrapped pid)
-		 * and continue to wait for the end of the orphan group.
+		 * keep the exit code of started application
+		 * (not wrapped pid) and continue to wait for
+		 * the end of the orphan group.
 		 */
 		if ((waited_pid != pid) || (orphan ==1))
 			continue;

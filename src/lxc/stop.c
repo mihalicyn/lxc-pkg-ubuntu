@@ -35,6 +35,7 @@
 #include <lxc/log.h>
 #include <lxc/start.h>
 
+#include "lxc.h"
 #include "commands.h"
 
 lxc_log_define(lxc_stop, lxc);
@@ -83,8 +84,14 @@ extern int lxc_stop_callback(int fd, struct lxc_request *request,
 	int ret;
 
 	answer.ret = kill(handler->pid, SIGKILL);
-	if (!answer.ret)
-		return 0;
+	if (!answer.ret) {
+		ret = lxc_unfreeze(handler->name);
+		if (!ret)
+			return 0;
+
+		ERROR("failed to unfreeze container");
+		answer.ret = ret;
+	}
 
 	ret = send(fd, &answer, sizeof(answer), 0);
 	if (ret < 0) {

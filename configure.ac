@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT([lxc], [0.7.1])
+AC_INIT([lxc], [0.7.2])
 
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_AUX_DIR([config])
@@ -148,6 +148,7 @@ AC_CONFIG_FILES([
 	src/lxc/lxc-netstat
 	src/lxc/lxc-checkconfig
 	src/lxc/lxc-setcap
+	src/lxc/lxc-setuid
 	src/lxc/lxc-version
 	src/lxc/lxc-create
 	src/lxc/lxc-destroy

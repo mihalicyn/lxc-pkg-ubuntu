@@ -21,7 +21,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 Name: lxc
-Version: 0.7.1
+Version: 0.7.2
 Release: 1
 URL: http://lxc.sourceforge.net
 Source: http://dl.sourceforge.net/sourceforge/%{name}/%{name}-%{version}.tar.gz
@@ -73,7 +73,16 @@ rm -rf %{buildroot}
 %defattr(-,root,root)
 %{_libdir}/*.so*
 %{_libdir}/%{name}
+%attr(4555,root,root) %{_libdir}/%{name}/lxc-init
 %{_bindir}/*
+%attr(4111,root,root) %{_bindir}/lxc-attach
+%attr(4111,root,root) %{_bindir}/lxc-create
+%attr(4111,root,root) %{_bindir}/lxc-start
+%attr(4111,root,root) %{_bindir}/lxc-netstat
+%attr(4111,root,root) %{_bindir}/lxc-unshare
+%attr(4111,root,root) %{_bindir}/lxc-execute
+%attr(4111,root,root) %{_bindir}/lxc-checkpoint
+%attr(4111,root,root) %{_bindir}/lxc-restart
 %{_mandir}/*
 %{_datadir}/pkgconfig/*
 %{_datadir}/doc/*
@@ -81,9 +90,14 @@ rm -rf %{buildroot}
 %files devel
 %defattr(-,root,root)
 %{_includedir}/%{name}/*
-%{_libdir}/*.so*
+%{_libdir}/*.so.*
 
 %changelog
+
+* Fri Jul 23 2010 Daniel Lezcano <dlezcano@fr.ibm.com> - Version 0.7.2
+- set attribute for installed files
+- fix libraries installation
+-
 
 * Mon Mar 24 2009 Daniel Lezcano <daniel.lezcano@free.fr> - Version 0.6.1
 - Removed capability setting, let the user to do that through "lxc-setcap"

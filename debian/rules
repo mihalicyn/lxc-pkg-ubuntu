@@ -7,7 +7,8 @@ include /usr/share/cdbs/1/class/autotools.mk
 
 # Install liblxc in out private area, for now, until it's stable.
 LIBDIR="\$${prefix}/lib/lxc"
-DEB_CONFIGURE_EXTRA_FLAGS=--libdir=$(LIBDIR)
+DEB_CONFIGURE_EXTRA_FLAGS=--libdir=$(LIBDIR) \
+			  --with-rootfs-path=$(LIBDIR)
 
 binary-install/lxc::
 	cp debian/lxc.overrides debian/lxc/usr/share/lintian/overrides/lxc

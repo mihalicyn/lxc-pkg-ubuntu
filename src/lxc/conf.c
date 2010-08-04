@@ -1025,7 +1025,8 @@ static int setup_netdev(struct lxc_netdev *netdev)
 
 	/* default: let the system to choose one interface name */
 	if (!netdev->name)
-		netdev->name = "eth%d";
+		netdev->name = netdev->type == LXC_NET_PHYS ?
+			netdev->link : "eth%d";
 
 	/* rename the interface name */
 	err = lxc_device_rename(ifname, netdev->name);
@@ -1284,6 +1285,11 @@ static int instanciate_vlan(struct lxc_netdev *netdev)
 
 static int instanciate_phys(struct lxc_netdev *netdev)
 {
+	if (!netdev->link) {
+		ERROR("no link specified for the physical interface");
+		return -1;
+	}
+
 	netdev->ifindex = if_nametoindex(netdev->link);
 	if (!netdev->ifindex) {
 		ERROR("failed to retrieve the index for %s", netdev->link);
@@ -1330,7 +1336,7 @@ void lxc_delete_network(struct lxc_list *network)
 
 	lxc_list_for_each(iterator, network) {
 		netdev = iterator->elem;
-		if (netdev->ifindex > 0)
+		if (netdev->ifindex > 0 && netdev->type != LXC_NET_PHYS)
 			lxc_device_delete_index(netdev->ifindex);
 	}
 }
