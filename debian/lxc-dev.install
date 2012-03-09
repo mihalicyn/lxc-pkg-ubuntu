@@ -1,3 +1,3 @@
 usr/include
-usr/lib/lxc/*.so
+usr/lib/i386-linux-gnu/lxc/*.so
 usr/share/pkgconfig
