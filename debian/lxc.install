@@ -3,8 +3,8 @@ usr/bin
 usr/lib/i386-linux-gnu/lxc/*.so.*
 usr/lib/i386-linux-gnu/lxc/lxc-*
 usr/lib/i386-linux-gnu/lxc/README
-usr/lib/i386-linux-gnu/lxc/templates
 usr/share/doc
+usr/share/lxc
 usr/share/man
 var
 
@@ -16,4 +16,4 @@ debian/local/lxc-ls		/usr/bin
 debian/local/lxc-restore	/usr/bin
 debian/local/lxc.sh		/etc/bash_completion.d
 
-debian/local/lxc-debconf*	/usr/lib/i386-linux-gnu/lxc/templates
+debian/local/lxc-debconf*	/usr/share/lxc/templates
