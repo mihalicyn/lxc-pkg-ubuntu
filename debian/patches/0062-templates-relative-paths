@@ -1,0 +1,271 @@
+Description: use relative paths when creating containers
+ At the same time, allow lxc.mount.entry to specify an absolute target
+ path relative to /var/lib/lxc/CN/rootfs, even if rootfs is a blockdev.
+ Otherwise all such entries are ignored for blockdev-backed containers.
+Author: Serge Hallyn <serge.hallyn@canonical.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/960860
+Forwarded: yes
+
+Index: lxc-0.8.0~rc1/templates/lxc-debian.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-debian.in	2012-04-23 23:09:19.259940782 -0500
++++ lxc-0.8.0~rc1/templates/lxc-debian.in	2012-04-23 23:09:57.155940142 -0500
+@@ -212,8 +212,8 @@
+ lxc.cgroup.devices.allow = c 254:0 rwm
+ 
+ # mounts point
+-lxc.mount.entry=proc $rootfs/proc proc nodev,noexec,nosuid 0 0
+-lxc.mount.entry=sysfs $rootfs/sys sysfs defaults  0 0
++lxc.mount.entry=proc proc proc nodev,noexec,nosuid 0 0
++lxc.mount.entry=sysfs sys sysfs defaults  0 0
+ EOF
+ 
+     if [ $? -ne 0 ]; then
+Index: lxc-0.8.0~rc1/templates/lxc-fedora.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-fedora.in	2012-04-23 23:09:33.707940539 -0500
++++ lxc-0.8.0~rc1/templates/lxc-fedora.in	2012-04-23 23:09:57.159940142 -0500
+@@ -257,8 +257,8 @@
+ EOF
+ 
+     cat <<EOF > $config_path/fstab
+-proc            $rootfs_path/proc         proc    nodev,noexec,nosuid 0 0
+-sysfs           $rootfs_path/sys          sysfs defaults  0 0
++proc            proc         proc    nodev,noexec,nosuid 0 0
++sysfs           sys          sysfs defaults  0 0
+ EOF
+     if [ $? -ne 0 ]; then
+ 	echo "Failed to add configuration"
+Index: lxc-0.8.0~rc1/templates/lxc-lenny.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-lenny.in	2012-04-23 23:09:14.251940869 -0500
++++ lxc-0.8.0~rc1/templates/lxc-lenny.in	2012-04-23 23:09:57.159940142 -0500
+@@ -200,8 +200,8 @@
+ lxc.cgroup.devices.allow = c 254:0 rwm
+ 
+ # mounts point
+-lxc.mount.entry=proc $rootfs/proc proc nodev,noexec,nosuid 0 0
+-lxc.mount.entry=sysfs $rootfs/sys sysfs defaults  0 0
++lxc.mount.entry=proc proc proc nodev,noexec,nosuid 0 0
++lxc.mount.entry=sysfs sys sysfs defaults  0 0
+ EOF
+ 
+     if [ $? -ne 0 ]; then
+Index: lxc-0.8.0~rc1/templates/lxc-opensuse.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-opensuse.in	2012-04-23 23:09:14.159940870 -0500
++++ lxc-0.8.0~rc1/templates/lxc-opensuse.in	2012-04-23 23:09:57.159940142 -0500
+@@ -281,8 +281,8 @@
+ EOF
+ 
+     cat <<EOF > $path/fstab
+-proc            $rootfs/proc         proc	nodev,noexec,nosuid 0 0
+-sysfs           $rootfs/sys          sysfs	defaults  0 0
++proc            proc         proc	nodev,noexec,nosuid 0 0
++sysfs           sys          sysfs	defaults  0 0
+ EOF
+ 
+     if [ $? -ne 0 ]; then
+Index: lxc-0.8.0~rc1/templates/lxc-sshd.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-sshd.in	2012-04-23 23:09:33.707940539 -0500
++++ lxc-0.8.0~rc1/templates/lxc-sshd.in	2012-04-23 23:09:57.159940142 -0500
+@@ -113,14 +113,14 @@
+ lxc.utsname = $name
+ lxc.pts = 1024
+ lxc.rootfs = $rootfs
+-lxc.mount.entry=/dev $rootfs/dev none ro,bind 0 0
+-lxc.mount.entry=/lib $rootfs/lib none ro,bind 0 0
+-lxc.mount.entry=/bin $rootfs/bin none ro,bind 0 0
+-lxc.mount.entry=/usr /$rootfs/usr none ro,bind 0 0
+-lxc.mount.entry=/sbin $rootfs/sbin none ro,bind 0 0
+-lxc.mount.entry=tmpfs $rootfs/var/run/sshd tmpfs mode=0644 0 0
+-lxc.mount.entry=@LXCTEMPLATEDIR@/lxc-sshd $rootfs/sbin/init none bind 0 0
+-lxc.mount.entry=proc $rootfs/proc proc nodev,noexec,nosuid 0 0
++lxc.mount.entry=/dev dev none ro,bind 0 0
++lxc.mount.entry=/lib lib none ro,bind 0 0
++lxc.mount.entry=/bin bin none ro,bind 0 0
++lxc.mount.entry=/usr usr none ro,bind 0 0
++lxc.mount.entry=/sbin sbin none ro,bind 0 0
++lxc.mount.entry=tmpfs var/run/sshd tmpfs mode=0644 0 0
++lxc.mount.entry=@LXCTEMPLATEDIR@/lxc-sshd sbin/init none bind 0 0
++lxc.mount.entry=proc proc proc nodev,noexec,nosuid 0 0
+ EOF
+ 
+     # if no .ipv4 section in config, then have the container run dhcp
+@@ -128,7 +128,7 @@
+ 
+     if [ "$(uname -m)" = "x86_64" ]; then
+         cat <<EOF >> $path/config
+-lxc.mount.entry=/lib64 $rootfs/lib64 none ro,bind 0 0
++lxc.mount.entry=/lib64 lib64 none ro,bind 0 0
+ EOF
+     fi
+ }
+Index: lxc-0.8.0~rc1/templates/lxc-ubuntu-cloud.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-ubuntu-cloud.in	2012-04-23 23:09:52.855940215 -0500
++++ lxc-0.8.0~rc1/templates/lxc-ubuntu-cloud.in	2012-04-23 23:09:57.159940142 -0500
+@@ -87,8 +87,8 @@
+ EOF
+ 
+     cat <<EOF > $path/fstab
+-proc            $rootfs/proc         proc    nodev,noexec,nosuid 0 0
+-sysfs           $rootfs/sys          sysfs defaults  0 0
++proc            proc         proc    nodev,noexec,nosuid 0 0
++sysfs           sys          sysfs defaults  0 0
+ EOF
+ 
+     return 0
+Index: lxc-0.8.0~rc1/templates/lxc-ubuntu.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-ubuntu.in	2012-04-23 23:09:46.179940328 -0500
++++ lxc-0.8.0~rc1/templates/lxc-ubuntu.in	2012-04-23 23:09:57.159940142 -0500
+@@ -366,8 +366,8 @@
+ EOF
+ 
+     cat <<EOF > $path/fstab
+-proc            $rootfs/proc         proc    nodev,noexec,nosuid 0 0
+-sysfs           $rootfs/sys          sysfs defaults  0 0
++proc            proc         proc    nodev,noexec,nosuid 0 0
++sysfs           sys          sysfs defaults  0 0
+ EOF
+ 
+     if [ $? -ne 0 ]; then
+@@ -543,7 +543,7 @@
+     # bind-mount the user's path into the container's /home
+     h=`getent passwd $user | cut -d: -f 6`
+     mkdir -p $rootfs/$h
+-    echo "$h $rootfs/$h none bind 0 0" >> $path/fstab
++    echo "$h $h none bind 0 0" >> $path/fstab
+ 
+     # Make sure the group exists in container
+     grp=`echo $pwd | cut -d: -f 4`  # group number for $user
+Index: lxc-0.8.0~rc1/src/lxc/conf.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/conf.c	2012-04-23 23:09:55.739940166 -0500
++++ lxc-0.8.0~rc1/src/lxc/conf.c	2012-04-23 23:09:57.163940142 -0500
+@@ -1142,27 +1142,50 @@
+ }
+ 
+ static int mount_entry_on_absolute_rootfs(struct mntent *mntent,
+-					  const struct lxc_rootfs *rootfs)
++					  const struct lxc_rootfs *rootfs,
++					  const char *lxc_name)
+ {
+ 	char *aux;
+ 	char path[MAXPATHLEN];
+ 	unsigned long mntflags;
+ 	char *mntdata;
+-	int ret = 0;
++	int r, ret = 0, offset;
+ 
+ 	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
+ 		ERROR("failed to parse mount option '%s'", mntent->mnt_opts);
+ 		return -1;
+ 	}
+ 
++	/* if rootfs->path is a blockdev path, allow container fstab to
++	 * use /var/lib/lxc/CN/rootfs as the target prefix */
++	r = snprintf(path, MAXPATHLEN, "/var/lib/lxc/%s/rootfs", lxc_name);
++	if (r < 0 || r >= MAXPATHLEN)
++		goto skipvarlib;
++
++	aux = strstr(mntent->mnt_dir, path);
++	if (aux) {
++		offset = strlen(path);
++		goto skipabs;
++	}
++
++skipvarlib:
+ 	aux = strstr(mntent->mnt_dir, rootfs->path);
+ 	if (!aux) {
+ 		WARN("ignoring mount point '%s'", mntent->mnt_dir);
+ 		goto out;
+ 	}
++	offset = strlen(rootfs->path);
++
++skipabs:
+ 
+ 	snprintf(path, MAXPATHLEN, "%s/%s", rootfs->mount,
+-		 aux + strlen(rootfs->path));
++		 aux + offset);
++	if (r < 0 || r >= MAXPATHLEN) {
++		WARN("pathnme too long for '%s'", mntent->mnt_dir);
++		ret = -1;
++		goto out;
++	}
++
+ 
+ 	ret = mount_entry(mntent->mnt_fsname, path, mntent->mnt_type,
+ 			  mntflags, mntdata);
+@@ -1196,7 +1219,8 @@
+ 	return ret;
+ }
+ 
+-static int mount_file_entries(const struct lxc_rootfs *rootfs, FILE *file)
++static int mount_file_entries(const struct lxc_rootfs *rootfs, FILE *file,
++	const char *lxc_name)
+ {
+ 	struct mntent *mntent;
+ 	int ret = -1;
+@@ -1217,7 +1241,7 @@
+ 			continue;
+ 		}
+ 
+-		if (mount_entry_on_absolute_rootfs(mntent, rootfs))
++		if (mount_entry_on_absolute_rootfs(mntent, rootfs, lxc_name))
+ 			goto out;
+ 	}
+ 
+@@ -1228,7 +1252,8 @@
+ 	return ret;
+ }
+ 
+-static int setup_mount(const struct lxc_rootfs *rootfs, const char *fstab)
++static int setup_mount(const struct lxc_rootfs *rootfs, const char *fstab,
++	const char *lxc_name)
+ {
+ 	FILE *file;
+ 	int ret;
+@@ -1242,13 +1267,14 @@
+ 		return -1;
+ 	}
+ 
+-	ret = mount_file_entries(rootfs, file);
++	ret = mount_file_entries(rootfs, file, lxc_name);
+ 
+ 	endmntent(file);
+ 	return ret;
+ }
+ 
+-static int setup_mount_entries(const struct lxc_rootfs *rootfs, struct lxc_list *mount)
++static int setup_mount_entries(const struct lxc_rootfs *rootfs, struct lxc_list *mount,
++	const char *lxc_name)
+ {
+ 	FILE *file;
+ 	struct lxc_list *iterator;
+@@ -1268,7 +1294,7 @@
+ 
+ 	rewind(file);
+ 
+-	ret = mount_file_entries(rootfs, file);
++	ret = mount_file_entries(rootfs, file, lxc_name);
+ 
+ 	fclose(file);
+ 	return ret;
+@@ -2048,12 +2074,12 @@
+ 		return -1;
+ 	}
+ 
+-	if (setup_mount(&lxc_conf->rootfs, lxc_conf->fstab)) {
++	if (setup_mount(&lxc_conf->rootfs, lxc_conf->fstab, name)) {
+ 		ERROR("failed to setup the mounts for '%s'", name);
+ 		return -1;
+ 	}
+ 
+-	if (setup_mount_entries(&lxc_conf->rootfs, &lxc_conf->mount_list)) {
++	if (setup_mount_entries(&lxc_conf->rootfs, &lxc_conf->mount_list, name)) {
+ 		ERROR("failed to setup the mount entries for '%s'", name);
+ 		return -1;
+ 	}

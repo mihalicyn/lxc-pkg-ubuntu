@@ -1,0 +1,27 @@
+Description: lxc-ubuntu-cloud: extract the right filenames from tarball
+Author: Ben Howard <ben.howard@canonical.com>
+Forwarded: yes
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/979996
+
+Index: lxc-0.8.0~rc1/templates/lxc-ubuntu-cloud.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-ubuntu-cloud.in	2012-04-23 23:07:12.383942932 -0500
++++ lxc-0.8.0~rc1/templates/lxc-ubuntu-cloud.in	2012-04-23 23:07:18.723942823 -0500
+@@ -272,7 +272,7 @@
+ 
+     xdir=`mktemp -d -p .`
+     tarname=`basename $url`
+-    imgname="`basename $tarname .tar.gz`.img"
++    imgname="$release-*-cloudimg-$arch.img"
+     trap buildcleanup EXIT
+     if [ $flushcache -eq 1 -o ! -f $cache/$tarname ]; then
+         rm -f $tarname
+@@ -280,7 +280,7 @@
+         wget $url || { echo "Couldn't find cloud image $url."; exit 1; }
+     fi
+     echo "Creating new cached cloud image rootfs"
+-    tar zxf $tarname $imgname
++    tar --wildcards -zxf $tarname $imgname
+     mount -o loop $imgname $xdir
+     (cd $xdir; tar zcf ../$filename .)
+     umount $xdir

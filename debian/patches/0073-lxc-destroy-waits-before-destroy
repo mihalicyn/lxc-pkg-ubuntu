@@ -1,0 +1,17 @@
+Description: Make lxc-destroy wait until the container is stopped
+Author: Timothy Chen <tnachen@gmail.com>
+Forwarded: yes
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/980902
+
+Index: lxc-0.8.0~rc1/src/lxc/lxc-destroy.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/lxc-destroy.in	2012-04-23 22:49:49.931960583 -0500
++++ lxc-0.8.0~rc1/src/lxc/lxc-destroy.in	2012-04-23 23:07:43.971942396 -0500
+@@ -87,6 +87,7 @@
+ if [ $? -eq 0 ]; then
+ 	if [ $force -eq 1 ]; then
+ 		lxc-stop -n $lxc_name
++		lxc-wait -n $lxc_name -s STOPPED
+ 	else
+ 		echo "Container $lxc_name is running, aborting the deletion."
+ 		exit 1

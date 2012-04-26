@@ -1,0 +1,25 @@
+Description: remove autostart symlinks when deleting a container
+ Note autostart symlinks are not upstream.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/930525
+Forwarded: no
+
+Index: lxc-0.8.0~rc1/src/lxc/lxc-destroy.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/lxc-destroy.in	2012-04-23 23:09:19.379940780 -0500
++++ lxc-0.8.0~rc1/src/lxc/lxc-destroy.in	2012-04-23 23:09:32.239940564 -0500
+@@ -108,3 +108,14 @@
+ fi
+ # recursively remove the container to remove old container configuration
+ rm -rf --one-file-system --preserve-root $lxc_path/$lxc_name
++
++# remove any autostart symlinks pointing to this container.
++ls /etc/lxc/auto/* > /dev/null 2>&1 || exit 0;
++for f in /etc/lxc/auto/*; do
++	if [ -h "$f" ]; then
++		l=`readlink $f`
++		if [ $l = $lxc_path/$lxc_name/config ]; then
++			rm -f $f
++		fi
++	fi
++done

@@ -1,0 +1,50 @@
+Description: Always add the user to the 'sudo' group as it's been around
+             since at least Ubuntu 10.04. In addition make the user part
+             of the admin group until 12.04 where it's been removed.
+             Also fix a minor layout issue with devttydir.
+Author: Stéphane Graber <stgraber@ubuntu.com>
+Forwarded: yes
+
+=== modified file 'lxc/templates/lxc-ubuntu.in'
+Index: lxc-0.8.0~rc1/templates/lxc-ubuntu.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-ubuntu.in	2012-04-23 23:09:36.675940489 -0500
++++ lxc-0.8.0~rc1/templates/lxc-ubuntu.in	2012-04-23 23:09:38.243940462 -0500
+@@ -55,9 +55,9 @@
+ EOF
+ 
+     if [ "$release" = "precise" ]; then
+-        group="sudo"
++        groups="sudo"
+     else
+-        group="admin"
++        groups="sudo admin"
+ 
+         # suppress log level output for udev
+         sed -i "s/=\"err\"/=0/" $rootfs/etc/udev/udev.conf
+@@ -67,9 +67,14 @@
+         rm -f $rootfs/etc/init/tty{5,6}.conf
+     fi
+ 
+-    chroot $rootfs groupadd --system $group >/dev/null 2>&1 || true
+-    chroot $rootfs useradd --create-home -s /bin/bash -G $group ubuntu
++    chroot $rootfs useradd --create-home -s /bin/bash ubuntu
+     echo "ubuntu:ubuntu" | chroot $rootfs chpasswd
++
++    for group in $groups; do
++        chroot $rootfs groupadd --system $group >/dev/null 2>&1 || true
++        chroot $rootfs adduser ubuntu $group >/dev/null 2>&1 || true
++    done
++
+     if [ -n "$auth_key" -a -f "$auth_key" ]; then
+ 	u_path="/home/ubuntu/.ssh"
+ 	root_u_path="$rootfs/$u_path"
+@@ -307,7 +312,7 @@
+     cat <<EOF >> $path/config
+ lxc.utsname = $name
+ 
+-lxc.devttydir = $ttydir
++lxc.devttydir =$ttydir
+ lxc.tty = 4
+ lxc.pts = 1024
+ lxc.rootfs = $rootfs

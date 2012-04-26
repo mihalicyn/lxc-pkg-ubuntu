@@ -1,0 +1,216 @@
+Description: support per-container apparmor profiles
+ It doesn't yet support selinux or smack.
+Author: Serge Hallyn <serge.hallyn@canonical.com>
+Forwarded: no
+
+Index: lxc-0.8.0~rc1/src/lxc/conf.h
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/conf.h	2012-04-23 23:09:42.871940384 -0500
++++ lxc-0.8.0~rc1/src/lxc/conf.h	2012-04-23 23:09:55.735940166 -0500
+@@ -198,6 +198,7 @@
+  * @tty_info   : tty data
+  * @console    : console data
+  * @ttydir     : directory (under /dev) in which to create console and ttys
++ * @aa_profile : apparmor profile to switch to
+  */
+ struct lxc_conf {
+ 	char *fstab;
+@@ -216,6 +217,7 @@
+ 	struct lxc_rootfs rootfs;
+ 	char *ttydir;
+ 	int close_all_fds;
++	char *aa_profile;
+ };
+ 
+ /*
+Index: lxc-0.8.0~rc1/src/lxc/start.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/start.c	2012-04-23 23:09:47.843940298 -0500
++++ lxc-0.8.0~rc1/src/lxc/start.c	2012-04-23 23:09:55.735940166 -0500
+@@ -44,6 +44,7 @@
+ #include <sys/wait.h>
+ #include <sys/un.h>
+ #include <sys/poll.h>
++#include <sys/apparmor.h>
+ 
+ #ifdef HAVE_SYS_SIGNALFD_H
+ #  include <sys/signalfd.h>
+@@ -465,7 +466,7 @@
+                 return -1;
+         }
+         if (wait(&status) < 0) {
+-                SYSERROR("unexpected wait error: %m\n");
++                SYSERROR("unexpected wait error: %m");
+                 return -1;
+         }
+ 
+@@ -475,6 +476,36 @@
+ 	return 0;
+ }
+ 
++#if 0
++/* aa_getcon is not working right now.  Use our hand-rolled version below */
++static int aa_am_unconfined(void)
++{
++	char *con;
++	int ret = 0;
++	if (aa_getcon(&con, NULL) == 0 && strcmp(con, "unconfined") == 0)
++		ret = 1;
++	free(con);
++	return ret;
++}
++#else
++static int aa_am_unconfined(void)
++{
++	int ret;
++	char path[100], p[100];
++	sprintf(path, "/proc/%d/attr/current", getpid());
++	FILE *f = fopen(path, "r");
++	if (!f)
++		return 0;
++	ret = fscanf(f, "%99s", p);
++	fclose(f);
++	if (ret < 1)
++		return 0;
++	if (strcmp(p, "unconfined") == 0)
++		return 1;
++	return 0;
++}
++#endif
++
+ static int do_start(void *data)
+ {
+ 	struct lxc_handler *handler = data;
+@@ -519,6 +550,31 @@
+ 
+ 	close(handler->sigfd);
+ 
++#define AA_DEF_PROFILE "lxc-container-default"
++
++	if (!handler->conf->aa_profile)
++		handler->conf->aa_profile = AA_DEF_PROFILE;
++
++	if (strcmp(handler->conf->aa_profile, "unconfined") == 0 &&
++	    aa_am_unconfined()) {
++		INFO("apparmor profile unchanged");
++		goto skip_profile;
++	}
++
++	/* aa_change_onexec makes more sense since we want to transition when
++	 * /sbin/init is exec'd.  But the transitions doesn't seem to work
++	 * then (refused).  aa_change_onexec will work since we're doing it
++	 * right before the exec, so we'll just use that for now.
++	 */
++	//if (aa_change_onexec(handler->conf->aa_profile) < 0) {
++	if (aa_change_profile(handler->conf->aa_profile) < 0) {
++		SYSERROR("failed to change apparmor profile to %s", handler->conf->aa_profile);
++		return -1;
++	}
++	INFO("changed apparmor profile to %s", handler->conf->aa_profile);
++
++skip_profile:
++
+ 	/* after this call, we are in error because this
+ 	 * ops should not return as it execs */
+ 	if (handler->ops->start(handler, handler->data))
+Index: lxc-0.8.0~rc1/src/lxc/conf.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/conf.c	2012-04-23 23:09:42.871940384 -0500
++++ lxc-0.8.0~rc1/src/lxc/conf.c	2012-04-23 23:09:55.739940166 -0500
+@@ -1636,6 +1636,7 @@
+ 	lxc_list_init(&new->network);
+ 	lxc_list_init(&new->mount_list);
+ 	lxc_list_init(&new->caps);
++	new->aa_profile = NULL;
+ 
+ 	return new;
+ }
+Index: lxc-0.8.0~rc1/src/lxc/confile.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/confile.c	2012-04-23 23:09:14.435940866 -0500
++++ lxc-0.8.0~rc1/src/lxc/confile.c	2012-04-23 23:09:55.739940166 -0500
+@@ -49,6 +49,7 @@
+ static int config_pts(const char *, char *, struct lxc_conf *);
+ static int config_tty(const char *, char *, struct lxc_conf *);
+ static int config_ttydir(const char *, char *, struct lxc_conf *);
++static int config_aa_profile(const char *, char *, struct lxc_conf *);
+ static int config_cgroup(const char *, char *, struct lxc_conf *);
+ static int config_mount(const char *, char *, struct lxc_conf *);
+ static int config_rootfs(const char *, char *, struct lxc_conf *);
+@@ -85,6 +86,7 @@
+ 	{ "lxc.pts",                  config_pts                  },
+ 	{ "lxc.tty",                  config_tty                  },
+ 	{ "lxc.devttydir",            config_ttydir               },
++	{ "lxc.aa_profile",            config_aa_profile          },
+ 	{ "lxc.cgroup",               config_cgroup               },
+ 	{ "lxc.mount",                config_mount                },
+ 	{ "lxc.rootfs.mount",         config_rootfs_mount         },
+@@ -632,6 +634,24 @@
+ 
+ 	return 0;
+ }
++
++static int config_aa_profile(const char *key, char *value,
++			  struct lxc_conf *lxc_conf)
++{
++	char *path;
++
++	if (!value || strlen(value) == 0)
++		return 0;
++	path = strdup(value);
++	if (!path) {
++		SYSERROR("failed to strdup '%s': %m", value);
++		return -1;
++	}
++
++	lxc_conf->aa_profile = path;
++
++	return 0;
++}
+ 
+ static int config_cgroup(const char *key, char *value, struct lxc_conf *lxc_conf)
+ {
+Index: lxc-0.8.0~rc1/src/lxc/Makefile.am
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/Makefile.am	2012-04-23 23:09:54.359940190 -0500
++++ lxc-0.8.0~rc1/src/lxc/Makefile.am	2012-04-23 23:09:55.739940166 -0500
+@@ -66,7 +66,7 @@
+ 	-shared \
+ 	-Wl,-soname,liblxc.so.$(firstword $(subst ., ,$(VERSION)))
+ 
+-liblxc_so_LDADD = -lutil $(CAP_LIBS)
++liblxc_so_LDADD = -lutil $(CAP_LIBS) -lapparmor
+ 
+ bin_SCRIPTS = \
+ 	lxc-ps \
+@@ -105,7 +105,7 @@
+ if ENABLE_RPATH
+ AM_LDFLAGS += -Wl,-rpath -Wl,$(libdir)
+ endif
+-LDADD=liblxc.so @CAP_LIBS@
++LDADD=liblxc.so @CAP_LIBS@ -lapparmor
+ 
+ lxc_attach_SOURCES = lxc_attach.c
+ lxc_cgroup_SOURCES = lxc_cgroup.c
+Index: lxc-0.8.0~rc1/src/lxc/Makefile.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/Makefile.in	2012-04-23 23:09:54.359940190 -0500
++++ lxc-0.8.0~rc1/src/lxc/Makefile.in	2012-04-23 23:09:55.739940166 -0500
+@@ -378,7 +378,7 @@
+ 	-shared \
+ 	-Wl,-soname,liblxc.so.$(firstword $(subst ., ,$(VERSION)))
+ 
+-liblxc_so_LDADD = -lutil $(CAP_LIBS)
++liblxc_so_LDADD = -lutil $(CAP_LIBS) -lapparmor
+ bin_SCRIPTS = \
+ 	lxc-ps \
+ 	lxc-netstat \
+@@ -393,7 +393,7 @@
+ 	lxc-destroy
+ 
+ AM_LDFLAGS = -Wl,-E $(am__append_1)
+-LDADD = liblxc.so @CAP_LIBS@
++LDADD = liblxc.so @CAP_LIBS@ -lapparmor
+ lxc_attach_SOURCES = lxc_attach.c
+ lxc_cgroup_SOURCES = lxc_cgroup.c
+ lxc_checkpoint_SOURCES = lxc_checkpoint.c

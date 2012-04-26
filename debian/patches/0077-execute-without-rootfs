@@ -1,0 +1,40 @@
+Description: Make lxc-execute without rootfs work.
+ That means, don't try to pin a null rootfs, and don't try to mount /proc
+ since /var/lib/lxc/root/proc doesn't exist to be mounted onto.
+ The apparmor patches are not yet upstream, so this patch will not go
+ upstream by itself.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/981955
+Forwarded: no
+
+Index: lxc-0.8.0~rc1/src/lxc/conf.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/conf.c	2012-04-26 15:10:50.059357146 -0500
++++ lxc-0.8.0~rc1/src/lxc/conf.c	2012-04-26 15:18:22.567335951 -0500
+@@ -485,6 +485,9 @@
+ 	struct stat s;
+ 	int ret, fd;
+ 
++	if (rootfs == NULL || strlen(rootfs) == 0)
++		return 0;
++
+ 	if (!realpath(rootfs, absrootfs)) {
+ 		SYSERROR("failed to get real path for '%s'", rootfs);
+ 		return -1;
+@@ -2189,8 +2192,15 @@
+ 	 * then (refused).  aa_change_onexec will work since we're doing it
+ 	 * right before the exec, so we'll just use that for now.
+ 	 * In case the container fstab didn't mount /proc, we mount it.
++	 *
++	 * But if there is no rootfs, then don't try to mount it.
+ 	 */
+-	mounted = mount_proc_if_needed(lxc_conf->rootfs.mount);
++	INFO("rootfs path is .%s., mount is .%s.", lxc_conf->rootfs.path,
++		lxc_conf->rootfs.mount);
++	if (lxc_conf->rootfs.path == NULL || strlen(lxc_conf->rootfs.path) == 0)
++		mounted = 0;
++	else
++		mounted = mount_proc_if_needed(lxc_conf->rootfs.mount);
+ 	if (mounted == -1) {
+ 		SYSERROR("failed to mount /proc in the container.");
+ 		return -1;

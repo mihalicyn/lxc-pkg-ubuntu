@@ -1,0 +1,370 @@
+Description: Add lxc-shutdown script
+ It optionally waits (an optional timeout # of seconds) for the container to
+ be STOPPED.  If given -r, it reboots the container (and exits immediately).
+ I decided to add the timeout after all because it's harder to finagle into
+ an upstart post-stop script than a full bash script.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Forwarded: yes
+
+Index: lxc-0.8.0~rc1/configure
+===================================================================
+--- lxc-0.8.0~rc1.orig/configure	2012-04-23 23:09:14.751940860 -0500
++++ lxc-0.8.0~rc1/configure	2012-04-23 23:09:54.355940190 -0500
+@@ -4970,7 +4970,7 @@
+   CFLAGS="$CFLAGS -Wall"
+ fi
+ 
+-ac_config_files="$ac_config_files Makefile lxc.pc lxc.spec config/Makefile doc/Makefile doc/lxc-create.sgml doc/lxc-destroy.sgml doc/lxc-execute.sgml doc/lxc-start.sgml doc/lxc-checkpoint.sgml doc/lxc-restart.sgml doc/lxc-stop.sgml doc/lxc-console.sgml doc/lxc-freeze.sgml doc/lxc-unfreeze.sgml doc/lxc-monitor.sgml doc/lxc-wait.sgml doc/lxc-ls.sgml doc/lxc-ps.sgml doc/lxc-cgroup.sgml doc/lxc-kill.sgml doc/lxc-attach.sgml doc/lxc.conf.sgml doc/lxc.sgml doc/common_options.sgml doc/see_also.sgml doc/rootfs/Makefile doc/examples/Makefile doc/examples/lxc-macvlan.conf doc/examples/lxc-vlan.conf doc/examples/lxc-no-netns.conf doc/examples/lxc-empty-netns.conf doc/examples/lxc-phys.conf doc/examples/lxc-veth.conf doc/examples/lxc-complex.conf templates/Makefile templates/lxc-lenny templates/lxc-debian templates/lxc-ubuntu templates/lxc-ubuntu-cloud templates/lxc-opensuse templates/lxc-busybox templates/lxc-fedora templates/lxc-altlinux templates/lxc-sshd templates/lxc-archlinux src/Makefile src/lxc/Makefile src/lxc/lxc-ps src/lxc/lxc-ls src/lxc/lxc-netstat src/lxc/lxc-checkconfig src/lxc/lxc-setcap src/lxc/lxc-setuid src/lxc/lxc-version src/lxc/lxc-create src/lxc/lxc-clone src/lxc/lxc-destroy"
++ac_config_files="$ac_config_files Makefile lxc.pc lxc.spec config/Makefile doc/Makefile doc/lxc-create.sgml doc/lxc-destroy.sgml doc/lxc-execute.sgml doc/lxc-start.sgml doc/lxc-checkpoint.sgml doc/lxc-restart.sgml doc/lxc-stop.sgml doc/lxc-console.sgml doc/lxc-freeze.sgml doc/lxc-unfreeze.sgml doc/lxc-monitor.sgml doc/lxc-wait.sgml doc/lxc-ls.sgml doc/lxc-ps.sgml doc/lxc-cgroup.sgml doc/lxc-kill.sgml doc/lxc-attach.sgml doc/lxc.conf.sgml doc/lxc.sgml doc/common_options.sgml doc/see_also.sgml doc/rootfs/Makefile doc/examples/Makefile doc/examples/lxc-macvlan.conf doc/examples/lxc-vlan.conf doc/examples/lxc-no-netns.conf doc/examples/lxc-empty-netns.conf doc/examples/lxc-phys.conf doc/examples/lxc-veth.conf doc/examples/lxc-complex.conf templates/Makefile templates/lxc-lenny templates/lxc-debian templates/lxc-ubuntu templates/lxc-ubuntu-cloud templates/lxc-opensuse templates/lxc-busybox templates/lxc-fedora templates/lxc-altlinux templates/lxc-sshd templates/lxc-archlinux src/Makefile src/lxc/Makefile src/lxc/lxc-ps src/lxc/lxc-ls src/lxc/lxc-netstat src/lxc/lxc-checkconfig src/lxc/lxc-setcap src/lxc/lxc-setuid src/lxc/lxc-version src/lxc/lxc-create src/lxc/lxc-clone src/lxc/lxc-shutdown src/lxc/lxc-destroy"
+ 
+ ac_config_commands="$ac_config_commands default"
+ 
+@@ -5775,6 +5775,7 @@
+     "src/lxc/lxc-version") CONFIG_FILES="$CONFIG_FILES src/lxc/lxc-version" ;;
+     "src/lxc/lxc-create") CONFIG_FILES="$CONFIG_FILES src/lxc/lxc-create" ;;
+     "src/lxc/lxc-clone") CONFIG_FILES="$CONFIG_FILES src/lxc/lxc-clone" ;;
++    "src/lxc/lxc-shutdown") CONFIG_FILES="$CONFIG_FILES src/lxc/lxc-shutdown" ;;
+     "src/lxc/lxc-destroy") CONFIG_FILES="$CONFIG_FILES src/lxc/lxc-destroy" ;;
+     "default") CONFIG_COMMANDS="$CONFIG_COMMANDS default" ;;
+ 
+Index: lxc-0.8.0~rc1/configure.ac
+===================================================================
+--- lxc-0.8.0~rc1.orig/configure.ac	2012-04-23 23:09:14.651940861 -0500
++++ lxc-0.8.0~rc1/configure.ac	2012-04-23 23:09:54.355940190 -0500
+@@ -160,6 +160,7 @@
+ 	src/lxc/lxc-version
+ 	src/lxc/lxc-create
+ 	src/lxc/lxc-clone
++	src/lxc/lxc-shutdown
+ 	src/lxc/lxc-destroy
+ 
+ ])
+Index: lxc-0.8.0~rc1/doc/lxc-shutdown.sgml.in
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-0.8.0~rc1/doc/lxc-shutdown.sgml.in	2012-04-23 23:09:54.355940190 -0500
+@@ -0,0 +1,97 @@
++<!--
++
++Copyright (C) 2012 Canonical, Inc
++
++Authors: Serge Hallyn <serge.hallyn@canonical.com>
++
++This library is free software; you can redistribute it and/or
++modify it under the terms of the GNU Lesser General Public
++License as published by the Free Software Foundation; either
++version 2.1 of the License, or (at your option) any later version.
++
++This library is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++Lesser General Public License for more details.
++
++You should have received a copy of the GNU Lesser General Public
++License along with this library; if not, write to the Free Software
++Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++
++-->
++
++<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN" [
++
++<!ENTITY commonoptions SYSTEM "@builddir@/common_options.sgml">
++<!ENTITY seealso SYSTEM "@builddir@/see_also.sgml">
++]>
++
++<refentry>
++
++  <docinfo><date>@LXC_GENERATE_DATE@</date></docinfo>
++
++  <refmeta>
++    <refentrytitle>lxc-shutdown</refentrytitle>
++    <manvolnum>1</manvolnum>
++  </refmeta>
++
++  <refnamediv>
++    <refname>lxc-shutdown</refname>
++
++    <refpurpose>
++      externally shut down or reboot a container
++    </refpurpose>
++  </refnamediv>
++
++  <refsynopsisdiv>
++    <cmdsynopsis>
++      <command>lxc-shutdown <replaceable>-n name</replaceable>
++      <optional>-w</optional> <optional>-r</optional>
++      </command>
++    </cmdsynopsis>
++  </refsynopsisdiv>
++
++  <refsect1>
++    <title>Description</title>
++
++    <para>
++      <command>lxc-shutdown</command> sends a SIGPWR signal to the
++      specified container to request it to cleanly shut down.  If
++      <optional>-w</optional> is specified, then <command>lxc-shutdown</command>
++      will wait until the container has shut down before exiting.
++      If <optional>-r</optional> is specified, the container will be
++      asked to reboot (using a SIGINT signal), and <optional>-w</optional>
++      will be ignored.  If the container ignore these signals, then
++      nothing will happen.  In that case, you can use <command>lxc-stop</command>
++      to force the container to stop.
++    </para>
++
++  </refsect1>
++
++  &commonoptions;
++
++  &seealso;
++
++  <refsect1>
++    <title>Author</title>
++    <para>Serge Hallyn <email>serge.hallyn@canonical.com</email></para>
++  </refsect1>
++
++</refentry>
++
++<!-- Keep this comment at the end of the file
++Local variables:
++mode: sgml
++sgml-omittag:t
++sgml-shorttag:t
++sgml-minimize-attributes:nil
++sgml-always-quote-attributes:t
++sgml-indent-step:2
++sgml-indent-data:t
++sgml-parent-document:nil
++sgml-default-dtd-file:nil
++sgml-exposed-tags:nil
++sgml-local-catalogs:nil
++sgml-local-ecat-files:nil
++End:
++-->
+Index: lxc-0.8.0~rc1/lxc.spec
+===================================================================
+--- lxc-0.8.0~rc1.orig/lxc.spec	2012-04-23 23:09:14.735940860 -0500
++++ lxc-0.8.0~rc1/lxc.spec	2012-04-23 23:09:54.359940190 -0500
+@@ -83,6 +83,7 @@
+ %attr(4111,root,root) %{_bindir}/lxc-attach
+ %attr(4111,root,root) %{_bindir}/lxc-create
+ %attr(4111,root,root) %{_bindir}/lxc-clone
++%attr(4111,root,root) %{_bindir}/lxc-shutdown
+ %attr(4111,root,root) %{_bindir}/lxc-start
+ %attr(4111,root,root) %{_bindir}/lxc-netstat
+ %attr(4111,root,root) %{_bindir}/lxc-unshare
+Index: lxc-0.8.0~rc1/lxc.spec.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/lxc.spec.in	2012-04-23 23:09:14.667940862 -0500
++++ lxc-0.8.0~rc1/lxc.spec.in	2012-04-23 23:09:54.359940190 -0500
+@@ -83,6 +83,7 @@
+ %attr(4111,root,root) %{_bindir}/lxc-attach
+ %attr(4111,root,root) %{_bindir}/lxc-create
+ %attr(4111,root,root) %{_bindir}/lxc-clone
++%attr(4111,root,root) %{_bindir}/lxc-shutdown
+ %attr(4111,root,root) %{_bindir}/lxc-start
+ %attr(4111,root,root) %{_bindir}/lxc-netstat
+ %attr(4111,root,root) %{_bindir}/lxc-unshare
+Index: lxc-0.8.0~rc1/src/lxc/Makefile.am
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/Makefile.am	2012-04-23 23:09:14.683940860 -0500
++++ lxc-0.8.0~rc1/src/lxc/Makefile.am	2012-04-23 23:09:54.359940190 -0500
+@@ -78,6 +78,7 @@
+ 	lxc-version \
+ 	lxc-create \
+ 	lxc-clone \
++	lxc-shutdown \
+ 	lxc-destroy
+ 
+ bin_PROGRAMS = \
+Index: lxc-0.8.0~rc1/src/lxc/Makefile.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/Makefile.in	2012-04-23 23:09:14.711940859 -0500
++++ lxc-0.8.0~rc1/src/lxc/Makefile.in	2012-04-23 23:09:54.359940190 -0500
+@@ -52,7 +52,7 @@
+ 	$(srcdir)/lxc-destroy.in $(srcdir)/lxc-ls.in \
+ 	$(srcdir)/lxc-netstat.in $(srcdir)/lxc-ps.in \
+ 	$(srcdir)/lxc-setcap.in $(srcdir)/lxc-setuid.in \
+-	$(srcdir)/lxc-version.in
++	$(srcdir)/lxc-version.in $(srcdir)/lxc-shutdown.in
+ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
+ am__aclocal_m4_deps = $(top_srcdir)/config/acinclude.m4 \
+ 	$(top_srcdir)/config/linux.m4 $(top_srcdir)/configure.ac
+@@ -62,7 +62,7 @@
+ CONFIG_HEADER = $(top_builddir)/src/config.h
+ CONFIG_CLEAN_FILES = lxc-ps lxc-ls lxc-netstat lxc-checkconfig \
+ 	lxc-setcap lxc-setuid lxc-version lxc-create lxc-clone \
+-	lxc-destroy
++	lxc-shutdown lxc-destroy
+ CONFIG_CLEAN_VPATH_FILES =
+ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" \
+ 	"$(DESTDIR)$(sodir)" "$(DESTDIR)$(bindir)" \
+@@ -389,6 +389,7 @@
+ 	lxc-version \
+ 	lxc-create \
+ 	lxc-clone \
++	lxc-shutdown \
+ 	lxc-destroy
+ 
+ AM_LDFLAGS = -Wl,-E $(am__append_1)
+@@ -461,6 +462,8 @@
+ 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+ lxc-clone: $(top_builddir)/config.status $(srcdir)/lxc-clone.in
+ 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
++lxc-shutdown: $(top_builddir)/config.status $(srcdir)/lxc-shutdown.in
++	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+ lxc-destroy: $(top_builddir)/config.status $(srcdir)/lxc-destroy.in
+ 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+ install-binPROGRAMS: $(bin_PROGRAMS)
+Index: lxc-0.8.0~rc1/src/lxc/lxc-shutdown.in
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-0.8.0~rc1/src/lxc/lxc-shutdown.in	2012-04-23 23:09:54.359940190 -0500
+@@ -0,0 +1,147 @@
++#!/bin/bash
++
++# (C) Copyright Canonical 2011,2012
++
++# This library is free software; you can redistribute it and/or
++# modify it under the terms of the GNU Lesser General Public
++# License as published by the Free Software Foundation; either
++# version 2.1 of the License, or (at your option) any later version.
++
++# This library is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++# Lesser General Public License for more details.
++
++# You should have received a copy of the GNU Lesser General Public
++# License along with this library; if not, write to the Free Software
++# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++
++set -e
++
++usage() {
++    echo "usage: lxc-shutdown -n name [-w] [-r]"
++    echo "  Cleanly shut down a container."
++    echo "  -w: wait for shutdown to complete."
++    echo "  -r: reboot (ignore -w)."
++    echo "  -t timeout: wait at most timeout seconds (implies -w), then kill"
++    echo "              the container."
++}
++
++alarm() {
++    pid=$1
++    timeout=$2
++    sleep $timeout
++    kill $pid
++}
++
++dolxcstop()
++{
++    echo "Calling lxc-stop on $lxc_name"
++    lxc-stop -n $lxc_name
++    exit 0
++}
++
++shortoptions='hn:rwt:'
++longoptions='help,name:,wait,reboot,timeout:'
++
++timeout="-1"
++
++getopt=$(getopt -o $shortoptions --longoptions  $longoptions -- "$@")
++if [ $? != 0 ]; then
++    usage
++    exit 1;
++fi
++
++eval set -- "$getopt"
++
++reboot=0
++dowait=0
++
++while true; do
++    case "$1" in
++    -h|--help)
++        help
++        exit 1
++        ;;
++    -n|--name)
++        shift
++        lxc_name=$1
++        shift
++        ;;
++    -w|--wait)
++        dowait=1
++        shift
++        ;;
++    -r|--reboot)
++        reboot=1
++        shift
++        ;;
++    -t|--timeout)
++        shift
++        timeout=$1
++        dowait=1
++        shift
++        ;;
++    --)
++        shift
++        break;;
++    *)
++        echo $1
++        usage
++        exit 1
++        ;;
++    esac
++done
++
++if [ -z "$lxc_name" ]; then
++    echo "no container name specified"
++    usage
++    exit 1
++fi
++
++if [ "$(id -u)" != "0" ]; then
++   echo "This command has to be run as root"
++   exit 1
++fi
++
++type lxc-info > /dev/null || { echo "lxc-info not found."; exit 1; }
++type lxc-wait > /dev/null || { echo "lxc-wait not found."; exit 1; }
++
++pid=`lxc-info -n $lxc_name -p 2>/dev/null | awk '{ print $2 }'`
++if [ "$pid" = "-1" ]; then
++    echo "$lxc_name is not running"
++    exit 1
++fi
++
++if [ $reboot -eq 1 ]; then
++    kill -INT $pid
++    exit 0
++else
++    kill -PWR $pid
++fi
++
++if [ $dowait -eq 0 ]; then
++    exit 0
++fi
++
++if [ $timeout != "-1" ]; then
++    trap dolxcstop EXIT
++    alarm $$ $timeout &
++    alarmpid=$!
++fi
++
++while [ 1 ]; do
++    s=`lxc-info -s -n $lxc_name | awk '{ print $2 }'`
++    if [ "$s" = "STOPPED" ]; then
++        break;
++    fi
++    sleep 1
++done
++
++if [ $timeout != "-1" ]; then
++    kill $alarmpid
++fi
++
++echo "Container $lxc_name has shut down"
++
++exit 0

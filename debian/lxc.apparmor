@@ -1,0 +1,29 @@
+#include <tunables/global>
+
+/usr/bin/lxc-start flags=(attach_disconnected) {
+  network,
+  capability,
+  file,
+
+  # FIXME: should be: mount /** -> /usr/lib/lxc/root/**
+  # currently blocked by apparmor bug
+  mount -> /usr/lib/x86_64-linux-gnu/lxc/{**,},
+  mount fstype=devpts -> /dev/pts/,
+  mount options=bind /dev/pts/ptmx/ -> /dev/ptmx/,
+  mount fstype=debugfs,
+
+  # all umounts are under the original root's /mnt, but right now we
+  # can't allow those umounts after pivot_root.  So allow all umounts
+  # right now.  They'll be restricted for the container at least.
+  umount,
+  #umount /mnt/{**,},
+
+  # FIXME: should be: pivot_root /usr/lib/lxc/x86_64-linux-gnu/root/
+  # requires >= 3.2.0-19
+  pivot_root,
+
+  change_profile -> lxc-*,
+  change_profile -> unconfined,
+
+}
+

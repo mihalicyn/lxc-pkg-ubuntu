@@ -1,0 +1,48 @@
+Description: If no config is specified, use our new default.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Forwarded: no
+
+Index: lxc-0.8.0~rc1/src/lxc/lxc-create.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/lxc-create.in	2012-04-25 14:16:08.309100884 -0500
++++ lxc-0.8.0~rc1/src/lxc/lxc-create.in	2012-04-25 14:16:49.193100192 -0500
+@@ -239,16 +239,18 @@
+ mkdir -p $lxc_path/$lxc_name
+ 
+ if [ -z "$lxc_config" ]; then
+-    touch $lxc_path/$lxc_name/config
+-else
+-    if [ ! -r "$lxc_config" ]; then
+-	echo "'$lxc_config' configuration file not found"
+-	exit 1
+-    fi
++    echo
++    echo "No config file specified, using the default config"
++    lxc_config="/etc/lxc/lxc.conf"
++fi
+ 
+-    cp $lxc_config $lxc_path/$lxc_name/config
++if [ ! -r "$lxc_config" ]; then
++    echo "'$lxc_config' configuration file not found"
++    exit 1
+ fi
+ 
++cp $lxc_config $lxc_path/$lxc_name/config
++
+ # Create the fs as needed
+ if [ $backingstore = "lvm" ]; then
+     [ -d "$rootfs" ] || mkdir $rootfs
+@@ -266,13 +268,6 @@
+         cleanup
+     fi
+ 
+-    if [ -z "$lxc_config" ]; then
+-	echo "Note: Usually the template option is called with a configuration"
+-	echo "file option too, mostly to configure the network."
+-	echo "For more information look at lxc.conf (5)"
+-	echo
+-    fi
+-
+     ${templatedir}/lxc-$lxc_template --path=$lxc_path/$lxc_name --name=$lxc_name $*
+     if [ $? -ne 0 ]; then
+         echo "failed to execute template '$lxc_template'"

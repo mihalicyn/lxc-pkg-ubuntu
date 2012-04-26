@@ -1,0 +1,30 @@
+Description: Minor lxc config template layout fix
+Author: Stéphane Graber <stgraber@ubuntu.com>
+Forwarded: yes
+
+Index: lxc-0.8.0~rc1/templates/lxc-ubuntu-cloud.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-ubuntu-cloud.in	2012-04-23 23:04:35.375945591 -0500
++++ lxc-0.8.0~rc1/templates/lxc-ubuntu-cloud.in	2012-04-23 23:06:58.183943173 -0500
+@@ -41,7 +41,7 @@
+     nics=`grep -e '^lxc\.network\.type[ \t]*=[ \t]*veth' $path/config | wc -l`
+     if [ $nics -eq 1 ]; then
+         grep -q "^lxc.network.hwaddr" $path/config || cat <<EOF >> $path/config
+-lxc.network.hwaddr= 00:16:3e:$(openssl rand -hex 3| sed 's/\(..\)/\1:/g; s/.$//')
++lxc.network.hwaddr = 00:16:3e:$(openssl rand -hex 3| sed 's/\(..\)/\1:/g; s/.$//')
+ EOF
+     fi
+ 
+Index: lxc-0.8.0~rc1/templates/lxc-ubuntu.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-ubuntu.in	2012-04-23 23:06:28.423943675 -0500
++++ lxc-0.8.0~rc1/templates/lxc-ubuntu.in	2012-04-23 23:06:58.187943173 -0500
+@@ -319,7 +319,7 @@
+     nics=`grep -e '^lxc\.network\.type[ \t]*=[ \t]*veth' $path/config | wc -l`
+     if [ $nics -eq 1 ]; then
+         grep -q "^lxc.network.hwaddr" $path/config || cat <<EOF >> $path/config
+-lxc.network.hwaddr= 00:16:3e:$(openssl rand -hex 3| sed 's/\(..\)/\1:/g; s/.$//')
++lxc.network.hwaddr = 00:16:3e:$(openssl rand -hex 3| sed 's/\(..\)/\1:/g; s/.$//')
+ EOF
+     fi
+ 

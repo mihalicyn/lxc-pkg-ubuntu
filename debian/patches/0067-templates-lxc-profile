@@ -1,0 +1,114 @@
+Description: templates: add commented lxc.aa_profile line to configs
+ Containers by default run in the lxc-container-default profile.  Leave
+ a commented example in every container config we create to show how to
+ run the container unconfined.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Forwarded: no
+
+Index: lxc-0.8.0~rc1/templates/lxc-busybox.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-busybox.in	2012-04-23 22:50:32.000000000 -0500
++++ lxc-0.8.0~rc1/templates/lxc-busybox.in	2012-04-23 23:04:35.371945591 -0500
+@@ -233,6 +233,8 @@
+ lxc.tty = 1
+ lxc.pts = 1
+ lxc.rootfs = $rootfs
++# uncomment the next line to run the container unconfined:
++#lxc.aa_profile = unconfined
+ EOF
+ 
+ if [ -d "$rootfs/lib" ]; then
+Index: lxc-0.8.0~rc1/templates/lxc-debian.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-debian.in	2012-04-23 23:03:36.000000000 -0500
++++ lxc-0.8.0~rc1/templates/lxc-debian.in	2012-04-23 23:05:11.659944975 -0500
+@@ -194,6 +194,8 @@
+ lxc.pts = 1024
+ lxc.rootfs = $rootfs
+ lxc.utsname = $hostname
++# uncomment the next line to run the container unconfined:
++#lxc.aa_profile = unconfined
+ lxc.cgroup.devices.deny = a
+ # /dev/null and zero
+ lxc.cgroup.devices.allow = c 1:3 rwm
+Index: lxc-0.8.0~rc1/templates/lxc-fedora.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-fedora.in	2012-04-23 23:03:05.000000000 -0500
++++ lxc-0.8.0~rc1/templates/lxc-fedora.in	2012-04-23 23:04:35.375945591 -0500
+@@ -237,6 +237,10 @@
+ lxc.pts = 1024
+ lxc.rootfs = $rootfs_path
+ lxc.mount  = $config_path/fstab
++
++# uncomment the next line to run the container unconfined:
++#lxc.aa_profile = unconfined
++
+ #cgroups
+ lxc.cgroup.devices.deny = a
+ # /dev/null and zero
+Index: lxc-0.8.0~rc1/templates/lxc-lenny.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-lenny.in	2012-04-23 23:03:05.000000000 -0500
++++ lxc-0.8.0~rc1/templates/lxc-lenny.in	2012-04-23 23:04:35.375945591 -0500
+@@ -182,6 +182,9 @@
+ lxc.tty = 4
+ lxc.pts = 1024
+ lxc.rootfs = $rootfs
++# uncomment the next line to run the container unconfined:
++#lxc.aa_profile = unconfined
++
+ lxc.cgroup.devices.deny = a
+ # /dev/null and zero
+ lxc.cgroup.devices.allow = c 1:3 rwm
+Index: lxc-0.8.0~rc1/templates/lxc-opensuse.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-opensuse.in	2012-04-23 23:03:05.000000000 -0500
++++ lxc-0.8.0~rc1/templates/lxc-opensuse.in	2012-04-23 23:04:35.375945591 -0500
+@@ -261,6 +261,8 @@
+ lxc.pts = 1024
+ lxc.rootfs = $rootfs
+ lxc.mount  = $path/fstab
++# uncomment the next line to run the container unconfined:
++#lxc.aa_profile = unconfined
+ 
+ lxc.cgroup.devices.deny = a
+ # /dev/null and zero
+Index: lxc-0.8.0~rc1/templates/lxc-sshd.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-sshd.in	2012-04-23 23:03:05.000000000 -0500
++++ lxc-0.8.0~rc1/templates/lxc-sshd.in	2012-04-23 23:04:35.375945591 -0500
+@@ -113,6 +113,8 @@
+ lxc.utsname = $name
+ lxc.pts = 1024
+ lxc.rootfs = $rootfs
++# uncomment the next line to run the container unconfined:
++#lxc.aa_profile = unconfined
+ lxc.mount.entry=/dev dev none ro,bind 0 0
+ lxc.mount.entry=/lib lib none ro,bind 0 0
+ lxc.mount.entry=/bin bin none ro,bind 0 0
+Index: lxc-0.8.0~rc1/templates/lxc-ubuntu-cloud.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-ubuntu-cloud.in	2012-04-23 23:03:05.000000000 -0500
++++ lxc-0.8.0~rc1/templates/lxc-ubuntu-cloud.in	2012-04-23 23:04:35.375945591 -0500
+@@ -54,6 +54,8 @@
+ lxc.mount  = $path/fstab
+ lxc.arch = $arch
+ lxc.cap.drop = sys_module mac_admin
++# uncomment the next line to run the container unconfined:
++#lxc.aa_profile = unconfined
+ 
+ lxc.cgroup.devices.deny = a
+ # Allow any mknod (but not using the node)
+Index: lxc-0.8.0~rc1/templates/lxc-ubuntu.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-ubuntu.in	2012-04-23 23:04:13.000000000 -0500
++++ lxc-0.8.0~rc1/templates/lxc-ubuntu.in	2012-04-23 23:06:28.423943675 -0500
+@@ -333,6 +333,8 @@
+ lxc.mount  = $path/fstab
+ lxc.arch = $arch
+ lxc.cap.drop = sys_module mac_admin mac_override
++# uncomment the next line to run the container unconfined:
++#lxc.aa_profile = unconfined
+ 
+ lxc.cgroup.devices.deny = a
+ # Allow any mknod (but not using the node)

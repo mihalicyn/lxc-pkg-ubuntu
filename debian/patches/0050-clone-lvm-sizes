@@ -1,0 +1,33 @@
+Description: maintain size of lvm snapshot in lxc-clone
+ When creating a container as lvm snapshot, use the original size unless
+ user explicitly overrides it.
+ It's all well and good to day "use lvextend if you run out of space", but
+ in the meantime applications may become corrupted...
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/939765
+Forwarded: yes
+
+Index: lxc-0.8.0~rc1/src/lxc/lxc-clone.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/lxc-clone.in	2012-04-23 23:09:35.103940516 -0500
++++ lxc-0.8.0~rc1/src/lxc/lxc-clone.in	2012-04-23 23:09:39.795940436 -0500
+@@ -48,7 +48,8 @@
+ lxc_path=@LXCPATH@
+ bindir=@BINDIR@
+ snapshot=no
+-lxc_size=2G
++lxc_defsize=2G
++lxc_size=_unset
+ lxc_vg=lxc
+ lxc_lv_prefix=""
+ fstype=ext3
+@@ -203,6 +204,9 @@
+         lxc-freeze -n $lxc_orig
+         frozen=1
+     fi
++    if [ $lxc_size = "_unset" ]; then
++        lxc_size=`lvdisplay $oldroot | grep Size | awk '{ print $3 $4 }'`
++    fi
+     lvcreate -s -L $lxc_size -n ${lxc_lv_prefix}${lxc_new}_snapshot $oldroot
+     if [ $container_running = "True" ]; then
+         lxc-unfreeze -n $lxc_orig

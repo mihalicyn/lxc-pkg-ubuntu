@@ -1,20 +1,21 @@
 Source: lxc
 Section: admin
 Priority: optional
-Maintainer: Daniel Baumann <daniel.baumann@progress-technologies.net>
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Daniel Baumann <daniel.baumann@progress-technologies.net>
 Uploaders: Jonas Genannt <jonas.genannt@capi2name.de>
 Build-Depends:
- debhelper (>= 9), autotools-dev, docbook-utils, libcap-dev, linux-libc-dev
+ debhelper (>= 9), autotools-dev, dh-apparmor, docbook-utils, libcap-dev,
+ linux-libc-dev, libapparmor-dev
 Standards-Version: 3.9.3
 Homepage: http://lxc.sourceforge.net/
 
 Package: lxc
 Architecture: linux-any
 Pre-Depends: ${multiarch:Pre-Depends}
-Depends: ${misc:Depends}, ${shlibs:Depends}
-Recommends: debootstrap | cdebootstrap, libcap2-bin
-Conflicts: cgroup-bin
-Suggests: lxctl
+Depends: ${misc:Depends}, ${shlibs:Depends}, bridge-utils, dnsmasq-base, iptables, rsync
+Recommends: debootstrap | cdebootstrap, libcap2-bin, cgroup-lite | cgroup-bin, openssl
+Suggests: lxctl, btrfs-tools, lvm2, qemu-user-static
 Description: Linux Containers userspace tools
  Containers are insulated areas inside a system, which have their own namespace
  for filesystem, network, PID, IPC, CPU and memory allocation and which can be

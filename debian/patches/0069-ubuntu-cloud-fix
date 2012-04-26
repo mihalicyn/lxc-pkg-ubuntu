@@ -1,0 +1,51 @@
+Description: Fix handling of user-data in ubuntu-cloud template
+ This patch will be forwarded, but has not yet been
+Author: Ben Howard <ben.howard@canonical.com>
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/977376
+Forwarded: yes
+
+Index: lxc-0.8.0~rc1/templates/lxc-ubuntu-cloud.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/templates/lxc-ubuntu-cloud.in	2012-04-23 23:06:58.183943173 -0500
++++ lxc-0.8.0~rc1/templates/lxc-ubuntu-cloud.in	2012-04-23 23:07:05.315943050 -0500
+@@ -119,7 +119,7 @@
+     return 0
+ }
+ 
+-options=$(getopt -o a:hp:r:n:Fi:CLS:T:ds: -l arch:,help,path:,release:,name:,flush-cache,hostid:,auth-key:,cloud,no_locales,tarball:,debug,stream: -- "$@")
++options=$(getopt -o a:hp:r:n:Fi:CLS:T:ds: -l arch:,help,path:,release:,name:,flush-cache,hostid:,auth-key:,cloud,no_locales,tarball:,debug,stream:,userdata: -- "$@")
+ if [ $? -ne 0 ]; then
+     usage $(basename $0)
+     exit 1
+@@ -209,6 +209,11 @@
+     exit 1
+ fi
+ 
++if [ -n "$userdata" -a ! -f "$userdata" ]; then
++    echo "Userdata does not exist"
++    exit 1
++fi
++
+ if [ -z "$path" ]; then
+     echo "'path' parameter is required"
+     exit 1
+@@ -324,8 +329,9 @@
+ 		echo "Inserted SSH public key from $auth_key into /home/ubuntu/.ssh/authorized_keys"
+ 	fi
+ 
+-	if [ ! -f $userdata ]; then
+-		cp $userdata $data_d/user-data
++	if [ -f "$userdata" ]; then
++		echo "Using custom user-data"
++		cp $userdata $seed_d/user-data
+ 	else
+ 
+ 		if [ -z "$MIRROR" ]; then
+@@ -339,7 +345,6 @@
+ manage_etc_hosts: localhost
+ locale: $(/usr/bin/locale | awk -F= '/LANG=/ {print$NF}')
+ EOF
+-
+ 	fi
+ 
+ 	chroot $rootfs /usr/sbin/usermod -U ubuntu

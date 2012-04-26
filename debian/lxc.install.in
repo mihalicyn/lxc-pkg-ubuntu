@@ -1,8 +1,8 @@
 etc
 usr/bin
-usr/lib/@DEB_HOST_MULTIARCH@/lxc/*.so.*
-usr/lib/@DEB_HOST_MULTIARCH@/lxc/lxc-*
-usr/lib/@DEB_HOST_MULTIARCH@/lxc/README
+usr/lib/*/lxc/*.so.*
+usr/lib/*/lxc/lxc-*
+usr/lib/*/lxc/README
 usr/share/doc
 usr/share/lxc
 usr/share/man
@@ -12,8 +12,8 @@ debian/local/lxc		/usr/bin
 debian/local/lxc-backup		/usr/bin
 debian/local/lxc-halt		/usr/bin
 debian/local/lxc-list		/usr/bin
-debian/local/lxc-ls		/usr/bin
 debian/local/lxc-restore	/usr/bin
 debian/local/lxc.sh		/etc/bash_completion.d
+debian/local/lxc-start-ephemeral   /usr/bin
 
-debian/local/lxc-debconf*	/usr/share/lxc/templates
+debian/lxc.conf etc/lxc/

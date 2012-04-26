@@ -1,0 +1,114 @@
+Description: pin container's rootfs to prevent read-only remount
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Forwarded: yes
+
+Index: lxc-0.8.0~rc1/src/lxc/conf.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/conf.c	2012-04-23 23:09:18.555940794 -0500
++++ lxc-0.8.0~rc1/src/lxc/conf.c	2012-04-23 23:09:42.871940384 -0500
+@@ -452,6 +452,51 @@
+ 	return mount_unknow_fs(rootfs, target, 0);
+ }
+ 
++/*
++ * pin_rootfs
++ * if rootfs is a directory, then open ${rootfs}.hold for writing for the
++ * duration of the container run, to prevent the container from marking the
++ * underlying fs readonly on shutdown.
++ * return -1 on error.
++ * return -2 if nothing needed to be pinned.
++ * return an open fd (>=0) if we pinned it.
++ */
++int pin_rootfs(const char *rootfs)
++{
++	char absrootfs[MAXPATHLEN];
++	char absrootfspin[MAXPATHLEN];
++	struct stat s;
++	int ret, fd;
++
++	if (!realpath(rootfs, absrootfs)) {
++		SYSERROR("failed to get real path for '%s'", rootfs);
++		return -1;
++	}
++
++	if (access(absrootfs, F_OK)) {
++		SYSERROR("'%s' is not accessible", absrootfs);
++		return -1;
++	}
++
++	if (stat(absrootfs, &s)) {
++		SYSERROR("failed to stat '%s'", absrootfs);
++		return -1;
++	}
++
++	if (!__S_ISTYPE(s.st_mode, S_IFDIR))
++		return -2;
++
++	ret = snprintf(absrootfspin, MAXPATHLEN, "%s%s", absrootfs, ".hold");
++	if (ret >= MAXPATHLEN) {
++		SYSERROR("pathname too long for rootfs hold file");
++		return -1;
++	}
++
++	fd = open(absrootfspin, O_CREAT | O_RDWR, S_IWUSR|S_IRUSR);
++	INFO("opened %s as fd %d\n", absrootfspin, fd);
++	return fd;
++}
++
+ static int mount_rootfs(const char *rootfs, const char *target)
+ {
+ 	char absrootfs[MAXPATHLEN];
+Index: lxc-0.8.0~rc1/src/lxc/conf.h
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/conf.h	2012-04-23 23:09:18.571940796 -0500
++++ lxc-0.8.0~rc1/src/lxc/conf.h	2012-04-23 23:09:42.871940384 -0500
+@@ -223,6 +223,8 @@
+  */
+ extern struct lxc_conf *lxc_conf_init(void);
+ 
++extern int pin_rootfs(const char *rootfs);
++
+ extern int lxc_create_network(struct lxc_handler *handler);
+ extern void lxc_delete_network(struct lxc_list *networks);
+ extern int lxc_assign_network(struct lxc_list *networks, pid_t pid);
+Index: lxc-0.8.0~rc1/src/lxc/start.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/start.c	2012-04-23 23:09:18.591940795 -0500
++++ lxc-0.8.0~rc1/src/lxc/start.c	2012-04-23 23:09:42.871940384 -0500
+@@ -538,6 +538,7 @@
+ 	int clone_flags;
+ 	int failed_before_rename = 0;
+ 	const char *name = handler->name;
++	int pinfd;
+ 
+ 	if (lxc_sync_init(handler))
+ 		return -1;
+@@ -567,6 +568,17 @@
+ 		}
+ 	}
+ 
++	/*
++	 * if the rootfs is not a blockdev, prevent the container from
++	 * marking it readonly.
++	 */
++
++	pinfd = pin_rootfs(handler->conf->rootfs.path);
++	if (pinfd == -1) {
++		ERROR("failed to pin the container's rootfs");
++		goto out_abort;
++	}
++
+ 	/* Create a process in a new set of namespaces */
+ 	handler->pid = lxc_clone(do_start, handler, clone_flags);
+ 	if (handler->pid < 0) {
+@@ -609,6 +621,10 @@
+ 	}
+ 
+ 	lxc_sync_fini(handler);
++
++	if (pinfd >= 0)
++		close(pinfd);
++
+ 	return 0;
+ 
+ out_delete_net:

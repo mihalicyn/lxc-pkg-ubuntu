@@ -1,5 +1,7 @@
 #!/usr/bin/make -f
 
+DEB_DH_INSTALLINIT_ARGS = --upstart-only
+
 SHELL := sh -e
 
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
@@ -10,7 +12,7 @@ DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_clean:
 	dh_auto_clean
 
-	for _FILE in debian/*.install.in; \
+	for _FILE in debian/*.install.in debian/*.apparmor.in; \
 	do \
 		rm -f debian/$$(basename $${_FILE} .in); \
 		sed -e 's|@DEB_HOST_MULTIARCH@|$(DEB_HOST_MULTIARCH)|g' \
@@ -30,20 +32,7 @@ override_dh_auto_install:
 	mkdir -p debian/tmp/usr/share/lxc/packages
 	mkdir -p debian/tmp/var/log/lxc
 
-	# replacing upstreams debian template
-	rm -f debian/tmp/usr/share/lxc/templates/lxc-debian
-	ln -s lxc-debconf debian/tmp/usr/share/lxc/templates/lxc-debian
-	ln -s lxc-debconf.d debian/tmp/usr/share/lxc/templates/lxc-debian.d
-
-	# adding progress template symlink
-	ln -s lxc-debconf debian/tmp/usr/share/lxc/templates/lxc-progress
-	ln -s lxc-debconf.d debian/tmp/usr/share/lxc/templates/lxc-progress.d
-
-	# removing currently unsupported lxc-ubuntu until lxc-debconf also supports ubuntu
-	rm -f debian/tmp/usr/share/lxc/templates/lxc-ubuntu
-
 	# removing useless files
-	rm -f debian/tmp/usr/share/lxc/templates/lxc-busybox
 	rm -f debian/tmp/usr/share/lxc/templates/lxc-lenny
 
 override_dh_builddeb:
@@ -65,10 +54,21 @@ else
 endif
 
 override_dh_install:
+	mkdir -p debian/lxc/etc/apparmor.d/lxc
+	cp debian/lxc.apparmor debian/lxc/etc/apparmor.d/usr.bin.lxc-start
+	cp debian/lxc-containers.apparmor debian/lxc/etc/apparmor.d/lxc-containers
+	cp debian/lxc-default.apparmor debian/lxc/etc/apparmor.d/lxc/lxc-default
+	if [ -x /usr/bin/dh_apparmor ]; then \
+		dh_apparmor --profile-name=usr.bin.lxc-start; \
+	fi
 	dh_install --fail-missing
 
+	# replace upstream lxc-wait which can only run one-at-a-time
+	cp -f debian/local/lxc-wait debian/lxc/usr/bin/
+
 override_dh_installinit:
-	dh_installinit --no-restart-on-upgrade
+	dh_installinit --no-restart-on-upgrade --name=lxc
+	dh_installinit --no-restart-on-upgrade --name=lxc-net
 
 override_dh_strip:
 	dh_strip --dbg-package=lxc-dbg

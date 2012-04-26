@@ -1,0 +1,15 @@
+Description: lxc-ls needs bash
+ It uses bash upstream, patch doesn't need to be forwarded.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Forwarded: no
+
+Index: lxc-0.8.0~rc1/src/lxc/lxc-ls.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/lxc-ls.in	2012-04-24 20:00:18.000000000 +0000
++++ lxc-0.8.0~rc1/src/lxc/lxc-ls.in	2012-04-25 18:18:53.019020432 +0000
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/bash
+ 
+ localstatedir=@LOCALSTATEDIR@
+ lxcpath=@LXCPATH@
