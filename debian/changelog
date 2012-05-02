@@ -1,3 +1,9 @@
+lxc (0.8.0~rc1-4ubuntu2) quantal; urgency=low
+
+  * lxc-clone: put quotes around $line to avoid expansion (LP: #993515)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Wed, 02 May 2012 15:23:52 -0500
+
 lxc (0.8.0~rc1-4ubuntu1) quantal; urgency=low
 
   * Merge from unstable.  Remaining changes:

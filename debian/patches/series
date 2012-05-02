@@ -45,3 +45,4 @@
 0075-lxc-ls-bash
 0076-fix-sprintfs
 0077-execute-without-rootfs
+0078-lxc-clone-quote-line
