@@ -1,3 +1,10 @@
+lxc (0.8.0~rc1-4ubuntu3) quantal; urgency=low
+
+  * Add support for quantal in lxc-ubuntu and lxc-ubuntucloud
+  * Drop support for maverick in lxc-ubuntu and lxc-ubuntucloud
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Wed, 02 May 2012 21:28:11 -0400
+
 lxc (0.8.0~rc1-4ubuntu2) quantal; urgency=low
 
   * lxc-clone: put quotes around $line to avoid expansion (LP: #993515)

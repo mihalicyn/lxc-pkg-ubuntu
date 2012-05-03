@@ -46,3 +46,5 @@
 0076-fix-sprintfs
 0077-execute-without-rootfs
 0078-lxc-clone-quote-line
+0079-quantal-support
+0080-drop-maverick
