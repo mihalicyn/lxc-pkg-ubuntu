@@ -1,3 +1,11 @@
+lxc (0.8.0~rc1-4ubuntu4) quantal; urgency=low
+
+  * Fix Ubuntu template to install the host architecture of the required
+    mutli-arch packages (when using qemu-user-static) instead of hardcoded
+    "amd64" version.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Fri, 04 May 2012 23:21:22 -0400
+
 lxc (0.8.0~rc1-4ubuntu3) quantal; urgency=low
 
   * Add support for quantal in lxc-ubuntu and lxc-ubuntucloud
