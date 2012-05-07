@@ -14,7 +14,7 @@ Package: lxc
 Architecture: linux-any
 Pre-Depends: ${multiarch:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}, bridge-utils, dnsmasq-base, iptables, rsync
-Recommends: debootstrap | cdebootstrap, libcap2-bin, cgroup-lite | cgroup-bin, openssl
+Recommends: debootstrap | cdebootstrap, cloud-utils, libcap2-bin, cgroup-lite | cgroup-bin, openssl
 Suggests: lxctl, btrfs-tools, lvm2, qemu-user-static
 Description: Linux Containers userspace tools
  Containers are insulated areas inside a system, which have their own namespace

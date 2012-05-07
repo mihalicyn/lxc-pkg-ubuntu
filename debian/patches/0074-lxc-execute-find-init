@@ -6,8 +6,8 @@ Forwarded: yes
 
 Index: lxc-0.8.0~rc1/src/lxc/execute.c
 ===================================================================
---- lxc-0.8.0~rc1.orig/src/lxc/execute.c	2012-04-25 14:15:50.929101176 -0500
-+++ lxc-0.8.0~rc1/src/lxc/execute.c	2012-04-25 17:39:49.174409120 -0500
+--- lxc-0.8.0~rc1.orig/src/lxc/execute.c	2012-03-01 21:42:19.000000000 +0000
++++ lxc-0.8.0~rc1/src/lxc/execute.c	2012-05-07 19:49:02.636971556 +0000
 @@ -21,10 +21,13 @@
   * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
   */
@@ -40,7 +40,7 @@ Index: lxc-0.8.0~rc1/src/lxc/execute.c
 +	if (!retv)
 +		return NULL;
 +
-+	snprintf(retv, PATH_MAX-1, LXCINITDIR "/lxc-init");
++	snprintf(retv, PATH_MAX-1, LXCINITDIR "/lxc/lxc-init");
 +	ret = stat(retv, &mystat);
 +	if (ret == 0)
 +		return retv;

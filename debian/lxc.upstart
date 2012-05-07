@@ -12,12 +12,6 @@ pre-start script
 
 	[ "x$LXC_AUTO" = "xtrue" ] || { stop; exit 0; }
 
-	ls /etc/lxc/auto/* > /dev/null 2>&1 || exit 0;
-	for f in /etc/lxc/auto/*; do
-		c="$(basename $f .conf)"
-		lxc-info -n $c 2>/dev/null | grep state | grep -q "RUNNING" || lxc-start -n $c -f $f -d
-	done
-
 	# don't load profiles if mount mediation is not supported
 	SYSF=/sys/kernel/security/apparmor/features/mount/mask
 	if [ -f $SYSF ]; then
@@ -26,6 +20,12 @@ pre-start script
 			/lib/init/apparmor-profile-load lxc-containers
 		fi
 	fi
+
+	ls /etc/lxc/auto/* > /dev/null 2>&1 || exit 0;
+	for f in /etc/lxc/auto/*; do
+		c="$(basename $f .conf)"
+		lxc-info -n $c 2>/dev/null | grep state | grep -q "RUNNING" || lxc-start -n $c -f $f -d
+	done
 end script
 
 post-stop script

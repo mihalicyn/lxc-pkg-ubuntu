@@ -1,3 +1,23 @@
+lxc (0.8.0~rc1-4ubuntu5) quantal; urgency=low
+
+  * 0082-umount-old-proc: fix proc auto-mount.  If /proc is already mounted,
+    make sure that /proc/self points to 1, since we are container init.
+    Otherwise, assume proc is an old one, and umount it and remount our own.
+    If we keep the old proc mounted, apparmor transitions will by tried for
+    wrong task and fail.  Also move check for whether apparmor is enabled so
+    that it is called by lxc-execute.  (LP: #993706)
+  * update 0074-lxc-execute-find-init to look for lxc-init in
+    LXCINITDIR/lxc/lxc-init
+  * debian/control: add cloud-utils to lxc Recommends, as lxc-ubuntu-cloud
+    needs it.  (LP: 995361)
+  * debian/lxc.upstart: load apparmor profiles before auto-starting containers.
+    (LP: #989853)
+  * pop 06-bash.patch and 0075-lxc-ls-bash.  lxc-clone also has bashims, just
+    stick to using bash until upstream is also converted (so we are safe
+    against patches).
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 07 May 2012 21:22:26 +0000
+
 lxc (0.8.0~rc1-4ubuntu4) quantal; urgency=low
 
   * Fix Ubuntu template to install the host architecture of the required

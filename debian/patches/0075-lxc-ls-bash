@@ -5,11 +5,21 @@ Forwarded: no
 
 Index: lxc-0.8.0~rc1/src/lxc/lxc-ls.in
 ===================================================================
---- lxc-0.8.0~rc1.orig/src/lxc/lxc-ls.in	2012-04-24 20:00:18.000000000 +0000
-+++ lxc-0.8.0~rc1/src/lxc/lxc-ls.in	2012-04-25 18:18:53.019020432 +0000
+--- lxc-0.8.0~rc1.orig/src/lxc/lxc-ls.in	2012-05-07 19:47:40.208968028 +0000
++++ lxc-0.8.0~rc1/src/lxc/lxc-ls.in	2012-05-07 19:49:05.668968004 +0000
 @@ -1,4 +1,4 @@
 -#!/bin/sh
 +#!/bin/bash
  
  localstatedir=@LOCALSTATEDIR@
  lxcpath=@LXCPATH@
+Index: lxc-0.8.0~rc1/src/lxc/lxc-clone.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/lxc-clone.in	2012-05-07 21:16:59.157911001 +0000
++++ lxc-0.8.0~rc1/src/lxc/lxc-clone.in	2012-05-07 21:17:15.309903359 +0000
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/bash
+ 
+ #
+ # lxc: linux Container library

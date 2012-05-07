@@ -3,7 +3,7 @@
 03-lxc-configuration-path.patch
 04-lxc-create-template-name.patch
 05-doc-ip-address.patch
-06-bash.patch
+#06-bash.patch
 07-lxc-netstat.patch
 08-lxc-debconf.patch
 09-lxc-create-trap-name.patch
@@ -42,10 +42,11 @@
 0072-lxc-shutdown-help
 0073-lxc-destroy-waits-before-destroy
 0074-lxc-execute-find-init
-0075-lxc-ls-bash
+#0075-lxc-ls-bash
 0076-fix-sprintfs
 0077-execute-without-rootfs
 0078-lxc-clone-quote-line
 0079-quantal-support
 0080-drop-maverick
 0081-fix-multiarch-install
+0082-umount-old-proc
