@@ -180,7 +180,7 @@ setup_container()
                 fi
             else
                 # Otherwise, we can pass it through unchanged.
-                echo $line;
+                echo "$line";
             fi
         fi
     done < $LXC_DIR/fstab.old > $LXC_DIR/fstab
@@ -200,7 +200,7 @@ setup_container()
         if [ "${line:0:18}" = "lxc.network.hwaddr" ]; then
                 echo "lxc.network.hwaddr= 00:16:3e:$(openssl rand -hex 3| sed 's/\(..\)/\1:/g; s/.$//')"
         else
-                echo $line
+                echo "$line"
         fi
     done
     ) < ${c}.old > ${c}

@@ -1,3 +1,11 @@
+lxc (0.8.0~rc1-4ubuntu6) quantal; urgency=low
+
+  * debian/control: add apparmor to lxc Depends (LP: #997681)
+  * debian/local/lxc-start-ephemeral: quote $line so its contents don't get
+    expanded (LP: #997687)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 10 May 2012 09:04:29 -0700
+
 lxc (0.8.0~rc1-4ubuntu5) quantal; urgency=low
 
   * 0082-umount-old-proc: fix proc auto-mount.  If /proc is already mounted,

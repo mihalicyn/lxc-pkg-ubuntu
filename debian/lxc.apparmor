@@ -7,7 +7,7 @@
 
   # FIXME: should be: mount /** -> /usr/lib/lxc/root/**
   # currently blocked by apparmor bug
-  mount -> /usr/lib/i386-linux-gnu/lxc/{**,},
+  mount -> /usr/lib/x86_64-linux-gnu/lxc/{**,},
   mount fstype=devpts -> /dev/pts/,
   mount options=bind /dev/pts/ptmx/ -> /dev/ptmx/,
   mount fstype=debugfs,
@@ -18,7 +18,7 @@
   umount,
   #umount /mnt/{**,},
 
-  # FIXME: should be: pivot_root /usr/lib/lxc/i386-linux-gnu/root/
+  # FIXME: should be: pivot_root /usr/lib/lxc/x86_64-linux-gnu/root/
   # requires >= 3.2.0-19
   pivot_root,
 
