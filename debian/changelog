@@ -1,3 +1,11 @@
+lxc (0.8.0~rc1-4ubuntu7) quantal; urgency=low
+
+  [ Francesco Banconi ]
+  * Introduced lxc-ip: retrieve the ip addresses of a container.
+  * lxc-start-ephemeral: use lxc-ip to ssh to the container (LP: #994752).
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Wed, 16 May 2012 10:46:21 -0500
+
 lxc (0.8.0~rc1-4ubuntu6) quantal; urgency=low
 
   * debian/control: add apparmor to lxc Depends (LP: #997681)

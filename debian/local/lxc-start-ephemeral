@@ -63,7 +63,7 @@ do_mount() {
     fi
 }
 
-trap cleanup SIGTERM SIGINT SIGQUIT 
+trap cleanup SIGTERM SIGINT SIGQUIT
 
 getopt=$(getopt -o $shortoptions --longoptions  $longoptions -- "$@")
 if [ $? != 0 ]; then
@@ -205,16 +205,6 @@ setup_container()
     done
     ) < ${c}.old > ${c}
     rm -f ${c}.old
-
-    # precise is now the worst - its dhclient *uses*
-    # /var/lib/dhcp3/dhclient.eth0.leases but ships without that
-    # directory, so you get no leases file at all.
-    LEASES=$LXC_DIR/rootfs/var/lib/dhcp3/dhclient.eth0.leases
-    LEASES2=$LXC_DIR/rootfs/var/lib/dhcp/dhclient.leases
-    sudo mkdir -p $LXC_DIR/rootfs/var/lib/dhcp3
-    sudo mkdir -p $LXC_DIR/rootfs/var/lib/dhcp
-    sudo truncate -c -s0 $LEASES
-    sudo truncate -c -s0 $LEASES2
 }
 
 start_container()
@@ -224,22 +214,38 @@ start_container()
     LXC_RUNNING=1
 
     if [ $COMMAND_LENGTH -gt 0 ]; then
-        # when lxc-attach support arrives in the kernel, we can switch to
-        # that
-        delay=30
-        while [ $delay -gt 0 -a ! -s $LEASES -a ! -s $LEASES2 ]
-        do
-            delay=$(( $delay - 1 ))
-            sleep 1
+        # When lxc-attach support arrives in the kernel, we can switch to
+        # that.
+        # Meanwhile, we use lxc-ip to wait for container's network to be up
+        # and to obtain the ip address, then we can ssh to the lxc.
+        TRIES=60
+        LXCIP='/usr/bin/lxc-ip'
+        LXC_INTERFACE=''
+
+        # Try to obtain the container's interfaces and ip addresses.
+        # The name of the first interface found will be used later to
+        # retrieve the container's ip address.
+        for i in $(seq 1 $TRIES); do
+            LXCIP_OUTPUT=`sudo $LXCIP -n $LXC_NAME 2> /dev/null`
+            if [ $? = 0 ]; then
+                LXC_INTERFACE=`echo $LXCIP_OUTPUT | head -1 | cut -d ":" -f 1`
+                break
+            else
+                sleep 1
+            fi
         done
 
-        [ -s $LEASES ] || LEASES=$LEASES2
-        IP_ADDRESS=`sudo grep fixed-address $LEASES | tail -n 1 | sed -r 's/.* ([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}).*/\1/'`
-        if [ 0 -eq $? -a -n "$IP_ADDRESS" ]; then
+        if [ -n "$LXC_INTERFACE" ]; then
             # Repeatedly try to connect over SSH until we either succeed
             # or time out.
-            for i in $(seq 1 30); do
-            ssh -n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $LXC_KEY $LXC_USER@$IP_ADDRESS -- "$COMMAND"
+            for i in $(seq 1 $TRIES); do
+                # We call lxc-ip inside the loop to ensure the correct ip
+                # is retrieved even in the case the DHCP ip assignment
+                # changes during the process.
+                IP_ADDRESS=`sudo $LXCIP -n $LXC_NAME -i $LXC_INTERFACE`
+                ssh -n -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    $LXC_KEY $LXC_USER@$IP_ADDRESS -- "$COMMAND"
                 if [ ! 255 -eq $? ]; then
                     # If ssh returns 255 then its connection failed.
                     # Anything else is either success (status 0) or a
@@ -252,10 +258,6 @@ start_container()
             done
         else
             echo "could not get IP address - aborting." >&2
-            echo "content of $LEASES:" >&2
-            cat $LEASES >&2
-            echo "content of $LEASES2:" >&2
-            cat $LEASES2 >&2
         fi
     else
         sudo lxc-wait -n $LXC_NAME -s RUNNING
