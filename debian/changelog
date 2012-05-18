@@ -1,3 +1,31 @@
+lxc (0.8.0~rc1-4ubuntu8) quantal; urgency=low
+
+  * Update lxc-ubuntu:
+    - Update list of extra packages for debootstrap to only include vim
+      and ssh. The others were only relevant when we were still using the
+      minbase variant. (LP: #996839)
+    - Drop any hardcoded Ubuntu version check and replace by feature
+      checks instead.
+    - Format lxc-ubuntu to consistently use 4-spaces indent instead of
+      mixed spaces/tabs.
+    - Update default /etc/network/interfaces to include the header.
+    - Update default /etc/hosts to match that of a regular Ubuntu system.
+    - Drop support for end-of-life releases (gutsy on sparc).
+    - Make sure /etc/resolv.conf is valid before running any apt command.
+    - Update template help message for release and arch parameters.
+    - Switch default Ubuntu version from lucid to precise.
+  * Update lxc-start-ephemeral:
+    - Remove lxc-ip and replace it by a call to "ip netns" until we have
+      an extended lxc-attach we can use for that.
+    - Fix a race in lxc-start-ephemeral where the container isn't yet
+      running when trying to get its IPs.
+    - Update a few calls so that lxc-start-ephemeral can be called as a
+      user (ensure consistent usage of sudo across the script).
+  * Add new lxc-default-with-nesting apparmor profile, allowing nested
+    containers.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Fri, 18 May 2012 19:05:44 -0400
+
 lxc (0.8.0~rc1-4ubuntu7) quantal; urgency=low
 
   [ Francesco Banconi ]

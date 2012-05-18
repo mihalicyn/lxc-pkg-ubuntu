@@ -58,6 +58,7 @@ override_dh_install:
 	cp debian/lxc.apparmor debian/lxc/etc/apparmor.d/usr.bin.lxc-start
 	cp debian/lxc-containers.apparmor debian/lxc/etc/apparmor.d/lxc-containers
 	cp debian/lxc-default.apparmor debian/lxc/etc/apparmor.d/lxc/lxc-default
+	cp debian/lxc-default-with-nesting.apparmor debian/lxc/etc/apparmor.d/lxc/lxc-default-with-nesting
 	if [ -x /usr/bin/dh_apparmor ]; then \
 		dh_apparmor --profile-name=usr.bin.lxc-start; \
 	fi

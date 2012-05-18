@@ -50,3 +50,4 @@
 0080-drop-maverick
 0081-fix-multiarch-install
 0082-umount-old-proc
+0083-ubuntu-simplify-template

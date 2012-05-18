@@ -1,0 +1,56 @@
+# Do not load this file.  Rather, load /etc/apparmor.d/lxc-containers, which
+# will source all profiles under /etc/apparmor.d/lxc
+
+profile lxc-container-default-with-nesting flags=(attach_disconnected,mediate_deleted) {
+  network,
+  capability,
+  file,
+  umount,
+
+  # addition for container nesting
+  mount -> /sys/fs/cgroup/**,
+  mount fstype=proc -> /var/cache/lxc/**,
+  mount fstype=sysfs -> /var/cache/lxc/**,
+  mount fstype=devpts -> /dev/pts/,
+  mount -> /usr/lib/lxc/root/,
+  mount -> /usr/lib/lxc/root/**,
+  mount /dev/pts/ptmx/ -> /dev/ptmx/,
+  pivot_root,
+  change_profile -> lxc-*,
+
+  # ignore DENIED message on / remount
+  deny mount options=(ro, remount) -> /,
+
+  # allow tmpfs mounts everywhere
+  mount fstype=tmpfs,
+
+  # allow mqueue mounts everywhere
+  mount fstype=mqueue,
+
+  # allow bind mount of /lib/init/fstab for lxcguest
+  mount options=(rw, bind) /lib/init/fstab.lxc/ -> /lib/init/fstab/,
+
+  # deny writes in /proc/sys/fs but allow fusectl to be mounted
+  mount fstype=binfmt_misc -> /proc/sys/fs/binfmt_misc/,
+  deny @{PROC}/sys/fs/** wklx,
+
+  # block some other dangerous paths
+  deny @{PROC}/sysrq-trigger rwklx,
+  deny @{PROC}/mem rwklx,
+  deny @{PROC}/kmem rwklx,
+  deny @{PROC}/sys/kernel/** wklx,
+
+  # deny writes in /sys except for /sys/fs/cgroup, also allow
+  # fusectl, securityfs and debugfs to be mounted there (read-only)
+  mount fstype=fusectl -> /sys/fs/fuse/connections/,
+  mount fstype=securityfs -> /sys/kernel/security/,
+  mount fstype=debugfs -> /sys/kernel/debug/,
+  deny mount fstype=debugfs -> /var/lib/ureadahead/debugfs/,
+  mount fstype=proc -> /proc/,
+  mount fstype=sysfs -> /sys/,
+  deny /sys/[^f]*/** wklx,
+  deny /sys/f[^s]*/** wklx,
+  deny /sys/fs/[^c]*/** wklx,
+  deny /sys/fs/c[^g]*/** wklx,
+  deny /sys/fs/cg[^r]*/** wklx,
+}

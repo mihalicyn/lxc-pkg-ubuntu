@@ -22,6 +22,7 @@ set -e
 case "$1" in
     purge)
         rm -f /etc/apparmor.d/lxc/lxc-default || true
+        rm -f /etc/apparmor.d/lxc/lxc-default-with-nesting || true
         rmdir /etc/apparmor.d/lxc || true
         rmdir /etc/apparmor.d/lxc-containers || true
     ;;

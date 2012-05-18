@@ -183,18 +183,18 @@ setup_container()
                 echo "$line";
             fi
         fi
-    done < $LXC_DIR/fstab.old > $LXC_DIR/fstab
+    done < $LXC_DIR/fstab.old | sudo tee $LXC_DIR/fstab >/dev/null
 
     # If LXC_BIND is defined, add it to fstab.
     if [ -n "$LXC_BIND" ]; then
         sudo mkdir -p $LXC_DIR/rootfs$LXC_BIND
-        echo "$LXC_BIND	$LXC_DIR/rootfs$LXC_BIND	none bind 0 0" >> $LXC_DIR/fstab
+        echo "$LXC_BIND	$LXC_DIR/rootfs$LXC_BIND	none bind 0 0" | sudo tee -a $LXC_DIR/fstab >/dev/null
     fi
 
     # update the ephemeral container's MAC address (lifted from lxc-clone)
     c=$LXC_DIR/config
     # change hwaddrs
-    mv ${c} ${c}.old
+    sudo mv ${c} ${c}.old
     (
     while read line; do
         if [ "${line:0:18}" = "lxc.network.hwaddr" ]; then
@@ -203,46 +203,63 @@ setup_container()
                 echo "$line"
         fi
     done
-    ) < ${c}.old > ${c}
-    rm -f ${c}.old
+    ) < ${c}.old | sudo tee ${c} >/dev/null
+    sudo rm -f ${c}.old
+}
+
+get_ip()
+{
+    # Get init's PID
+    PID=$(sudo lxc-info -n $1 -p | awk '{print $2}')
+    [ "$PID" = "-1" ] && return 1
+
+    # Get some unique path
+    DST=$(sudo mktemp -u --tmpdir=/run/netns/)
+    NAME=$(basename $DST)
+
+    # Prepare the /run/netns entry for "ip netns"
+    sudo mkdir -p /run/netns
+    sudo ln -s /proc/$PID/ns/net $DST
+
+    # Grab all the public globally routed IPv4 and IPv6 addresses
+    (sudo ip netns exec $NAME ip -4 addr show scope global && \
+     sudo ip netns exec $NAME ip -6 addr show scope global) | grep inet | while read line; do
+        ip=$(echo $line | awk '{print $2}' | cut -d '/' -f1)
+        echo "$ip"
+    done
+
+    sudo rm $DST
 }
 
 start_container()
 {
     echo "Starting up the container..."
     sudo lxc-start -n $LXC_NAME -d
+    sudo lxc-wait -s RUNNING -n $LXC_NAME
     LXC_RUNNING=1
 
     if [ $COMMAND_LENGTH -gt 0 ]; then
         # When lxc-attach support arrives in the kernel, we can switch to
         # that.
-        # Meanwhile, we use lxc-ip to wait for container's network to be up
+        # Meanwhile, we use get_ip to wait for container's network to be up
         # and to obtain the ip address, then we can ssh to the lxc.
         TRIES=60
-        LXCIP='/usr/bin/lxc-ip'
-        LXC_INTERFACE=''
+        FAILED=1
 
-        # Try to obtain the container's interfaces and ip addresses.
-        # The name of the first interface found will be used later to
-        # retrieve the container's ip address.
+        # Repeatedly try to connect over SSH until we either succeed
+        # or time out.
         for i in $(seq 1 $TRIES); do
-            LXCIP_OUTPUT=`sudo $LXCIP -n $LXC_NAME 2> /dev/null`
-            if [ $? = 0 ]; then
-                LXC_INTERFACE=`echo $LXCIP_OUTPUT | head -1 | cut -d ":" -f 1`
-                break
-            else
+            # We call get_ip inside the loop to ensure the correct ip
+            # is retrieved even in the case the DHCP ip assignment
+            # changes during the process.
+            IP_ADDRESS=$(get_ip $LXC_NAME)
+            if [ -z "$IP_ADDRESS" ]; then
                 sleep 1
+                continue
             fi
-        done
 
-        if [ -n "$LXC_INTERFACE" ]; then
-            # Repeatedly try to connect over SSH until we either succeed
-            # or time out.
-            for i in $(seq 1 $TRIES); do
-                # We call lxc-ip inside the loop to ensure the correct ip
-                # is retrieved even in the case the DHCP ip assignment
-                # changes during the process.
-                IP_ADDRESS=`sudo $LXCIP -n $LXC_NAME -i $LXC_INTERFACE`
+            # Iterate through all the addresses (if multiple)
+            for ip in $IP_ADDRESS; do
                 ssh -n -o StrictHostKeyChecking=no \
                     -o UserKnownHostsFile=/dev/null \
                     $LXC_KEY $LXC_USER@$IP_ADDRESS -- "$COMMAND"
@@ -251,12 +268,20 @@ start_container()
                     # Anything else is either success (status 0) or a
                     # failure from whatever we ran over the SSH connection.
                     # In those cases we want to stop looping, so we break
-                    # here.
+                    # here
+
+                    FAILED=0
                     break;
                 fi
-                sleep 1
             done
-        else
+
+            if [ "$FAILED" = "0" ]; then
+                break
+            fi
+            sleep 1
+        done
+
+        if [ "$FAILED" = "1" ]; then
             echo "could not get IP address - aborting." >&2
         fi
     else
