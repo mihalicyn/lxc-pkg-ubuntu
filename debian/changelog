@@ -1,3 +1,10 @@
+lxc (0.8.0~rc1-4ubuntu9) quantal; urgency=low
+
+  * debian/lxc-net.upstart: don't put '()' after call to cleanup.
+    (LP: #1000174)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 21 May 2012 08:26:25 -0700
+
 lxc (0.8.0~rc1-4ubuntu8) quantal; urgency=low
 
   * Update lxc-ubuntu:

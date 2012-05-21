@@ -39,7 +39,7 @@ pre-start script
 	brctl addbr ${LXC_BRIDGE}
 	ifconfig ${LXC_BRIDGE} ${LXC_ADDR} netmask ${LXC_NETMASK} up
 	iptables -A POSTROUTING -s ${LXC_NETWORK} -t nat -j MASQUERADE
-	dnsmasq -u lxc-dnsmasq --strict-order --bind-interfaces --pid-file=${varrun}/dnsmasq.pid --conf-file= --listen-address ${LXC_ADDR} --dhcp-range ${LXC_DHCP_RANGE} --dhcp-lease-max=${LXC_DHCP_MAX} --dhcp-no-override --except-interface=lo --interface=${LXC_BRIDGE} || cleanup()
+	dnsmasq -u lxc-dnsmasq --strict-order --bind-interfaces --pid-file=${varrun}/dnsmasq.pid --conf-file= --listen-address ${LXC_ADDR} --dhcp-range ${LXC_DHCP_RANGE} --dhcp-lease-max=${LXC_DHCP_MAX} --dhcp-no-override --except-interface=lo --interface=${LXC_BRIDGE} || cleanup
 	touch ${varrun}/network_up
 end script
 
