@@ -51,3 +51,5 @@
 0081-fix-multiarch-install
 0082-umount-old-proc
 0083-ubuntu-simplify-template
+0084-lxc-ubuntu-drop-duplicate-code.patch
+0085-pivot-dir

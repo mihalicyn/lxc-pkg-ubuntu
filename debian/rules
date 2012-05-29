@@ -54,6 +54,7 @@ else
 endif
 
 override_dh_install:
+	# copy apparmor profiles
 	mkdir -p debian/lxc/etc/apparmor.d/lxc
 	cp debian/lxc.apparmor debian/lxc/etc/apparmor.d/usr.bin.lxc-start
 	cp debian/lxc-containers.apparmor debian/lxc/etc/apparmor.d/lxc-containers
@@ -62,6 +63,11 @@ override_dh_install:
 	if [ -x /usr/bin/dh_apparmor ]; then \
 		dh_apparmor --profile-name=usr.bin.lxc-start; \
 	fi
+
+	# copy dnsmasq configuration
+	mkdir -p debian/lxc/etc/dnsmasq.d
+	cp debian/lxc.dnsmasq debian/lxc/etc/dnsmasq.d/lxc
+
 	dh_install --fail-missing
 
 	# replace upstream lxc-wait which can only run one-at-a-time

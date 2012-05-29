@@ -1,0 +1,53 @@
+From d163cf279f26f44ad0d2a43c087d97c2b1063e7e Mon Sep 17 00:00:00 2001
+From: Serge Hallyn <serge.hallyn@ubuntu.com>
+Date: Thu, 24 May 2012 14:19:57 -0500
+Subject: [PATCH 1/1] lxc-ubuntu.in: drop duplicate code
+
+Commits 15da01b3938d7ba45472e6c9d3b183a94dd86ca9 and
+2e44ed1e647d9fd1544b7ad855bda22ca71abd12 conflicted and resulted in
+some duplicate functionality.  Drop the poorer version of that block.
+
+Signed-off-by: Serge Hallyn <serge.hallyn@ubuntu.com>
+---
+ templates/lxc-ubuntu.in |   28 ----------------------------
+ 1 file changed, 28 deletions(-)
+
+Index: lxc/templates/lxc-ubuntu.in
+===================================================================
+--- lxc.orig/templates/lxc-ubuntu.in	2012-05-24 14:24:14.836363000 -0500
++++ lxc/templates/lxc-ubuntu.in	2012-05-24 14:26:55.384221133 -0500
+@@ -176,34 +176,6 @@
+             return 1
+     fi
+ 
+-    echo "Installing updates"
+-    if [ -z "$MIRROR" ]; then
+-        MIRROR="http://archive.ubuntu.com/ubuntu"
+-    fi
+-    cat >> "$1/partial-${arch}/etc/apt/sources.list" << EOF
+-deb $MIRROR ${release}-updates main universe
+-deb http://security.ubuntu.com/ubuntu ${release}-security main universe
+-EOF
+-    chroot "$1/partial-${arch}" apt-get update
+-    if [ $? -ne 0 ]; then
+-        echo "Failed to update the apt cache"
+-        return 1
+-    fi
+-    cat > "$1/partial-${arch}"/usr/sbin/policy-rc.d << EOF
+-#!/bin/sh
+-exit 101
+-EOF
+-    chmod +x "$1/partial-${arch}"/usr/sbin/policy-rc.d
+-
+-    chroot "$1/partial-${arch}" apt-get dist-upgrade -y
+-    ret=$?
+-
+-    rm -f "$1/partial-${arch}"/usr/sbin/policy-rc.d
+-    if [ $ret -ne 0 ]; then
+-        echo "Failed to upgrade the cache"
+-        return 1
+-    fi
+-
+     # Serge isn't sure whether we should avoid doing this when
+     # $release == `distro-info -d`
+     echo "Installing updates"

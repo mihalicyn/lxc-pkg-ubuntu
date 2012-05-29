@@ -1,0 +1,33 @@
+Description: use lxc_putold as the pivot_root put dir
+ By default we use mnt, but that means that lxc fstab entries do not work
+ when placed under the container's /mnt/.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/986385
+Forwarded: yes
+
+Index: lxc/templates/lxc-ubuntu-cloud.in
+===================================================================
+--- lxc.orig/templates/lxc-ubuntu-cloud.in	2012-05-24 14:24:14.836363000 -0500
++++ lxc/templates/lxc-ubuntu-cloud.in	2012-05-25 11:24:39.800430880 -0500
+@@ -55,6 +55,8 @@
+ lxc.mount  = $path/fstab
+ lxc.arch = $arch
+ lxc.cap.drop = sys_module mac_admin
++lxc.pivotdir = lxc_putold
++
+ # uncomment the next line to run the container unconfined:
+ #lxc.aa_profile = unconfined
+ 
+Index: lxc/templates/lxc-ubuntu.in
+===================================================================
+--- lxc.orig/templates/lxc-ubuntu.in	2012-05-24 14:26:55.384221133 -0500
++++ lxc/templates/lxc-ubuntu.in	2012-05-25 11:24:28.688431175 -0500
+@@ -301,6 +301,8 @@
+ lxc.mount  = $path/fstab
+ lxc.arch = $arch
+ lxc.cap.drop = sys_module mac_admin mac_override
++lxc.pivotdir = lxc_putold
++
+ # uncomment the next line to run the container unconfined:
+ #lxc.aa_profile = unconfined
+ 

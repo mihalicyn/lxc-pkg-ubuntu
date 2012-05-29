@@ -53,6 +53,9 @@ case "$1" in
     configure)
         add_users
         apparmor_load
+
+        # Try to restart a potential system wide dnsmasq
+        invoke-rc.d dnsmasq restart 2>/dev/null || true
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

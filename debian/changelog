@@ -1,3 +1,19 @@
+lxc (0.8.0~rc1-4ubuntu10) quantal; urgency=low
+
+  [ Serge Hallyn ]
+  * 0084-lxc-ubuntu-drop-duplicate-code.patch: drop some duplicate code from
+    the ubuntu template. (LP: #1004118)
+  * 0085-pivot-dir: use a directory other than /mnt to put the pivot_root
+    old dir into (LP: #986385)
+
+  [ Stéphane Graber ]
+  * Ship /etc/dnsmasq.d/lxc to configure an eventual system wide
+    dnsmasq daemon not to listen on the LXC bridge interface. (LP: #928524)
+  * Drop rm calls from postrm for apparmor rules, these were in the purge
+    target so didn't really serve any purpose.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Tue, 29 May 2012 16:56:25 -0400
+
 lxc (0.8.0~rc1-4ubuntu9) quantal; urgency=low
 
   * debian/lxc-net.upstart: don't put '()' after call to cleanup.
