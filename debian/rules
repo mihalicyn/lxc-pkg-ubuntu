@@ -63,6 +63,9 @@ override_dh_install:
 	if [ -x /usr/bin/dh_apparmor ]; then \
 		dh_apparmor --profile-name=usr.bin.lxc-start; \
 	fi
+	# copy apport hook
+	mkdir -p debian/lxc/usr/share/apport/package-hooks
+	cp debian/lxc.apport debian/lxc/usr/share/apport/package-hooks/source_lxc.py
 
 	# copy dnsmasq configuration
 	mkdir -p debian/lxc/etc/dnsmasq.d

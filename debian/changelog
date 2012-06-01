@@ -1,3 +1,9 @@
+lxc (0.8.0~rc1-4ubuntu11) quantal; urgency=low
+
+  * add apport hook
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Fri, 01 Jun 2012 08:13:03 -0500
+
 lxc (0.8.0~rc1-4ubuntu10) quantal; urgency=low
 
   [ Serge Hallyn ]
