@@ -1,3 +1,10 @@
+lxc (0.8.0~rc1-4ubuntu12) quantal; urgency=low
+
+  * Fix broken logic in lxc-ubuntu template where lxc.devttydir would be
+    set to 'lxc' only for releases that don't support it. (LP: #1007493)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Fri, 01 Jun 2012 11:57:44 -0400
+
 lxc (0.8.0~rc1-4ubuntu11) quantal; urgency=low
 
   * add apport hook

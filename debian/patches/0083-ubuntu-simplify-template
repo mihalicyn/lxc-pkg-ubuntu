@@ -193,7 +193,7 @@ Forwarded: no
  
      ttydir=""
 -    if [ $release = "precise" ] || [ $release = "quantal" ]; then
-+    if [ ! -f $rootfs/etc/init/container-detect.conf ]; then
++    if [ -f $rootfs/etc/init/container-detect.conf ]; then
          ttydir=" lxc"
      fi
  
