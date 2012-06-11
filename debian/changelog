@@ -1,3 +1,15 @@
+lxc (0.8.0~rc1-4ubuntu13) quantal; urgency=low
+
+  * 0086-lxc-unshare-zero-args: fix lxc-unshare segfaulting when no command
+    is given (LP: #1011603)
+  * 0087-lxc-ls-dash: fix lxc-ls for containers whose names start with a
+    dash  (LP: #1006332)
+  * 0088-ubuntu-template-flock: don't fail when flock is busy, just wait,
+    so concurrent lxc-creates don't break.  (LP: #1007483)
+  * 0089-lxc-netstat-exec: fix lxc-netstat errors (LP: #1011739)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 11 Jun 2012 15:46:25 +0000
+
 lxc (0.8.0~rc1-4ubuntu12) quantal; urgency=low
 
   * Fix broken logic in lxc-ubuntu template where lxc.devttydir would be

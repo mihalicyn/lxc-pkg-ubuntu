@@ -53,3 +53,7 @@
 0083-ubuntu-simplify-template
 0084-lxc-ubuntu-drop-duplicate-code.patch
 0085-pivot-dir
+0086-lxc-unshare-zero-args
+0087-lxc-ls-dash
+0088-ubuntu-template-flock
+0089-lxc-netstat-exec
