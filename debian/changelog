@@ -1,3 +1,14 @@
+lxc (0.8.0~rc1-4ubuntu14) quantal; urgency=low
+
+  * Apparmor profile update:
+    - Move lxc-start profile content to abstractions/lxc-start-container
+    - Move lxc-default profile content to abstractions/lxc/container-default
+    - Include the abstractions
+    - Update lxc-default-with-nesting to include both abstractions
+    - Allow fstype=fuse.*, for all containers
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Tue, 19 Jun 2012 15:13:23 +0000
+
 lxc (0.8.0~rc1-4ubuntu13) quantal; urgency=low
 
   * 0086-lxc-unshare-zero-args: fix lxc-unshare segfaulting when no command

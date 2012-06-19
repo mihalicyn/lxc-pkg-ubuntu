@@ -12,11 +12,18 @@ DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 override_dh_auto_clean:
 	dh_auto_clean
 
-	for _FILE in debian/*.install.in debian/*.apparmor.in; \
+	for _FILE in debian/*.install.in; \
 	do \
 		rm -f debian/$$(basename $${_FILE} .in); \
 		sed -e 's|@DEB_HOST_MULTIARCH@|$(DEB_HOST_MULTIARCH)|g' \
 		$${_FILE} > debian/$$(basename $${_FILE} .in); \
+	done
+
+	for _FILE in debian/apparmor/*.in; \
+	do \
+		rm -f debian/apparmor/$$(basename $${_FILE} .in); \
+		sed -e 's|@DEB_HOST_MULTIARCH@|$(DEB_HOST_MULTIARCH)|g' \
+		$${_FILE} > debian/apparmor/$$(basename $${_FILE} .in); \
 	done
 
 override_dh_auto_configure:
@@ -56,10 +63,13 @@ endif
 override_dh_install:
 	# copy apparmor profiles
 	mkdir -p debian/lxc/etc/apparmor.d/lxc
-	cp debian/lxc.apparmor debian/lxc/etc/apparmor.d/usr.bin.lxc-start
-	cp debian/lxc-containers.apparmor debian/lxc/etc/apparmor.d/lxc-containers
-	cp debian/lxc-default.apparmor debian/lxc/etc/apparmor.d/lxc/lxc-default
-	cp debian/lxc-default-with-nesting.apparmor debian/lxc/etc/apparmor.d/lxc/lxc-default-with-nesting
+	mkdir -p debian/lxc/etc/apparmor.d/abstractions
+	cp debian/apparmor/usr.bin.lxc-start debian/lxc/etc/apparmor.d/usr.bin.lxc-start
+	cp debian/apparmor/lxc-containers debian/lxc/etc/apparmor.d/lxc-containers
+	cp debian/apparmor/lxc-default debian/lxc/etc/apparmor.d/lxc/lxc-default
+	cp debian/apparmor/lxc-default-with-nesting debian/lxc/etc/apparmor.d/lxc/lxc-default-with-nesting
+	cp debian/apparmor/abstractions-lxc-container-default debian/lxc/etc/apparmor.d/abstractions/lxc-container-default
+	cp debian/apparmor/abstractions-lxc-start-container debian/lxc/etc/apparmor.d/abstractions/lxc-start-container
 	if [ -x /usr/bin/dh_apparmor ]; then \
 		dh_apparmor --profile-name=usr.bin.lxc-start; \
 	fi

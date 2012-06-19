@@ -1,22 +1,7 @@
-# Do not load this file.  Rather, load /etc/apparmor.d/lxc-containers, which
-# will source all profiles under /etc/apparmor.d/lxc
-
-profile lxc-container-default-with-nesting flags=(attach_disconnected,mediate_deleted) {
   network,
   capability,
   file,
   umount,
-
-  # addition for container nesting
-  mount -> /sys/fs/cgroup/**,
-  mount fstype=proc -> /var/cache/lxc/**,
-  mount fstype=sysfs -> /var/cache/lxc/**,
-  mount fstype=devpts -> /dev/pts/,
-  mount -> /usr/lib/lxc/root/,
-  mount -> /usr/lib/lxc/root/**,
-  mount /dev/pts/ptmx/ -> /dev/ptmx/,
-  pivot_root,
-  change_profile -> lxc-*,
 
   # ignore DENIED message on / remount
   deny mount options=(ro, remount) -> /,
@@ -26,6 +11,14 @@ profile lxc-container-default-with-nesting flags=(attach_disconnected,mediate_de
 
   # allow mqueue mounts everywhere
   mount fstype=mqueue,
+
+  # allow fuse mounts everywhere
+  mount fstype=fuse.*,
+
+  # the container may never be allowed to mount devpts.  If it does, it
+  # will remount the host's devpts.  We could allow it to do it with
+  # the newinstance option (but, right now, we don't).
+  deny mount fstype=devpts,
 
   # allow bind mount of /lib/init/fstab for lxcguest
   mount options=(rw, bind) /lib/init/fstab.lxc/ -> /lib/init/fstab/,
@@ -53,4 +46,3 @@ profile lxc-container-default-with-nesting flags=(attach_disconnected,mediate_de
   deny /sys/fs/[^c]*/** wklx,
   deny /sys/fs/c[^g]*/** wklx,
   deny /sys/fs/cg[^r]*/** wklx,
-}

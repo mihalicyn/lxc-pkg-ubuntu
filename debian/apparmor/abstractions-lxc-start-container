@@ -1,13 +1,9 @@
-#include <tunables/global>
-
-/usr/bin/lxc-start flags=(attach_disconnected) {
   network,
   capability,
   file,
 
-  # FIXME: should be: mount /** -> /usr/lib/lxc/root/**
   # currently blocked by apparmor bug
-  mount -> /usr/lib/@DEB_HOST_MULTIARCH@/lxc/{**,},
+  mount -> /usr/lib/x86_64-linux-gnu/lxc/{**,},
   mount fstype=devpts -> /dev/pts/,
   mount options=bind /dev/pts/ptmx/ -> /dev/ptmx/,
   mount fstype=debugfs,
@@ -18,12 +14,7 @@
   umount,
   #umount /mnt/{**,},
 
-  # FIXME: should be: pivot_root /usr/lib/lxc/@DEB_HOST_MULTIARCH@/root/
-  # requires >= 3.2.0-19
-  pivot_root,
+  pivot_root /usr/lib/x86_64-linux-gnu/lxc/,
 
   change_profile -> lxc-*,
   change_profile -> unconfined,
-
-}
-
