@@ -48,11 +48,6 @@ override_dh_builddeb:
 override_dh_compress:
 	dh_compress -X.cfg
 
-override_dh_fixperms:
-	dh_fixperms
-
-	chmod 0700 debian/lxc/var/log/lxc
-
 override_dh_gencontrol:
 ifeq ($(DEB_HOST_MULTIARCH),)
 	dh_gencontrol
@@ -71,7 +66,7 @@ override_dh_install:
 	cp debian/apparmor/abstractions-lxc-container-default debian/lxc/etc/apparmor.d/abstractions/lxc-container-default
 	cp debian/apparmor/abstractions-lxc-start-container debian/lxc/etc/apparmor.d/abstractions/lxc-start-container
 	if [ -x /usr/bin/dh_apparmor ]; then \
-		dh_apparmor --profile-name=usr.bin.lxc-start; \
+		dh_apparmor -p lxc --profile-name=usr.bin.lxc-start; \
 	fi
 	# copy apport hook
 	mkdir -p debian/lxc/usr/share/apport/package-hooks

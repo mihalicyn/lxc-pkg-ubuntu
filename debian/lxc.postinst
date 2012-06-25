@@ -26,11 +26,11 @@ add_users()
     if ! getent passwd lxc-dnsmasq >/dev/null; then
         adduser --quiet \
             --system \
-	    --ingroup lxc-dnsmasq \
+            --ingroup lxc-dnsmasq \
             --quiet \
             --disabled-login \
             --disabled-password \
-	    --home /var/lib/lxc \
+            --home /var/lib/lxc \
             --no-create-home \
             -gecos "LXC dnsmasq" \
             lxc-dnsmasq
@@ -73,5 +73,3 @@ esac
 #DEBHELPER#
 
 exit 0
-
-

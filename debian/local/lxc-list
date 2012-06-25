@@ -12,13 +12,13 @@ for _STATUS in RUNNING FROZEN STOPPED
 do
 	echo ${_STATUS}
 
-	for _CONTAINER in $(lxc-ls)
+	for _CONTAINER in $(lxc-ls | sort -u)
 	do
 		if lxc-info -n ${_CONTAINER} 2>&1 | grep -qs "${_STATUS}"
 		then
 			echo -n "  ${_CONTAINER}"
 
-			if [ -e /etc/lxc/auto/${_CONTAINER} ]
+			if [ -e /etc/lxc/auto/${_CONTAINER} ] || [ -e /etc/lxc/auto/${_CONTAINER}.conf ]
 			then
 				echo " (auto)"
 			else

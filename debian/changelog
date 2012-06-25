@@ -1,3 +1,15 @@
+lxc (0.8.0~rc1-4ubuntu16) quantal; urgency=low
+
+  * Update debian/local/lxc-list to only list every container once
+    and to support both the Debian and Ubuntu way of marking a container
+    as auto-started.
+  * Depend on adduser as it's being used in postinst.
+  * Fix lintian-overrides syntax and silence no-debconf-templates.
+  * Only run dh_apparmor against the lxc package.
+  * Don't override /var/log/lxc as 700, there's no good reason for that.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 25 Jun 2012 15:00:01 -0400
+
 lxc (0.8.0~rc1-4ubuntu15) quantal; urgency=low
 
   [ Serge Hallyn ]
