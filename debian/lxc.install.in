@@ -14,6 +14,7 @@ debian/local/lxc-halt		/usr/bin
 debian/local/lxc-list		/usr/bin
 debian/local/lxc-restore	/usr/bin
 debian/local/lxc.sh		/etc/bash_completion.d
-debian/local/lxc-start-ephemeral   /usr/bin
+debian/local/lxc-start-ephemeral     /usr/bin
+debian/local/lxc-aa-custom-profile  /usr/bin
 
 debian/lxc.conf etc/lxc/

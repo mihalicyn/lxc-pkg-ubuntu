@@ -15,11 +15,6 @@
   # allow fuse mounts everywhere
   mount fstype=fuse.*,
 
-  # the container may never be allowed to mount devpts.  If it does, it
-  # will remount the host's devpts.  We could allow it to do it with
-  # the newinstance option (but, right now, we don't).
-  deny mount fstype=devpts,
-
   # allow bind mount of /lib/init/fstab for lxcguest
   mount options=(rw, bind) /lib/init/fstab.lxc/ -> /lib/init/fstab/,
 

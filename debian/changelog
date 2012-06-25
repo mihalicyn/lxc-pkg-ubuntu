@@ -1,3 +1,17 @@
+lxc (0.8.0~rc1-4ubuntu15) quantal; urgency=low
+
+  [ Serge Hallyn ]
+  * Add 'lxc-aa-custom-profile' command to make it easier to start using a
+    cusom profile for a container.
+
+  [ Stéphane Graber ]
+  * Update apparmor profiles to fix nesting:
+    - Allow fstype=cgroup mounts for lxc-default-with-nesting
+    - Only prevent mounting devpts for lxc-default and not
+      in lxc-default-with-nesting as it's required to spawn containers.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 25 Jun 2012 01:34:12 -0400
+
 lxc (0.8.0~rc1-4ubuntu14) quantal; urgency=low
 
   * Apparmor profile update:
