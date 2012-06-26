@@ -57,3 +57,5 @@
 0087-lxc-ls-dash
 0088-ubuntu-template-flock
 0089-lxc-netstat-exec
+0090-lxc-ubuntu-use-dpkg-add-architecture
+0091-introduce-container-hooks.patch

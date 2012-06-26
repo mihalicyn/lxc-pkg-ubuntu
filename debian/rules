@@ -71,6 +71,10 @@ override_dh_install:
 	# copy apport hook
 	mkdir -p debian/lxc/usr/share/apport/package-hooks
 	cp debian/lxc.apport debian/lxc/usr/share/apport/package-hooks/source_lxc.py
+	# copy example hooks
+	mkdir -p debian/lxc/usr/share/lxc
+	cp -r debian/hooks debian/lxc/usr/share/lxc/
+	chmod ugo+x debian/lxc/usr/share/lxc/hooks/*
 
 	# copy dnsmasq configuration
 	mkdir -p debian/lxc/etc/dnsmasq.d

@@ -1,3 +1,19 @@
+lxc (0.8.0~rc1-4ubuntu17) quantal-proposed; urgency=low
+
+  [ Stéphane Graber ]
+  * 0090-lxc-ubuntu-use-dpkg-add-architecture: Update lxc-ubuntu
+    template to use "dpkg --add-architecture" in containers running
+    dpkg >= 1.16.2. (LP: #1017862)
+
+  [ Serge Hallyn ]
+  * 0091-introduce-container-hooks.patch: introduce container hooks at several
+    points in the container life-cycle.
+  * Add copyright statement to lxc-aa-custom-profile
+  * Add debian/hooks/mountcgroups as an example (installed under
+    /usr/share/lxc/hooks)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Tue, 26 Jun 2012 13:04:01 -0500
+
 lxc (0.8.0~rc1-4ubuntu16) quantal; urgency=low
 
   * Update debian/local/lxc-list to only list every container once
