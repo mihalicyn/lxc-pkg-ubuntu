@@ -1,0 +1,25 @@
+Description: Don't update the host-name field in dhclient.conf when
+ it doesn't contain an hardcoded value.
+
+ On Debian and Ubuntu, the default host-name field in dhclient.conf is
+ set to either "<hostname>" or "gethostname()" both of which get replaced
+ by the machine's hostname at query time.
+
+ The sed call currently present in lxc-clone hardcodes the hostname in
+ dhclient.conf, causing dpkg to prompt on isc-dhcp updates.
+
+Author: Stéphane Graber <stgraber@ubuntu.com>
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1017862
+Forwarded: no
+
+--- lxc-0.8.0~rc1.orig/src/lxc/lxc-clone.in
++++ lxc-0.8.0~rc1/src/lxc/lxc-clone.in
+@@ -263,7 +263,7 @@ fi
+ echo "Updating rootfs..."
+ 
+ # so you can 'ssh $hostname.' or 'ssh $hostname.local'
+-if [ -f $rootfs/etc/dhcp/dhclient.conf ]; then
++if [ -f $rootfs/etc/dhcp/dhclient.conf ] && ! grep -q "^send host-name.*hostname" $rootfs/etc/dhcp/dhclient.conf; then
+     sed -i "s/send host-name.*$/send host-name \"$hostname\";/" $rootfs/etc/dhcp/dhclient.conf
+ fi
+ 

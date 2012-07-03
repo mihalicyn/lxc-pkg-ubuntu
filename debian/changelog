@@ -1,3 +1,11 @@
+lxc (0.8.0~rc1-4ubuntu18) quantal; urgency=low
+
+  * Patch lxc-clone to stop messing with dhclient.conf when it contains a
+    placeholder (<hostname> or gethostname()). Fixes cases where dpkg will
+    prompt for modified config file on upgrade.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Tue, 03 Jul 2012 17:57:27 -0400
+
 lxc (0.8.0~rc1-4ubuntu17) quantal-proposed; urgency=low
 
   [ Stéphane Graber ]
