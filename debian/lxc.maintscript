@@ -1,0 +1,2 @@
+mv_conffile /etc/apparmor.d/abstractions/lxc-container-default /etc/apparmor.d/abstractions/lxc/container-base 0.8.0~rc1-4ubuntu18 lxc
+mv_conffile /etc/apparmor.d/abstractions/lxc-start-container /etc/apparmor.d/abstractions/lxc/start-container 0.8.0~rc1-4ubuntu18 lxc

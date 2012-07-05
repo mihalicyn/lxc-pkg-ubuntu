@@ -26,7 +26,8 @@
   deny @{PROC}/sysrq-trigger rwklx,
   deny @{PROC}/mem rwklx,
   deny @{PROC}/kmem rwklx,
-  deny @{PROC}/sys/kernel/** wklx,
+  deny @{PROC}/sys/kernel/[^s][^h][^m]* wklx,
+  deny @{PROC}/sys/kernel/*/** wklx,
 
   # deny writes in /sys except for /sys/fs/cgroup, also allow
   # fusectl, securityfs and debugfs to be mounted there (read-only)
