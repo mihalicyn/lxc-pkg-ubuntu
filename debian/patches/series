@@ -60,3 +60,4 @@
 0090-lxc-ubuntu-use-dpkg-add-architecture
 0091-introduce-container-hooks.patch
 0092-clone-no-dhclient.conf-update-when-not-hardcoded
+0093-lxc-clone-copy-fstab

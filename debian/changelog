@@ -1,3 +1,14 @@
+lxc (0.8.0~rc1-4ubuntu20) quantal; urgency=low
+
+  [ Stéphane Graber ]
+  * debian/apparmor/lxc-default-with-nesting: allow mounting /proc and /sys
+    so containers can be created.
+
+  [ Serge Hallyn ]
+  * 0093-lxc-clone-copy-fstab: fix updating of lxc.mount entries in lxc-clone
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Fri, 20 Jul 2012 09:38:35 -0500
+
 lxc (0.8.0~rc1-4ubuntu19) quantal; urgency=low
 
   * Move /etc/apparmor.d/abstractions/lxc-* to /etc/apparmor.d/abstractions/lxc/

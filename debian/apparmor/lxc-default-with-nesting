@@ -6,4 +6,7 @@ profile lxc-container-default-with-nesting flags=(attach_disconnected,mediate_de
   #include <abstractions/lxc/start-container>
 
   mount fstype=cgroup -> /sys/fs/cgroup/**,
+
+  mount fstype=proc -> /var/cache/lxc/**,
+  mount fstype=sysfs -> /var/cache/lxc/**,
 }
