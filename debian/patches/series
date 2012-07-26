@@ -61,3 +61,6 @@
 0091-introduce-container-hooks.patch
 0092-clone-no-dhclient.conf-update-when-not-hardcoded
 0093-lxc-clone-copy-fstab
+0094-fix-dev-shm-check
+0095-lxc-clone-change-uuid-on-xfs.patch
+0096-lxc-wait-add-timeout.patch

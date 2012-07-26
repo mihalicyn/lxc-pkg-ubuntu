@@ -1,0 +1,113 @@
+Allow to specify a timeout for waiting on state changes via lxc-wait.
+Helpful for scripts that need to handle errors or excessive delays in
+state changing procedures.
+
+Signed-off-by: Jan Kiszka <jan.kiszka@siemens.com>
+---
+ doc/lxc-wait.sgml.in |   11 +++++++++++
+ src/lxc/arguments.h  |    1 +
+ src/lxc/lxc_wait.c   |   16 +++++++++++++++-
+ 3 files changed, 27 insertions(+), 1 deletions(-)
+
+Index: lxc/doc/lxc-wait.sgml.in
+===================================================================
+--- lxc.orig/doc/lxc-wait.sgml.in	2012-07-26 17:51:42.145353005 +0000
++++ lxc/doc/lxc-wait.sgml.in	2012-07-26 17:51:44.297353675 +0000
+@@ -79,6 +79,17 @@
+ 	</listitem>
+       </varlistentry>
+ 
++      <varlistentry>
++	<term>
++	  <option>-t <replaceable>timeout</replaceable></option>
++	</term>
++	<listitem>
++	  <para>
++	    Wait timeout seconds for desired state to be reached.
++	  </para>
++	</listitem>
++      </varlistentry>
++
+     </variablelist>
+ 
+   </refsect1>
+Index: lxc/src/lxc/arguments.h
+===================================================================
+--- lxc.orig/src/lxc/arguments.h	2012-07-26 17:51:42.145353005 +0000
++++ lxc/src/lxc/arguments.h	2012-07-26 17:51:44.297353675 +0000
+@@ -57,6 +57,7 @@
+ 
+ 	/* for lxc-wait */
+ 	char *states;
++	long timeout;
+ 
+ 	/* close fds from parent? */
+ 	int close_all_fds;
+Index: lxc/src/lxc/lxc_wait.c
+===================================================================
+--- lxc.orig/src/lxc/lxc_wait.c	2012-07-26 17:51:42.145353005 +0000
++++ lxc/src/lxc/lxc_wait.c	2012-07-26 17:51:44.301353694 +0000
+@@ -24,6 +24,8 @@
+ #include <string.h>
+ #include <libgen.h>
+ #include <unistd.h>
++#include <stdlib.h>
++#include <signal.h>
+ #include <sys/types.h>
+ 
+ #include <lxc/lxc.h>
+@@ -46,12 +48,14 @@
+ {
+ 	switch (c) {
+ 	case 's': args->states = optarg; break;
++	case 't': args->timeout = atol(optarg); break;
+ 	}
+ 	return 0;
+ }
+ 
+ static const struct option my_longopts[] = {
+ 	{"state", required_argument, 0, 's'},
++	{"timeout", required_argument, 0, 't'},
+ 	LXC_COMMON_OPTIONS
+ };
+ 
+@@ -66,7 +70,8 @@
+   -n, --name=NAME   NAME for name of the container\n\
+   -s, --state=STATE ORed states to wait for\n\
+                     STOPPED, STARTING, RUNNING, STOPPING,\n\
+-                    ABORTING, FREEZING, FROZEN\n",
++                    ABORTING, FREEZING, FROZEN\n\
++  -t, --timeout=TMO Seconds to wait for state changes\n",
+ 	.options  = my_longopts,
+ 	.parser   = my_parser,
+ 	.checker  = my_checker,
+@@ -91,6 +96,11 @@
+ 	return 0;
+ }
+ 
++static void timeout_handler(int signal)
++{
++	exit(-1);
++}
++
+ int main(int argc, char *argv[])
+ {
+ 	struct lxc_msg msg;
+@@ -124,6 +134,9 @@
+ 		goto out_close;
+ 	}
+ 
++	signal(SIGALRM, timeout_handler);
++	alarm(my_args.timeout);
++
+ 	for (;;) {
+ 		if (lxc_monitor_read(fd, &msg) < 0)
+ 			goto out_close;
+@@ -140,6 +153,7 @@
+ 			}
+ 
+ 			if (s[msg.value]) {
++				alarm(0);
+ 				ret = 0;
+ 				goto out_close;
+ 			}

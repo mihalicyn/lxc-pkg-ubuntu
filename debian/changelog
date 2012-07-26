@@ -1,3 +1,21 @@
+lxc (0.8.0~rc1-4ubuntu21) quantal; urgency=low
+
+  [ Stéphane Graber ]
+  * Fix lxc-ubuntu and lxc-ubuntu-cloud to fix the /dev/shm workaround to only
+    trigger when /dev/shm is not a symlink. (LP: #974584)
+
+  [ Serge Hallyn ]
+  * lxc.lxc-net.upstart: replace the check for USE_LXC_BRIDGE (which could be
+    changed from true to false after starting lxc-net) with one for the
+    existence /var/run/lxc.  (LP: #1019290)
+  * 0095-lxc-clone-change-uuid-on-xfs.patch: give each cloned xfs-backed
+    lvm partition a unique uuid so they can be mounted simultaneously.
+    (LP: #1013549)
+  * 0096-lxc-wait-add-timeout.patch: patch submitted upstream to add a timeout
+    option to lxc-wait.  (LP: #1020179)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 26 Jul 2012 17:40:36 +0000
+
 lxc (0.8.0~rc1-4ubuntu20) quantal; urgency=low
 
   [ Stéphane Graber ]

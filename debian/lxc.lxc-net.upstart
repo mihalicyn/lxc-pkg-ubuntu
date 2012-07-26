@@ -45,7 +45,7 @@ end script
 
 post-stop script
 	[ -f /etc/default/lxc ] && . /etc/default/lxc
-	[ "x$USE_LXC_BRIDGE" = "xtrue" ] || exit 0;
+	[ -f "${varrun}/network_up" ] || exit 0;
 	# if $LXC_BRIDGE has attached interfaces, don't shut it down
 	ls /sys/class/net/${LXC_BRIDGE}/brif/* > /dev/null 2>&1 && exit 0;
 
