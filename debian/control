@@ -6,7 +6,7 @@ XSBC-Original-Maintainer: Daniel Baumann <daniel.baumann@progress-technologies.n
 Uploaders: Jonas Genannt <jonas.genannt@capi2name.de>
 Build-Depends:
  debhelper (>= 9), autotools-dev, dh-apparmor, docbook-utils, libcap-dev,
- linux-libc-dev, libapparmor-dev
+ linux-libc-dev, libapparmor-dev, libseccomp-dev, dh-autoreconf
 Standards-Version: 3.9.3
 Homepage: http://lxc.sourceforge.net/
 

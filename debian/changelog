@@ -1,3 +1,11 @@
+lxc (0.8.0~rc1-4ubuntu23) quantal; urgency=low
+
+  * fix FTBFS
+    - add libseccomp to build-deps
+    - add autoreconf to build-deps to regenerate Makefile.in at build time.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Wed, 08 Aug 2012 18:11:21 -0500
+
 lxc (0.8.0~rc1-4ubuntu22) quantal; urgency=low
 
   [ Stéphane Graber ]
