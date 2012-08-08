@@ -131,7 +131,7 @@ if [ -z $LXC_BASE ]; then
     exit 1
 fi
 if [ ! -d /var/lib/lxc/$LXC_BASE ] ; then
-    echo 'no such lxc container $LXC_BASE'
+    echo "no such lxc container $LXC_BASE"
     exit 1
 fi
 

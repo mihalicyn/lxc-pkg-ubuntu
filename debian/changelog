@@ -1,3 +1,14 @@
+lxc (0.8.0~rc1-4ubuntu22) quantal; urgency=low
+
+  [ Stéphane Graber ]
+  * Fix call to echo in lxc-start-ephemeral that was literally showing
+    '$LXC_BASE' instead of the variable's value.
+
+  [ Serge Hallyn ]
+  * Introduce support for seccomp.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Wed, 08 Aug 2012 10:43:06 -0500
+
 lxc (0.8.0~rc1-4ubuntu21) quantal; urgency=low
 
   [ Stéphane Graber ]
