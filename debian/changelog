@@ -1,3 +1,11 @@
+lxc (0.8.0~rc1-4ubuntu24) quantal; urgency=low
+
+  * lxc-start-ephemeral: use unionfs only for the rootfs itself
+    (LP: #959352)
+  * allow config files to include other config files.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Tue, 14 Aug 2012 13:11:24 +0000
+
 lxc (0.8.0~rc1-4ubuntu23) quantal; urgency=low
 
   * fix FTBFS

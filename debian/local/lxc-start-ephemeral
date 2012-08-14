@@ -38,16 +38,32 @@ LXC_RUNNING=0
 LXC_MOUNTED=0
 DAEMON=0
 
+cleanup_dirs()
+{
+    # echo "umounting ephemeral_bind_dir $EPHEMERAL_BIND_DIR" >&2
+    sudo umount $EPHEMERAL_BIND_DIR
+    # echo "umounting lxc_dir $LXC_DIR" >&2
+    sudo umount $LXC_DIR/rootfs
+    # echo "umounting overlay" >&2
+    sudo umount $OVERLAY_DIR
+
+    # remove all contents of the content dir
+    sudo rmdir $LXC_DIR/ephemeralbind
+    sudo rmdir $LXC_DIR/rootfs
+    sudo rm -f $LXC_DIR/*
+
+    # echo "rming lxc_dir $LXC_DIR" >&2
+    sudo rmdir $LXC_DIR
+    # echo "rming overlay dir $OVERLAY_DIR" >&2
+    sudo rmdir $OVERLAY_DIR
+}
+
 cleanup() {
     if [ $LXC_RUNNING -eq 1 ]; then
         sudo lxc-stop -n $LXC_NAME
     fi
     if [ $LXC_MOUNTED -eq 1 ]; then
-        sudo umount $EPHEMERAL_BIND_DIR
-        sudo umount $LXC_DIR
-        sudo umount $OVERLAY_DIR
-        sudo rmdir $LXC_DIR
-        sudo rmdir $OVERLAY_DIR
+	    cleanup_dirs
     fi
     exit 1
 }
@@ -147,11 +163,20 @@ setup_container()
     sudo mount -t tmpfs none $OVERLAY_DIR
     LXC_DIR=`sudo mktemp -d --tmpdir=/var/lib/lxc $LXC_BASE-temp-XXXXXXX`
     LXC_NAME=`basename $LXC_DIR`
-    do_mount "/var/lib/lxc/$LXC_BASE" "${OVERLAY_DIR}" $LXC_DIR
+    mkdir ${LXC_DIR}/rootfs
+    do_mount "/var/lib/lxc/$LXC_BASE/rootfs" "${OVERLAY_DIR}" ${LXC_DIR}/rootfs
     EPHEMERAL_BIND_DIR=$LXC_DIR/ephemeralbind
     sudo mkdir $EPHEMERAL_BIND_DIR
     sudo mount -t tmpfs none $EPHEMERAL_BIND_DIR
     LXC_MOUNTED=1
+    {
+        d1=/var/lib/lxc/${LXC_BASE}
+        for f in ${d1}/*; do
+            if [ -f $f ]; then
+                cp $f $LXC_DIR/
+            fi
+        done
+    }
 
     # Update the ephemeral lxc's configuration to reflect the new container name.
     sudo sed -i -e "s/$LXC_BASE/$LXC_NAME/" $LXC_DIR/fstab $LXC_DIR/config $LXC_DIR/rootfs/etc/hostname $LXC_DIR/rootfs/etc/hosts
@@ -298,16 +323,8 @@ stop_container()
     echo "Stopping lxc" >&2
     sudo lxc-stop -n $LXC_NAME
     sleep 2
-    # echo "umounting ephemeral_bind_dir $EPHEMERAL_BIND_DIR" >&2
-    sudo umount $EPHEMERAL_BIND_DIR
-    # echo "umounting lxc_dir $LXC_DIR" >&2
-    sudo umount $LXC_DIR
-    # echo "umounting overlay" >&2
-    sudo umount $OVERLAY_DIR
-    # echo "rming lxc_dir $LXC_DIR" >&2
-    sudo rmdir $LXC_DIR
-    # echo "rming overlay dir $OVERLAY_DIR" >&2
-    sudo rmdir $OVERLAY_DIR
+    LXC_RUNNING=0
+    cleanup_dirs
 }
 
 handle_container()
