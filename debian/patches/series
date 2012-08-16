@@ -66,3 +66,4 @@
 0096-lxc-wait-add-timeout.patch
 0097-seccomp
 0098-config-file-includes
+0099-cleanup-after-template-help

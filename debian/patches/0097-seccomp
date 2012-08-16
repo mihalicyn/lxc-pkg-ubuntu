@@ -1,49 +1,112 @@
-Index: lxc-0.8.0~rc1/configure.ac
+commit 16049797728edeba06f3d6dce8c21daa7ffdbced
+Author: Serge Hallyn <serge.hallyn@canonical.com>
+Date:   Fri Jul 27 21:13:53 2012 -0500
+
+    Introduce support for seccomp.
+    
+    Hi,
+    
+    This patch is so far just a proof of concept.  The libseccomp api will be
+    changing soon so it probably wouldn't be worth pulling this until it is
+    updated for the new API.
+    
+    This patch introduces support for seccomp to lxc.  Seccomp lets a program
+    restrict its own (and its children's) future access to system calls.  It
+    uses a simple whitelist system call policy file.  It would probably be
+    better to switch to something more symbolic (i.e specifying 'open' rather
+    than the syscall #, especially given container arch flexibility).
+    
+    I just wanted to get this out there as a first step.  You can also get
+    source for an ubuntu package based on this patch at
+    https://code.launchpad.net/~serge-hallyn/ubuntu/quantal/lxc/lxc-seccomp
+    
+    Signed-off-by: Serge Hallyn <serge.hallyn@canonical.com>
+
+Index: lxc-fix-seccomp/README
 ===================================================================
---- lxc-0.8.0~rc1.orig/configure.ac	2012-08-08 17:54:34.000000000 -0500
-+++ lxc-0.8.0~rc1/configure.ac	2012-08-08 17:54:34.000000000 -0500
-@@ -18,6 +18,11 @@
+--- lxc-fix-seccomp.orig/README	2012-08-16 15:38:00.877173000 -0500
++++ lxc-fix-seccomp/README	2012-08-16 15:38:00.877173000 -0500
+@@ -52,3 +52,27 @@
+ 
+ AUTHOR
+        Daniel Lezcano <daniel.lezcano@free.fr>
++
++Seccomp with LXC
++----------------
++
++To restrict a container with seccomp, you must specify a profile which is
++basically a whitelist of system calls it may execute.  In the container
++config file, add a line like
++
++lxc.seccomp = /var/lib/lxc/q1/seccomp.full
++
++I created a usable (but basically worthless) seccomp.full file using
++
++cat > seccomp.full << EOF
++1
++whitelist
++EOF
++for i in `seq 0 300`; do
++	echo $i >> secomp.full
++done
++for i in `seq 1024 1079`; do
++	echo $i >> seccomp.full
++done
++
++ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Fri, 27 Jul 2012 15:47:02 +0600
+Index: lxc-fix-seccomp/configure.ac
+===================================================================
+--- lxc-fix-seccomp.orig/configure.ac	2012-08-16 15:38:00.877173000 -0500
++++ lxc-fix-seccomp/configure.ac	2012-08-16 17:48:05.955917878 -0500
+@@ -18,6 +18,10 @@
  
  AM_CONDITIONAL([ENABLE_RPATH], [test "x$enable_rpath" = "xyes"])
  
 +AC_ARG_ENABLE([seccomp],
 +	[AC_HELP_STRING([--enable-seccomp], [enable seccomp])],
-+	[], [enable_seccomp=yes])
-+AM_CONDITIONAL([ENABLE_SECCOMP], [test "x$enable_seccomp" = "xyes"])
++	[], [enable_seccomp=check])
 +
  AC_ARG_ENABLE([doc],
  	[AC_HELP_STRING([--enable-doc], [make mans (require docbook2man installed) [default=auto]])],
  	[], [enable_doc=auto])
-@@ -29,6 +34,11 @@
+@@ -29,6 +33,18 @@
  		AC_MSG_ERROR([docbook2man required by man request, but not found])
  fi
  
++if test "$enable_seccomp" = "check" ; then
++    AC_CHECK_LIB([seccomp],[seccomp_init],[enable_seccomp=yes], [enable_seccomp=no])
++fi
++
++AM_CONDITIONAL([ENABLE_SECCOMP], [test "x$enable_seccomp" = "xyes"])
++
 +AM_COND_IF([ENABLE_SECCOMP],
 +    [AC_CHECK_HEADER([seccomp.h],[],[AC_MSG_ERROR([You must install the seccomp development package in order to compile lxc])])
 +     AC_CHECK_LIB([seccomp], [seccomp_init],[],[AC_MSG_ERROR([You must install the seccomp development package in order to compile lxc])])
++     AC_DEFINE_UNQUOTED([ENABLE_SECCOMP], 1, [Seccomp is available])
 +     AC_SUBST([SECCOMP_LIBS], [-lseccomp])])
 +
  AM_CONDITIONAL([ENABLE_DOCBOOK], [test "x$have_docbook" = "xyes"])
  
  AC_ARG_ENABLE([examples],
-Index: lxc-0.8.0~rc1/src/lxc/Makefile.am
+Index: lxc-fix-seccomp/src/lxc/Makefile.am
 ===================================================================
---- lxc-0.8.0~rc1.orig/src/lxc/Makefile.am	2012-08-08 17:54:34.000000000 -0500
-+++ lxc-0.8.0~rc1/src/lxc/Makefile.am	2012-08-08 17:54:34.000000000 -0500
+--- lxc-fix-seccomp.orig/src/lxc/Makefile.am	2012-08-16 15:38:00.877173000 -0500
++++ lxc-fix-seccomp/src/lxc/Makefile.am	2012-08-16 17:36:30.547929653 -0500
 @@ -50,6 +50,7 @@
          genl.c genl.h \
  	\
  	caps.c caps.h \
-+	seccomp.c seccomp.h \
++	lxcseccomp.h \
  	mainloop.c mainloop.h \
  	af_unix.c af_unix.h \
  	\
-@@ -60,13 +61,17 @@
+@@ -60,13 +61,18 @@
  	-DLXCPATH=\"$(LXCPATH)\" \
  	-DLXCINITDIR=\"$(LXCINITDIR)\"
  
 +if ENABLE_SECCOMP
 +AM_CFLAGS += -DHAVE_SECCOMP
++liblxc_so_SOURCES += seccomp.c
 +endif
 +
  liblxc_so_CFLAGS = -fPIC -DPIC $(AM_CFLAGS)
@@ -53,23 +116,23 @@ Index: lxc-0.8.0~rc1/src/lxc/Makefile.am
  	-Wl,-soname,liblxc.so.$(firstword $(subst ., ,$(VERSION)))
  
 -liblxc_so_LDADD = -lutil $(CAP_LIBS) -lapparmor
-+liblxc_so_LDADD = -lutil $(CAP_LIBS) -lapparmor -lseccomp
++liblxc_so_LDADD = -lutil $(CAP_LIBS) -lapparmor $(SECCOMP_LIBS)
  
  bin_SCRIPTS = \
  	lxc-ps \
-@@ -105,7 +110,7 @@
+@@ -105,7 +111,7 @@
  if ENABLE_RPATH
  AM_LDFLAGS += -Wl,-rpath -Wl,$(libdir)
  endif
 -LDADD=liblxc.so @CAP_LIBS@ -lapparmor
-+LDADD=liblxc.so @CAP_LIBS@ -lapparmor -lseccomp
++LDADD=liblxc.so @CAP_LIBS@ -lapparmor @SECCOMP_LIBS@
  
  lxc_attach_SOURCES = lxc_attach.c
  lxc_cgroup_SOURCES = lxc_cgroup.c
-Index: lxc-0.8.0~rc1/src/lxc/conf.h
+Index: lxc-fix-seccomp/src/lxc/conf.h
 ===================================================================
---- lxc-0.8.0~rc1.orig/src/lxc/conf.h	2012-08-08 17:54:34.000000000 -0500
-+++ lxc-0.8.0~rc1/src/lxc/conf.h	2012-08-08 17:54:34.000000000 -0500
+--- lxc-fix-seccomp.orig/src/lxc/conf.h	2012-08-16 15:38:00.877173000 -0500
++++ lxc-fix-seccomp/src/lxc/conf.h	2012-08-16 15:38:00.877173000 -0500
 @@ -223,6 +223,7 @@
  	char *aa_profile;
  	int umount_proc;
@@ -78,10 +141,10 @@ Index: lxc-0.8.0~rc1/src/lxc/conf.h
  };
  
  int run_lxc_hooks(const char *name, char *hook, struct lxc_conf *conf);
-Index: lxc-0.8.0~rc1/src/lxc/confile.c
+Index: lxc-fix-seccomp/src/lxc/confile.c
 ===================================================================
---- lxc-0.8.0~rc1.orig/src/lxc/confile.c	2012-08-08 17:54:34.000000000 -0500
-+++ lxc-0.8.0~rc1/src/lxc/confile.c	2012-08-08 17:54:34.000000000 -0500
+--- lxc-fix-seccomp.orig/src/lxc/confile.c	2012-08-16 15:38:00.877173000 -0500
++++ lxc-fix-seccomp/src/lxc/confile.c	2012-08-16 17:48:11.919917776 -0500
 @@ -73,6 +73,7 @@
  static int config_network_ipv6_gateway(const char *, char *, struct lxc_conf *);
  static int config_cap_drop(const char *, char *, struct lxc_conf *);
@@ -125,10 +188,10 @@ Index: lxc-0.8.0~rc1/src/lxc/confile.c
  static int config_hook(const char *key, char *value,
  				 struct lxc_conf *lxc_conf)
  {
-Index: lxc-0.8.0~rc1/src/lxc/lxc-clone.in
+Index: lxc-fix-seccomp/src/lxc/lxc-clone.in
 ===================================================================
---- lxc-0.8.0~rc1.orig/src/lxc/lxc-clone.in	2012-08-08 17:54:34.000000000 -0500
-+++ lxc-0.8.0~rc1/src/lxc/lxc-clone.in	2012-08-08 17:54:34.000000000 -0500
+--- lxc-fix-seccomp.orig/src/lxc/lxc-clone.in	2012-08-16 15:38:00.877173000 -0500
++++ lxc-fix-seccomp/src/lxc/lxc-clone.in	2012-08-16 15:38:00.877173000 -0500
 @@ -180,7 +180,7 @@
  sed -i '/lxc.utsname/d' $lxc_path/$lxc_new/config
  echo "lxc.utsname = $hostname" >> $lxc_path/$lxc_new/config
@@ -138,10 +201,56 @@ Index: lxc-0.8.0~rc1/src/lxc/lxc-clone.in
  
  if [ -e  $lxc_path/$lxc_orig/fstab ];then
      cp $lxc_path/$lxc_orig/fstab $lxc_path/$lxc_new/fstab
-Index: lxc-0.8.0~rc1/src/lxc/seccomp.c
+Index: lxc-fix-seccomp/src/lxc/lxcseccomp.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-0.8.0~rc1/src/lxc/seccomp.c	2012-08-08 17:54:34.000000000 -0500
++++ lxc-fix-seccomp/src/lxc/lxcseccomp.h	2012-08-16 15:38:00.877173000 -0500
+@@ -0,0 +1,41 @@
++/*
++ * lxc: linux Container library
++ *
++ * (C) Copyright Canonical, Inc. 2012
++ *
++ * Authors:
++ * Serge Hallyn <serge.hallyn@canonical.com>
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++ */
++
++#ifndef _lxc_seccomp_h
++
++#include "conf.h"
++
++#ifdef HAVE_SECCOMP
++int lxc_seccomp_load(struct lxc_conf *conf);
++int lxc_read_seccomp_config(struct lxc_conf *conf);
++#else
++static inline int lxc_seccomp_load(struct lxc_conf *conf) {
++	return 0;
++}
++
++static inline int lxc_read_seccomp_config(struct lxc_conf *conf) {
++	return 0;
++}
++#endif
++
++#endif
+Index: lxc-fix-seccomp/src/lxc/seccomp.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-fix-seccomp/src/lxc/seccomp.c	2012-08-16 15:38:00.877173000 -0500
 @@ -0,0 +1,121 @@
 +/*
 + * lxc: linux Container library
@@ -264,11 +373,19 @@ Index: lxc-0.8.0~rc1/src/lxc/seccomp.c
 +	}
 +	return 0;
 +}
-Index: lxc-0.8.0~rc1/src/lxc/start.c
+Index: lxc-fix-seccomp/src/lxc/start.c
 ===================================================================
---- lxc-0.8.0~rc1.orig/src/lxc/start.c	2012-08-08 17:54:34.000000000 -0500
-+++ lxc-0.8.0~rc1/src/lxc/start.c	2012-08-08 17:54:34.000000000 -0500
-@@ -354,6 +354,11 @@
+--- lxc-fix-seccomp.orig/src/lxc/start.c	2012-08-16 15:38:00.877173000 -0500
++++ lxc-fix-seccomp/src/lxc/start.c	2012-08-16 15:38:00.877173000 -0500
+@@ -129,6 +129,7 @@
+ #include "console.h"
+ #include "sync.h"
+ #include "namespace.h"
++#include "lxcseccomp.h"
+ 
+ lxc_log_define(lxc_start, lxc);
+ 
+@@ -354,6 +355,11 @@
  		goto out_free;
  	}
  
@@ -280,7 +397,7 @@ Index: lxc-0.8.0~rc1/src/lxc/start.c
  	/* Begin the set the state to STARTING*/
  	if (lxc_set_state(name, handler, STARTING)) {
  		ERROR("failed to set state '%s'", lxc_state2str(STARTING));
-@@ -587,6 +592,9 @@
+@@ -587,6 +593,9 @@
  	if (apparmor_load(handler) < 0)
  		goto out_warn_father;
  
@@ -290,111 +407,140 @@ Index: lxc-0.8.0~rc1/src/lxc/start.c
  	close(handler->sigfd);
  
  	HOOK(handler->name, "start", handler->conf);
-Index: lxc-0.8.0~rc1/src/lxc/lxcseccomp.h
+Index: lxc-fix-seccomp/configure
 ===================================================================
---- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-0.8.0~rc1/src/lxc/lxcseccomp.h	2012-08-08 17:54:34.000000000 -0500
-@@ -0,0 +1,41 @@
-+/*
-+ * lxc: linux Container library
-+ *
-+ * (C) Copyright Canonical, Inc. 2012
-+ *
-+ * Authors:
-+ * Serge Hallyn <serge.hallyn@canonical.com>
-+ *
-+ * This library is free software; you can redistribute it and/or
-+ * modify it under the terms of the GNU Lesser General Public
-+ * License as published by the Free Software Foundation; either
-+ * version 2.1 of the License, or (at your option) any later version.
-+ *
-+ * This library is distributed in the hope that it will be useful,
-+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-+ * Lesser General Public License for more details.
-+ *
-+ * You should have received a copy of the GNU Lesser General Public
-+ * License along with this library; if not, write to the Free Software
-+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-+ */
+--- lxc-fix-seccomp.orig/configure	2012-08-16 15:38:00.877173000 -0500
++++ lxc-fix-seccomp/configure	2012-08-16 16:23:27.284003869 -0500
+@@ -623,7 +623,10 @@
+ ENABLE_EXAMPLES_TRUE
+ ENABLE_DOCBOOK_FALSE
+ ENABLE_DOCBOOK_TRUE
++SECCOMP_LIBS
+ have_docbook
++ENABLE_SECCOMP_FALSE
++ENABLE_SECCOMP_TRUE
+ ENABLE_RPATH_FALSE
+ ENABLE_RPATH_TRUE
+ SETCAP
+@@ -720,6 +723,7 @@
+ enable_option_checking
+ enable_dependency_tracking
+ enable_rpath
++enable_seccomp
+ enable_doc
+ enable_examples
+ with_config_path
+@@ -1358,6 +1362,7 @@
+   --disable-dependency-tracking  speeds up one-time build
+   --enable-dependency-tracking   do not reject slow dependency extractors
+   --disable-rpath         do not set rpath in executables
++  --enable-seccomp        enable seccomp
+   --enable-doc            make mans (require docbook2man installed)
+                           [default=auto]
+   --disable-examples      do not install configuration examples
+@@ -4340,6 +4345,22 @@
+ fi
+ 
+ 
++# Check whether --enable-seccomp was given.
++if test "${enable_seccomp+set}" = set; then :
++  enableval=$enable_seccomp;
++else
++  enable_seccomp=yes
++fi
 +
-+#ifndef _lxc_seccomp_h
++ if test "x$enable_seccomp" = "xyes"; then
++  ENABLE_SECCOMP_TRUE=
++  ENABLE_SECCOMP_FALSE='#'
++else
++  ENABLE_SECCOMP_TRUE='#'
++  ENABLE_SECCOMP_FALSE=
++fi
 +
-+#include "conf.h"
 +
-+#ifdef HAVE_SECCOMP
-+int lxc_seccomp_load(struct lxc_conf *conf);
-+int lxc_read_seccomp_config(struct lxc_conf *conf);
-+#else
-+static inline int lxc_seccomp_load(struct lxc_conf *conf) {
-+	return 0;
-+}
+ # Check whether --enable-doc was given.
+ if test "${enable_doc+set}" = set; then :
+   enableval=$enable_doc;
+@@ -4392,6 +4413,71 @@
+ 		as_fn_error $? "docbook2man required by man request, but not found" "$LINENO" 5
+ fi
+ 
++if test -z "$ENABLE_SECCOMP_TRUE"; then :
++  ac_fn_c_check_header_mongrel "$LINENO" "seccomp.h" "ac_cv_header_seccomp_h" "$ac_includes_default"
++if test "x$ac_cv_header_seccomp_h" = xyes; then :
 +
-+static inline int lxc_read_seccomp_config(struct lxc_conf *conf) {
-+	return 0;
-+}
++else
++  as_fn_error $? "You must install the seccomp development package in order to compile lxc" "$LINENO" 5
++fi
++
++
++     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for seccomp_init in -lseccomp" >&5
++$as_echo_n "checking for seccomp_init in -lseccomp... " >&6; }
++if ${ac_cv_lib_seccomp_seccomp_init+:} false; then :
++  $as_echo_n "(cached) " >&6
++else
++  ac_check_lib_save_LIBS=$LIBS
++LIBS="-lseccomp  $LIBS"
++cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++/* end confdefs.h.  */
++
++/* Override any GCC internal prototype to avoid an error.
++   Use char because int might match the return type of a GCC
++   builtin and then its argument prototype would still apply.  */
++#ifdef __cplusplus
++extern "C"
 +#endif
++char seccomp_init ();
++int
++main ()
++{
++return seccomp_init ();
++  ;
++  return 0;
++}
++_ACEOF
++if ac_fn_c_try_link "$LINENO"; then :
++  ac_cv_lib_seccomp_seccomp_init=yes
++else
++  ac_cv_lib_seccomp_seccomp_init=no
++fi
++rm -f core conftest.err conftest.$ac_objext \
++    conftest$ac_exeext conftest.$ac_ext
++LIBS=$ac_check_lib_save_LIBS
++fi
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_seccomp_seccomp_init" >&5
++$as_echo "$ac_cv_lib_seccomp_seccomp_init" >&6; }
++if test "x$ac_cv_lib_seccomp_seccomp_init" = xyes; then :
++  cat >>confdefs.h <<_ACEOF
++#define HAVE_LIBSECCOMP 1
++_ACEOF
 +
-+#endif
-Index: lxc-0.8.0~rc1/README
-===================================================================
---- lxc-0.8.0~rc1.orig/README	2011-10-25 07:02:11.000000000 -0500
-+++ lxc-0.8.0~rc1/README	2012-08-08 17:54:34.000000000 -0500
-@@ -52,3 +52,27 @@
- 
- AUTHOR
-        Daniel Lezcano <daniel.lezcano@free.fr>
++  LIBS="-lseccomp $LIBS"
 +
-+Seccomp with LXC
-+----------------
++else
++  as_fn_error $? "You must install the seccomp development package in order to compile lxc" "$LINENO" 5
++fi
 +
-+To restrict a container with seccomp, you must specify a profile which is
-+basically a whitelist of system calls it may execute.  In the container
-+config file, add a line like
 +
-+lxc.seccomp = /var/lib/lxc/q1/seccomp.full
++cat >>confdefs.h <<_ACEOF
++#define ENABLE_SECCOMP 1
++_ACEOF
 +
-+I created a usable (but basically worthless) seccomp.full file using
++     SECCOMP_LIBS=-lseccomp
 +
-+cat > seccomp.full << EOF
-+1
-+whitelist
-+EOF
-+for i in `seq 0 300`; do
-+	echo $i >> secomp.full
-+done
-+for i in `seq 1024 1079`; do
-+	echo $i >> seccomp.full
-+done
++fi
 +
-+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Fri, 27 Jul 2012 15:47:02 +0600
-Index: lxc-0.8.0~rc1/src/lxc/Makefile.in
-===================================================================
---- lxc-0.8.0~rc1.orig/src/lxc/Makefile.in	2012-08-08 17:54:34.000000000 -0500
-+++ lxc-0.8.0~rc1/src/lxc/Makefile.in	2012-08-08 17:55:55.125019315 -0500
-@@ -363,6 +363,7 @@
-         genl.c genl.h \
- 	\
- 	caps.c caps.h \
-+	seccomp.c seccomp.h \
- 	mainloop.c mainloop.h \
- 	af_unix.c af_unix.h \
- 	\
-@@ -378,7 +379,7 @@
- 	-shared \
- 	-Wl,-soname,liblxc.so.$(firstword $(subst ., ,$(VERSION)))
- 
--liblxc_so_LDADD = -lutil $(CAP_LIBS) -lapparmor
-+liblxc_so_LDADD = -lutil $(CAP_LIBS) -lapparmor -lseccomp
- bin_SCRIPTS = \
- 	lxc-ps \
- 	lxc-netstat \
-@@ -393,7 +394,7 @@
- 	lxc-destroy
- 
- AM_LDFLAGS = -Wl,-E $(am__append_1)
--LDADD = liblxc.so @CAP_LIBS@ -lapparmor
-+LDADD = liblxc.so @CAP_LIBS@ -lapparmor -lseccomp
- lxc_attach_SOURCES = lxc_attach.c
- lxc_cgroup_SOURCES = lxc_cgroup.c
- lxc_checkpoint_SOURCES = lxc_checkpoint.c
+  if test "x$have_docbook" = "xyes"; then
+   ENABLE_DOCBOOK_TRUE=
+   ENABLE_DOCBOOK_FALSE='#'
+@@ -5103,6 +5189,10 @@
+   as_fn_error $? "conditional \"ENABLE_RPATH\" was never defined.
+ Usually this means the macro was only invoked conditionally." "$LINENO" 5
+ fi
++if test -z "${ENABLE_SECCOMP_TRUE}" && test -z "${ENABLE_SECCOMP_FALSE}"; then
++  as_fn_error $? "conditional \"ENABLE_SECCOMP\" was never defined.
++Usually this means the macro was only invoked conditionally." "$LINENO" 5
++fi
+ if test -z "${ENABLE_DOCBOOK_TRUE}" && test -z "${ENABLE_DOCBOOK_FALSE}"; then
+   as_fn_error $? "conditional \"ENABLE_DOCBOOK\" was never defined.
+ Usually this means the macro was only invoked conditionally." "$LINENO" 5

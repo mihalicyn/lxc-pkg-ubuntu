@@ -1,3 +1,14 @@
+lxc (0.8.0~rc1-4ubuntu25) quantal; urgency=low
+
+  * debian/control: only depend on libseccomp-dev on i386 and amd64, and
+    switch to upstream-submitted seccomp patch (LP: #1037701)
+  * debian/rules: add '--with autoreconf' to force recreation of
+    configure from configure.ac
+  * 0099-cleanup-after-template-help: don't leave a partially created
+    container when -h is passed after '--'.  (LP: #1031043)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 16 Aug 2012 17:03:07 -0500
+
 lxc (0.8.0~rc1-4ubuntu24) quantal; urgency=low
 
   * lxc-start-ephemeral: use unionfs only for the rootfs itself
