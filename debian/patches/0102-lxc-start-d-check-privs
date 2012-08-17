@@ -1,0 +1,38 @@
+Description: exit early out lxc-start if insufficient privs and -d
+ Starting a container with insufficient privilege (correctly) fails
+ during lxc_init.  However, if starting a daemonized container, we
+ daemonize before we get to that check.  Therefore while the
+ container will fail to start, and the logfile will show this, the
+ 'lxc-start -n x -d' command will return success.  For ease of
+ scripting, do a check for the required privilege before we exit.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Forwarded: yes
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/918327
+
+Index: lxc/src/lxc/lxc_start.c
+===================================================================
+--- lxc.orig/src/lxc/lxc_start.c	2012-08-16 20:56:28.375771000 -0500
++++ lxc/src/lxc/lxc_start.c	2012-08-17 11:01:57.738500926 -0500
+@@ -199,9 +199,19 @@
+ 		free(console);
+ 	}
+ 
+-	if (my_args.daemonize && daemon(0, 0)) {
+-		SYSERROR("failed to daemonize '%s'", my_args.name);
+-		return err;
++	if (my_args.daemonize) {
++		/* do an early check for needed privs, since otherwise the
++		 * user won't see the error */
++
++		if (!lxc_caps_check()) {
++			ERROR("Not running with sufficient privilege");
++			return err;
++		}
++
++		if (daemon(0, 0)) {
++			SYSERROR("failed to daemonize '%s'", my_args.name);
++			return err;
++		}
+ 	}
+ 
+ 	if (my_args.close_all_fds)

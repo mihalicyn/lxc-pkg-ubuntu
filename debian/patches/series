@@ -67,3 +67,7 @@
 0097-seccomp
 0098-config-file-includes
 0099-cleanup-after-template-help
+0100-template-cleanup-cache
+0101-template-empty-apt-cache
+0102-lxc-start-d-check-privs
+0103-make-rootfs-location-optional

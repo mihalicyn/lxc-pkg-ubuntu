@@ -1,0 +1,444 @@
+Description: lxc-create: Make location of container rootfs configurable
+ Make 'dir' an explicit backing store type, which accepts '--dir rootfs'
+ as an option to specify a custom location for the container rootfs.  Also
+ update lxc-destroy to now remove the rootfs separately, as removing
+ @LXCPATH@/$name may not hit it.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Forwarded: yes
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/1019398
+
+Index: lxc-fixbugs/src/lxc/lxc-create.in
+===================================================================
+--- lxc-fixbugs.orig/src/lxc/lxc-create.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/src/lxc/lxc-create.in	2012-08-17 11:23:01.885410188 -0500
+@@ -23,6 +23,7 @@
+ usage() {
+     echo "usage: lxc-create -n <name> [-f configuration] [-t template] [-h] [fsopts] -- [template_options]"
+     echo "   fsopts: -B none"
++    echo "   fsopts: -B dir --dir rootfs_dir"
+     echo "   fsopts: -B lvm [--lvname lvname] [--vgname vgname] [--fstype fstype] [--fssize fssize]"
+     echo "   fsopts: -B btrfs"
+     echo "           flag is not necessary, if possible btrfs support will be used"
+@@ -44,6 +45,7 @@
+     echo "The container backing store can be altered using '-B'.  By default it"
+     echo "is 'none', which is a simple directory tree under /var/lib/lxc/<name>/rootfs"
+     echo "Otherwise, the following option values may be relevant:"
++    echo "dir          : [for dir] path for custom rootfs directory location"
+     echo "lvname       : [for -lvm] name of lv in which to create lv,"
+     echo "                container-name by default"
+     echo "vgname       : [for -lvm] name of vg in which to create lv, 'lxc' by default"
+@@ -64,7 +66,7 @@
+ }
+ 
+ shortoptions='hn:f:t:B:'
+-longoptions='help,name:,config:,template:,backingstore:,fstype:,lvname:,vgname:,fssize:'
++longoptions='help,name:,config:,template:,backingstore:,fstype:,dir:,lvname:,vgname:,fssize:'
+ localstatedir=@LOCALSTATEDIR@
+ lxc_path=@LXCPATH@
+ bindir=@BINDIR@
+@@ -74,6 +76,7 @@
+ fstype=ext4
+ fssize=500M
+ vgname=lxc
++custom_rootfs=""
+ 
+ getopt=$(getopt -o $shortoptions --longoptions  $longoptions -- "$@")
+ if [ $? != 0 ]; then
+@@ -109,6 +112,11 @@
+ 		backingstore=$1
+ 		shift
+ 		;;
++	    --dir)
++		shift
++		custom_rootfs=$1
++		shift
++		;;
+ 	    --lvname)
+ 		shift
+ 		lvname=$1
+@@ -172,9 +180,13 @@
+    exit 1
+ fi
+ 
++if [ -n "$custom_rootfs" -a "$backingstore" != "dir" ]; then
++   echo "--dir is only valid with -B dir"
++fi
++
+ case "$backingstore" in
+-    lvm|none|btrfs|_unset) :;;
+-    *) echo "'$backingstore' is not known ('none', 'lvm', 'btrfs')"
++    dir|lvm|none|btrfs|_unset) :;;
++    *) echo "'$backingstore' is not known ('none', 'lvm', 'btrfs', 'dir')"
+         usage
+         exit 1
+         ;;
+@@ -263,6 +275,14 @@
+ 
+ cp $lxc_config $lxc_path/$lxc_name/config
+ 
++if [ -n "$custom_rootfs" ]; then
++	if grep -q "lxc.rootfs" $lxc_path/$lxc_name/config ; then
++		echo "configuration file already specifies a lxc.rootfs"
++		exit 1
++	fi
++	echo "lxc.rootfs = $custom_rootfs" >> $lxc_path/$lxc_name/config
++fi
++
+ # Create the fs as needed
+ if [ $backingstore = "lvm" ]; then
+     [ -d "$rootfs" ] || mkdir $rootfs
+Index: lxc-fixbugs/templates/lxc-ubuntu-cloud.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-ubuntu-cloud.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-ubuntu-cloud.in	2012-08-17 12:44:34.405231670 -0500
+@@ -46,12 +46,12 @@
+ EOF
+     fi
+ 
++    grep -q "^lxc.rootfs" $path/config 2>/dev/null || echo "lxc.rootfs = $rootfs" >> $path/config
+     cat <<EOF >> $path/config
+ lxc.utsname = $name
+ 
+ lxc.tty = 4
+ lxc.pts = 1024
+-lxc.rootfs = $rootfs
+ lxc.mount  = $path/fstab
+ lxc.arch = $arch
+ lxc.cap.drop = sys_module mac_admin
+@@ -236,7 +236,13 @@
+     exit 1
+ fi
+ 
+-rootfs=$path/rootfs
++# detect rootfs
++config="$path/config"
++if grep -q '^lxc.rootfs' $config 2>/dev/null ; then
++    rootfs=`grep 'lxc.rootfs =' $config | awk -F= '{ print $2 }'`
++else
++    rootfs=$path/rootfs
++fi
+ 
+ type ubuntu-cloudimg-query
+ type wget
+Index: lxc-fixbugs/templates/lxc-ubuntu.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-ubuntu.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-ubuntu.in	2012-08-17 12:39:43.021242302 -0500
+@@ -304,13 +304,13 @@
+ EOF
+     fi
+ 
++    grep -q "^lxc.rootfs" $path/config 2>/dev/null || echo "lxc.rootfs = $rootfs" >> $path/config
+     cat <<EOF >> $path/config
+ lxc.utsname = $name
+ 
+ lxc.devttydir =$ttydir
+ lxc.tty = 4
+ lxc.pts = 1024
+-lxc.rootfs = $rootfs
+ lxc.mount  = $path/fstab
+ lxc.arch = $arch
+ lxc.cap.drop = sys_module mac_admin mac_override
+@@ -670,7 +670,13 @@
+     exit 1
+ fi
+ 
+-rootfs=$path/rootfs
++# detect rootfs
++config="$path/config"
++if grep -q '^lxc.rootfs' $config 2>/dev/null ; then
++    rootfs=`grep 'lxc.rootfs =' $config | awk -F= '{ print $2 }'`
++else
++    rootfs=$path/rootfs
++fi
+ 
+ install_ubuntu $rootfs $release $flushcache
+ if [ $? -ne 0 ]; then
+Index: lxc-fixbugs/templates/lxc-altlinux.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-altlinux.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-altlinux.in	2012-08-17 12:44:53.517230974 -0500
+@@ -239,11 +239,11 @@
+ {
+ 
+     mkdir -p $config_path
++    grep -q "^lxc.rootfs" $config_path/config 2>/dev/null || echo "lxc.rootfs = $rootfs_path" >> $config_path/config
+     cat <<EOF >> $config_path/config
+ lxc.utsname = $name
+ lxc.tty = 4
+ lxc.pts = 1024
+-lxc.rootfs = $rootfs_path
+ lxc.mount  = $config_path/fstab
+ #networking
+ lxc.network.type = $lxc_network_type
+@@ -429,6 +429,11 @@
+     exit 1
+ fi
+ 
++# check for 'lxc.rootfs' passed in through default config by lxc-create
++if grep -q '^lxc.rootfs' $path/config 2>/dev/null ; then
++    rootfs_path=`grep 'lxc.rootfs =' $path/config | awk -F= '{ print $2 }'`
++fi
++
+ install_altlinux
+ if [ $? -ne 0 ]; then
+     echo "failed to install altlinux"
+Index: lxc-fixbugs/templates/lxc-archlinux.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-archlinux.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-archlinux.in	2012-08-17 12:41:11.365239080 -0500
+@@ -218,11 +218,11 @@
+ # write container configuration files
+ function copy_configuration {
+     mkdir -p "${config_path}"
++    grep -q "^lxc.rootfs" "${config_path}/config" 2>/dev/null || echo "lxc.rootfs=${rootfs_path}" >> "${config_path}/config"
+     cat > "${config_path}/config" << EOF
+ lxc.utsname=${name}
+ lxc.tty=4
+ lxc.pts=1024
+-lxc.rootfs=${rootfs_path}
+ lxc.mount=${config_path}/fstab
+ #networking
+ lxc.network.type=${lxc_network_type}
+@@ -419,6 +419,10 @@
+ fi
+ 
+ rootfs_path="${path}/rootfs"
++# check for 'lxc.rootfs' passed in through default config by lxc-create
++if grep -q '^lxc.rootfs' $path/config 2>/dev/null ; then
++    rootfs_path=`grep 'lxc.rootfs =' $path/config | awk -F= '{ print $2 }'`
++fi
+ config_path="${default_path}/${name}"
+ 
+ revert()
+Index: lxc-fixbugs/templates/lxc-busybox.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-busybox.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-busybox.in	2012-08-17 12:41:56.633237426 -0500
+@@ -228,11 +228,11 @@
+     rootfs=$2
+     name=$3
+ 
++grep -q "^lxc.rootfs" $path/config 2>/dev/null || echo "lxc.rootfs = $rootfs" >> $path/config
+ cat <<EOF >> $path/config
+ lxc.utsname = $name
+ lxc.tty = 1
+ lxc.pts = 1
+-lxc.rootfs = $rootfs
+ # uncomment the next line to run the container unconfined:
+ #lxc.aa_profile = unconfined
+ EOF
+@@ -293,7 +293,13 @@
+     exit 1
+ fi
+ 
+-rootfs=$path/rootfs
++# detect rootfs
++config="$path/config"
++if grep -q '^lxc.rootfs' $config 2>/dev/null ; then
++    rootfs=`grep 'lxc.rootfs =' $config | awk -F= '{ print $2 }'`
++else
++    rootfs=$path/rootfs
++fi
+ 
+ install_busybox $rootfs $name
+ if [ $? -ne 0 ]; then
+Index: lxc-fixbugs/templates/lxc-debian.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-debian.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-debian.in	2012-08-17 12:45:52.777228812 -0500
+@@ -200,10 +200,10 @@
+     rootfs=$2
+     hostname=$3
+ 
++    grep -q "^lxc.rootfs" $path/config 2>/dev/null || echo "lxc.rootfs = $rootfs" >> $path/config
+     cat <<EOF >> $path/config
+ lxc.tty = 4
+ lxc.pts = 1024
+-lxc.rootfs = $rootfs
+ lxc.utsname = $hostname
+ # uncomment the next line to run the container unconfined:
+ #lxc.aa_profile = unconfined
+@@ -308,7 +308,14 @@
+     exit 1
+ fi
+ 
+-rootfs=$path/rootfs
++# detect rootfs
++config="$path/config"
++if grep -q '^lxc.rootfs' $config 2>/dev/null ; then
++    rootfs=`grep 'lxc.rootfs =' $config | awk -F= '{ print $2 }'`
++else
++    rootfs=$path/rootfs
++fi
++
+ 
+ install_debian $rootfs
+ if [ $? -ne 0 ]; then
+Index: lxc-fixbugs/templates/lxc-fedora.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-fedora.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-fedora.in	2012-08-17 12:43:07.529234840 -0500
+@@ -231,11 +231,11 @@
+ {
+ 
+     mkdir -p $config_path
++    grep -q "^lxc.rootfs" $config_path/config 2>/dev/null || echo "lxc.rootfs = $rootfs_path" >> $config_path/config
+     cat <<EOF >> $config_path/config
+ lxc.utsname = $name
+ lxc.tty = 4
+ lxc.pts = 1024
+-lxc.rootfs = $rootfs_path
+ lxc.mount  = $config_path/fstab
+ 
+ # uncomment the next line to run the container unconfined:
+@@ -375,6 +375,10 @@
+ 
+ 
+ rootfs_path=$path/rootfs
++# check for 'lxc.rootfs' passed in through default config by lxc-create
++if grep -q '^lxc.rootfs' $path/config 2>/dev/null ; then
++    rootfs_path=`grep 'lxc.rootfs =' $path/config | awk -F= '{ print $2 }'`
++fi
+ config_path=$default_path/$name
+ cache=$cache_base/$release
+ 
+Index: lxc-fixbugs/templates/lxc-lenny.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-lenny.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-lenny.in	2012-08-17 12:46:15.065227998 -0500
+@@ -178,10 +178,10 @@
+     rootfs=$2
+     name=$3
+ 
++    grep -q "^lxc.rootfs" $path/config 2>/dev/null || echo "lxc.rootfs = $rootfs" >> $path/config
+     cat <<EOF >> $path/config
+ lxc.tty = 4
+ lxc.pts = 1024
+-lxc.rootfs = $rootfs
+ # uncomment the next line to run the container unconfined:
+ #lxc.aa_profile = unconfined
+ 
+@@ -286,7 +286,13 @@
+     exit 1
+ fi
+ 
+-rootfs=$path/rootfs
++# detect rootfs
++config="$path/config"
++if grep -q '^lxc.rootfs' $config 2>/dev/null ; then
++    rootfs=`grep 'lxc.rootfs =' $config | awk -F= '{ print $2 }'`
++else
++    rootfs=$path/rootfs
++fi
+ 
+ install_debian $rootfs
+ if [ $? -ne 0 ]; then
+Index: lxc-fixbugs/templates/lxc-opensuse.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-opensuse.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-opensuse.in	2012-08-17 12:43:49.425233313 -0500
+@@ -254,12 +254,12 @@
+     rootfs=$2
+     name=$3
+ 
++    grep -q "^lxc.rootfs" $path/config 2>/dev/null || echo "lxc.rootfs = $rootfs" >> $path/config
+     cat <<EOF >> $path/config
+ lxc.utsname = $name
+ 
+ lxc.tty = 4
+ lxc.pts = 1024
+-lxc.rootfs = $rootfs
+ lxc.mount  = $path/fstab
+ # uncomment the next line to run the container unconfined:
+ #lxc.aa_profile = unconfined
+@@ -366,7 +366,13 @@
+     exit 1
+ fi
+ 
+-rootfs=$path/rootfs
++# detect rootfs
++config="$path/config"
++if grep -q '^lxc.rootfs' $config 2>/dev/null ; then
++    rootfs=`grep 'lxc.rootfs =' $config | awk -F= '{ print $2 }'`
++else
++    rootfs=$path/rootfs
++fi
+ 
+ install_opensuse $rootfs
+ if [ $? -ne 0 ]; then
+Index: lxc-fixbugs/templates/lxc-sshd.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-sshd.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-sshd.in	2012-08-17 12:44:09.937232563 -0500
+@@ -109,10 +109,10 @@
+     rootfs=$2
+     name=$3
+ 
++    grep -q "^lxc.rootfs" $path/config 2>/dev/null || echo "lxc.rootfs = $rootfs" >> $path/config
+     cat <<EOF >> $path/config
+ lxc.utsname = $name
+ lxc.pts = 1024
+-lxc.rootfs = $rootfs
+ # uncomment the next line to run the container unconfined:
+ #lxc.aa_profile = unconfined
+ lxc.mount.entry=/dev dev none ro,bind 0 0
+@@ -206,7 +206,13 @@
+     exit 1
+ fi
+ 
+-rootfs=$path/rootfs
++# detect rootfs
++config="$path/config"
++if grep -q '^lxc.rootfs' $config 2>/dev/null ; then
++    rootfs=`grep 'lxc.rootfs =' $config | awk -F= '{ print $2 }'`
++else
++    rootfs=$path/rootfs
++fi
+ 
+ install_sshd $rootfs
+ if [ $? -ne 0 ]; then
+Index: lxc-fixbugs/doc/lxc-create.sgml.in
+===================================================================
+--- lxc-fixbugs.orig/doc/lxc-create.sgml.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/doc/lxc-create.sgml.in	2012-08-17 11:49:13.701352838 -0500
+@@ -123,9 +123,13 @@
+ 	</term>
+ 	<listitem>
+ 	  <para>
+-	    'backingstore' is one of 'none', 'lvm', or 'btrfs'.  The
++	    'backingstore' is one of 'none', 'dir', 'lvm', or 'btrfs'.  The
+ 	    default is 'none', meaning that the container root filesystem
+ 	    will be a directory under <filename>@LXCPATH@/container/rootfs</filename>.
++	    'dir' has the same meaning as 'none', but also allows the optional
++	    <replaceable>--dir ROOTFS</replaceable> to be specified, meaning
++	    that the container rootfs should be placed under the specified path,
++	    rather than the default.
+ 	    The option 'btrfs' need not be specified as it will be used
+ 	    automatically if the <filename>@LXCPATH@</filename> filesystem is found to
+ 	    be btrfs.  If backingstore is 'lvm', then an lvm block device will be
+Index: lxc-fixbugs/src/lxc/lxc-destroy.in
+===================================================================
+--- lxc-fixbugs.orig/src/lxc/lxc-destroy.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/src/lxc/lxc-destroy.in	2012-08-17 12:21:11.493282860 -0500
+@@ -98,15 +98,19 @@
+ # If LVM partition, destroy it.  If anything else, ignore it.  We'll support
+ # deletion of others later.
+ rootdev=`grep lxc.rootfs $lxc_path/$lxc_name/config 2>/dev/null | sed -e 's/^[^/]*/\//'`
+-if [ ! -z "$rootdev" ]; then
++if [ -n "$rootdev" ]; then
+ 	if [ -b "$rootdev" -o -h "$rootdev" ]; then
+ 		lvdisplay $rootdev > /dev/null 2>&1
+ 		if [ $? -eq 0 ]; then
+ 			echo "removing backing store: $rootdev"
+ 			lvremove -f $rootdev
+ 		fi
++	elif [ -d "$rootdev" ]; then
++		# In case rootfs is not under $lxc_path/$lxc_name, remove it
++		rm -rf --one-file-system --preserve-root $rootdev
+ 	fi
+ fi
++
+ # recursively remove the container to remove old container configuration
+ rm -rf --one-file-system --preserve-root $lxc_path/$lxc_name
+ 

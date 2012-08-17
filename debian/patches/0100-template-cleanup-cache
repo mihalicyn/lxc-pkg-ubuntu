@@ -1,0 +1,127 @@
+Description: Clean up cache if cache build is interrupted
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Forwarded: yes
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/1037331
+
+Index: lxc-fixbugs/templates/lxc-ubuntu.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-ubuntu.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-ubuntu.in	2012-08-17 13:54:31.873078514 -0500
+@@ -147,6 +147,12 @@
+     fi
+ }
+ 
++cleanup()
++{
++    rm -rf $cache/partial-$arch
++    rm -rf $cache/rootfs-$arch
++}
++
+ download_ubuntu()
+ {
+     cache=$1
+@@ -156,6 +162,7 @@
+     packages=vim,ssh
+     echo "installing packages: $packages"
+ 
++    trap cleanup EXIT SIGHUP SIGINT SIGTERM
+     # check the mini ubuntu was not already downloaded
+     mkdir -p "$cache/partial-$arch"
+     if [ $? -ne 0 ]; then
+@@ -203,6 +210,10 @@
+     fi
+ 
+     mv "$1/partial-$arch" "$1/rootfs-$arch"
++    trap EXIT
++    trap SIGINT
++    trap SIGTERM
++    trap SIGHUP
+     echo "Download complete"
+     return 0
+ }
+Index: lxc-fixbugs/templates/lxc-ubuntu-cloud.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-ubuntu-cloud.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-ubuntu-cloud.in	2012-08-17 13:55:32.297076309 -0500
+@@ -256,6 +256,11 @@
+ 
+ filename=`basename $url2`
+ 
++wgetcleanup()
++{
++	rm -f $filename
++}
++
+ buildcleanup()
+ {
+     cd $rootfs
+@@ -274,7 +279,7 @@
+     xdir=`mktemp -d -p .`
+     tarname=`basename $url`
+     imgname="$release-*-cloudimg-$arch.img"
+-    trap buildcleanup EXIT
++    trap buildcleanup EXIT SIGHUP SIGINT SIGTERM
+     if [ $flushcache -eq 1 -o ! -f $cache/$tarname ]; then
+         rm -f $tarname
+         echo "Downloading cloud image from $url"
+@@ -289,6 +294,9 @@
+     rmdir $xdir
+     echo "New cloud image cache created"
+     trap EXIT
++    trap SIGHUP
++    trap SIGINT
++    trap SIGTERM
+ }
+ 
+ mkdir -p /var/lock/subsys/
+@@ -301,9 +309,14 @@
+         rm -f $filename
+     fi
+ 
++    trap wgetcleanup EXIT SIGHUP SIGINT SIGTERM
+     if [ ! -f $filename ]; then
+        wget $url2 || build_root_tgz $url1 $filename
+     fi
++    trap EXIT
++    trap SIGHUP
++    trap SIGINT
++    trap SIGTERM
+ 
+     echo "Extracting container rootfs"
+     mkdir -p $rootfs
+Index: lxc-fixbugs/templates/lxc-debian.in
+===================================================================
+--- lxc-fixbugs.orig/templates/lxc-debian.in	2012-08-17 11:15:50.246248000 -0500
++++ lxc-fixbugs/templates/lxc-debian.in	2012-08-17 13:54:31.065078542 -0500
+@@ -95,6 +95,12 @@
+     return 0
+ }
+ 
++cleanup()
++{
++    rm -rf $cache/partial-$SUITE-$arch
++    rm -rf $cache/rootfs-$SUITE-$arch
++}
++
+ download_debian()
+ {
+     packages=\
+@@ -111,6 +117,7 @@
+     cache=$1
+     arch=$2
+ 
++    trap cleanup EXIT SIGHUP SIGINT SIGTERM
+     # check the mini debian was not already downloaded
+     mkdir -p "$cache/partial-$SUITE-$arch"
+     if [ $? -ne 0 ]; then
+@@ -130,6 +137,10 @@
+ 
+     mv "$1/partial-$SUITE-$arch" "$1/rootfs-$SUITE-$arch"
+     echo "Download complete."
++    trap EXIT
++    trap SIGINT
++    trap SIGTERM
++    trap SIGHUP
+ 
+     return 0
+ }

@@ -1,3 +1,16 @@
+lxc (0.8.0~rc1-4ubuntu26) quantal; urgency=low
+
+  * 0100-template-cleanup-cache: clean up template cache if interrupted
+    during build. (LP: #1037331)
+  * 0101-template-empty-apt-cache: do an apt-cache clean after creating
+    a new cache.  (LP: #1037626)
+  * 0102-lxc-start-d-check-privs: exit early (with failure) if starting a
+    daemonized container with insufficient privilege.  (LP: #918327)
+  * 0103-make-rootfs-location-optional: allow custom location for a
+    container rootfs to be specified.  (LP: #1019398)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Fri, 17 Aug 2012 09:44:02 -0500
+
 lxc (0.8.0~rc1-4ubuntu25) quantal; urgency=low
 
   * debian/control: only depend on libseccomp-dev on i386 and amd64, and
