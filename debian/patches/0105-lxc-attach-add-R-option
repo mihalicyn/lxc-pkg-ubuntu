@@ -1,0 +1,226 @@
+When attaching to only some namespaces of the container but not the mount
+namespace, the contents of /sys and /proc of the host system do not properly
+reflect the context of the container's pid and/or network namespaces, and
+possibly others.
+
+The introduced -R option adds the possibility to additionally unshare the
+mount namespace (when it is not being attached) and remount /sys and /proc
+in order for those filesystems to properly reflect the container's context
+even when only attaching to some of the namespaces.
+
+Signed-off-by: Christian Seiler <christian@iwakd.de>
+Cc: Stéphane Graber <stgraber@ubuntu.com>
+Cc: Daniel Lezcano <daniel.lezcano@free.fr>
+Acked-by: Serge Hallyn <serge.hallyn@canonical.com>
+---
+ doc/lxc-attach.sgml.in |   42 ++++++++++++++++++++++++++++++++++--------
+ src/lxc/attach.c       |   44 ++++++++++++++++++++++++++++++++++++++++++++
+ src/lxc/attach.h       |    1 +
+ src/lxc/lxc_attach.c   |   27 ++++++++++++++++++++++++++-
+ 4 files changed, 105 insertions(+), 9 deletions(-)
+
+Index: lxc-0.8.0~rc1/doc/lxc-attach.sgml.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/doc/lxc-attach.sgml.in	2012-08-21 16:08:59.000000000 -0500
++++ lxc-0.8.0~rc1/doc/lxc-attach.sgml.in	2012-08-21 16:09:39.140170707 -0500
+@@ -50,7 +50,7 @@
+     <cmdsynopsis><command>lxc-attach <replaceable>-n
+     name</replaceable> <optional>-a
+     arch</optional> <optional>-e</optional> <optional>-s
+-    namespaces</optional>
++    namespaces</optional> <optional>-R</optional>
+     <optional>-- command</optional></command></cmdsynopsis>
+   </refsynopsisdiv>
+ 
+@@ -146,6 +146,29 @@
+ 	</listitem>
+       </varlistentry>
+ 
++      <varlistentry>
++	<term>
++	  <option>-R, --remount-sys-proc</option>
++	</term>
++	<listitem>
++	  <para>
++	    When using <option>-s</option> and the mount namespace is not
++	    included, this flag will cause <command>lxc-attach</command>
++	    to remount <replaceable>/proc</replaceable> and
++	    <replaceable>/sys</replaceable> to reflect the current other
++	    namespace contexts.
++	  </para>
++	  <para>
++	    Please see the <emphasis>Notes</emphasis> section for more
++	    details.
++	  </para>
++	  <para>
++	    This option will be ignored if one tries to attach to the
++	    mount namespace anyway.
++	  </para>
++	</listitem>
++      </varlistentry>
++
+     </variablelist>
+ 
+   </refsect1>
+@@ -230,13 +253,16 @@
+       the network namespace.
+     </para>
+     <para>
+-      A workaround is to use <command>lxc-unshare</command> to unshare
+-      the mount namespace after using <command>lxc-attach</command> with
+-      <replaceable>-s PID</replaceable> and/or <replaceable>-s
+-      NETWORK</replaceable> and then unmount and then mount again both
+-      pseudo-filesystems within that new mount namespace, before
+-      executing a program/script that relies on this information to be
+-      correct.
++      To work around this problem, the <option>-R</option> flag provides
++      the option to remount <replaceable>/proc</replaceable> and
++      <replaceable>/sys</replaceable> in order for them to reflect the
++      network/pid namespace context of the attached process. In order
++      not to interfere with the host's actual filesystem, the mount
++      namespace will be unshared (like <command>lxc-unshare</command>
++      does) before this is done, esentially giving the process a new
++      mount namespace, which is identical to the hosts's mount namespace
++      except for the <replaceable>/proc</replaceable> and
++      <replaceable>/sys</replaceable> filesystems.
+     </para>
+   </refsect1>
+ 
+Index: lxc-0.8.0~rc1/src/lxc/attach.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/attach.c	2012-08-21 16:08:59.000000000 -0500
++++ lxc-0.8.0~rc1/src/lxc/attach.c	2012-08-21 16:09:52.908170203 -0500
+@@ -30,6 +30,7 @@
+ #include <fcntl.h>
+ #include <sys/param.h>
+ #include <sys/prctl.h>
++#include <sys/mount.h>
+ 
+ #if !HAVE_DECL_PR_CAPBSET_DROP
+ #define PR_CAPBSET_DROP 24
+@@ -321,6 +322,49 @@
+ 	}
+ 
+ 	return 0;
++}
++
++int lxc_attach_remount_sys_proc()
++{
++	int ret;
++
++	ret = unshare(CLONE_NEWNS);
++	if (ret < 0) {
++		SYSERROR("failed to unshare mount namespace: %s", strerror(errno));
++		return -1;
++	}
++
++	/* assume /proc is always mounted, so remount it */
++	ret = umount2("/proc", MNT_DETACH);
++	if (ret < 0) {
++		SYSERROR("failed to unmount /proc: %s", strerror(errno));
++		return -1;
++	}
++
++	ret = mount("none", "/proc", "proc", 0, NULL);
++	if (ret < 0) {
++		SYSERROR("failed to remount /proc: %s", strerror(errno));
++		return -1;
++	}
++
++	/* try to umount /sys - if it's not a mount point,
++	 * we'll get EINVAL, then we ignore it because it
++	 * may not have been mounted in the first place
++	 */
++	ret = umount2("/sys", MNT_DETACH);
++	if (ret < 0 && errno != EINVAL) {
++		SYSERROR("failed to unmount /sys: %s", strerror(errno));
++		return -1;
++	} else if (ret == 0) {
++		/* remount it */
++		ret = mount("none", "/sys", "sysfs", 0, NULL);
++		if (ret < 0) {
++			SYSERROR("failed to remount /sys: %s", strerror(errno));
++			return -1;
++		}
++	}
++
++	return 0;
+ }
+ 
+ int lxc_attach_drop_privs(struct lxc_proc_context_info *ctx)
+Index: lxc-0.8.0~rc1/src/lxc/attach.h
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/attach.h	2012-08-21 16:09:21.000000000 -0500
++++ lxc-0.8.0~rc1/src/lxc/attach.h	2012-08-21 16:09:39.152170705 -0500
+@@ -43,6 +43,7 @@
+ 
+ extern int lxc_attach_proc_to_cgroups(pid_t pid, struct lxc_proc_context_info *ctx);
+ extern int lxc_attach_to_ns(pid_t other_pid, int which);
++extern int lxc_attach_remount_sys_proc();
+ extern int lxc_attach_drop_privs(struct lxc_proc_context_info *ctx);
+ 
+ #endif
+Index: lxc-0.8.0~rc1/src/lxc/lxc_attach.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/lxc_attach.c	2012-08-21 16:08:59.000000000 -0500
++++ lxc-0.8.0~rc1/src/lxc/lxc_attach.c	2012-08-21 16:09:39.156170706 -0500
+@@ -48,18 +48,21 @@
+ 	{"elevated-privileges", no_argument, 0, 'e'},
+ 	{"arch", required_argument, 0, 'a'},
+ 	{"namespaces", required_argument, 0, 's'},
++	{"remount-sys-proc", no_argument, 0, 'R'},
+ 	LXC_COMMON_OPTIONS
+ };
+ 
+ static int elevated_privileges = 0;
+ static signed long new_personality = -1;
+ static int namespace_flags = -1;
++static int remount_sys_proc = 0;
+ 
+ static int my_parser(struct lxc_arguments* args, int c, char* arg)
+ {
+ 	int ret;
+ 	switch (c) {
+ 	case 'e': elevated_privileges = 1; break;
++	case 'R': remount_sys_proc = 1; break;
+ 	case 'a':
+ 		new_personality = lxc_config_parse_arch(arg);
+ 		if (new_personality < 0) {
+@@ -99,7 +102,12 @@
+                     but just to the following OR'd list of flags:\n\
+                     MOUNT, PID, UTSNAME, IPC, USER or NETWORK\n\
+                     WARNING: Using -s implies -e, it may therefore\n\
+-                    leak privileges into the container. Use with care.",
++                    leak privileges into the container. Use with care.\n\
++  -R, --remount-sys-proc\n\
++                    Remount /sys and /proc if not attaching to the\n\
++                    mount namespace when using -s in order to properly\n\
++                    reflect the correct namespace context. See the\n\
++                    lxc-attach(1) manual page for details.\n",
+ 	.options  = my_longopts,
+ 	.parser   = my_parser,
+ 	.checker  = NULL,
+@@ -206,6 +214,23 @@
+ 			return -1;
+ 		}
+ 
++		/* if the user wants to attach to namespaces that don't
++		 * include the mount namespace, and the -R option was
++		 * specified, unshare the mount namespace (but DON'T
++		 * attach to that of the container) and remount /sys and
++		 * /proc in that new mount namespace so that they
++		 * represent the current state of the other namespaces
++		 * (i.e. /sys/class/net reflects the current network
++		 * namespace and /proc contents reflects the current
++		 * pid namespace)
++		 */
++		if (namespace_flags != -1 && !(namespace_flags & CLONE_NEWNS) && remount_sys_proc) {
++			ret = lxc_attach_remount_sys_proc();
++			if (ret < 0) {
++				return -1;
++			}
++		}
++
+ 		if (curdir && chdir(curdir))
+ 			WARN("could not change directory to '%s'", curdir);
+ 

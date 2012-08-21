@@ -1,0 +1,476 @@
+This patch adds the -s/--namespaces option to lxc-attach that works
+analogously to lxc-unshare, allowing the user to select the namespaces the
+process should be attached to.
+
+User namespaces are supported, under the assumption that the file in
+/proc/pid/ns will be called 'usr'. Currently, user namespaces will be
+skipped (without having lxc-attach fail, unlike for other namespaces) if the
+kernel lacks support.
+
+Signed-off-by: Christian Seiler <christian@iwakd.de>
+Cc: Stéphane Graber <stgraber@ubuntu.com>
+Cc: Daniel Lezcano <daniel.lezcano@free.fr>
+Acked-by: Serge Hallyn <serge.hallyn@canonical.com>
+---
+ doc/lxc-attach.sgml.in |   99 +++++++++++++++++++++++++++++++++++++++++++++--
+ src/lxc/attach.c       |   72 ++++++++++++++++++++++++++++++++--
+ src/lxc/attach.h       |    2 +-
+ src/lxc/lxc_attach.c   |   28 ++++++++++++-
+ src/lxc/lxc_unshare.c  |   46 ----------------------
+ src/lxc/namespace.c    |   46 ++++++++++++++++++++++
+ src/lxc/namespace.h    |    3 +
+ 7 files changed, 236 insertions(+), 60 deletions(-)
+
+Index: lxc-0.8.0~rc1/doc/lxc-attach.sgml.in
+===================================================================
+--- lxc-0.8.0~rc1.orig/doc/lxc-attach.sgml.in	2012-03-01 17:02:37.000000000 -0600
++++ lxc-0.8.0~rc1/doc/lxc-attach.sgml.in	2012-08-21 16:08:59.384172156 -0500
+@@ -49,7 +49,8 @@
+   <refsynopsisdiv>
+     <cmdsynopsis><command>lxc-attach <replaceable>-n
+     name</replaceable> <optional>-a
+-    arch</optional> <optional>-e</optional>
++    arch</optional> <optional>-e</optional> <optional>-s
++    namespaces</optional>
+     <optional>-- command</optional></command></cmdsynopsis>
+   </refsynopsisdiv>
+ 
+@@ -122,6 +123,29 @@
+ 	</listitem>
+       </varlistentry>
+ 
++      <varlistentry>
++	<term>
++	  <option>-s, --namespaces <replaceable>namespaces</replaceable></option>
++	</term>
++	<listitem>
++	  <para>
++	    Specify the namespaces to attach to, as a pipe-separated liste,
++	    e.g. <replaceable>NETWORK|IPC</replaceable>. Allowed values are
++	    <replaceable>MOUNT</replaceable>, <replaceable>PID</replaceable>,
++	    <replaceable>UTSNAME</replaceable>, <replaceable>IPC</replaceable>,
++	    <replaceable>USER </replaceable> and
++	    <replaceable>NETWORK</replaceable>. This allows one to change
++	    the context of the process to e.g. the network namespace of the
++	    container while retaining the other namespaces as those of the
++	    host.
++	  </para>
++	  <para>
++	    <emphasis>Important:</emphasis> This option implies
++	    <option>-e</option>.
++	  </para>
++	</listitem>
++      </varlistentry>
++
+     </variablelist>
+ 
+   </refsect1>
+@@ -144,19 +168,84 @@
+       </para>
+       <para>
+         To deactivate the network link eth1 of a running container that
+-        does not have the NET_ADMIN capability, use the <option>-e</option>
+-        option to use increased capabilities:
++        does not have the NET_ADMIN capability, use either the
++        <option>-e</option> option to use increased capabilities,
++        assuming the <command>ip</command> tool is installed:
+         <programlisting>
+           lxc-attach -n container -e -- /sbin/ip link delete eth1
+         </programlisting>
++        Or, alternatively, use the <option>-s</option> to use the
++        tools installed on the host outside the container:
++        <programlisting>
++          lxc-attach -n container -s NETWORK -- /sbin/ip link delete eth1
++        </programlisting>
+       </para>
+   </refsect1>
+ 
+   <refsect1>
++    <title>Compatibility</title>
++    <para>
++      Attaching completely (including the pid and mount namespaces) to a
++      container requires a patched kernel, please see the lxc website for
++      details. <command>lxc-attach</command> will fail in that case if
++      used with an unpatched kernel.
++    </para>
++    <para>
++      Nevertheless, it will succeed on an unpatched kernel of version 3.0
++      or higher if the <option>-s</option> option is used to restrict the
++      namespaces that the process is to be attached to to one or more of 
++      <replaceable>NETWORK</replaceable>, <replaceable>IPC</replaceable>
++      and <replaceable>UTSNAME</replaceable>.
++    </para>
++    <para>
++      Attaching to user namespaces is currently completely unsupported
++      by the kernel. User namespaces will be skipped (but will not cause
++      <command>lxc-attach</command> to fail) unless used with a future
++      version of the kernel that supports this.
++    </para>
++  </refsect1>
++
++  <refsect1>
++    <title>Notes</title>
++    <para>
++      The Linux <replaceable>/proc</replaceable> and
++      <replaceable>/sys</replaceable> filesystems contain information
++      about some quantities that are affected by namespaces, such as
++      the directories named after process ids in
++      <replaceable>/proc</replaceable> or the network interface infromation
++      in <replaceable>/sys/class/net</replaceable>. The namespace of the
++      process mounting the pseudo-filesystems determines what information
++      is shown, <emphasis>not</emphasis> the namespace of the process
++      accessing <replaceable>/proc</replaceable> or
++      <replaceable>/sys</replaceable>.
++    </para>
++    <para>
++      If one uses the <option>-s</option> option to only attach to
++      the pid namespace of a container, but not its mount namespace
++      (which will contain the <replaceable>/proc</replaceable> of the
++      container and not the host), the contents of <option>/proc</option>
++      will reflect that of the host and not the container. Analogously,
++      the same issue occurs when reading the contents of
++      <replaceable>/sys/class/net</replaceable> and attaching to just
++      the network namespace.
++    </para>
++    <para>
++      A workaround is to use <command>lxc-unshare</command> to unshare
++      the mount namespace after using <command>lxc-attach</command> with
++      <replaceable>-s PID</replaceable> and/or <replaceable>-s
++      NETWORK</replaceable> and then unmount and then mount again both
++      pseudo-filesystems within that new mount namespace, before
++      executing a program/script that relies on this information to be
++      correct.
++    </para>
++  </refsect1>
++
++  <refsect1>
+     <title>Security</title>
+     <para>
+-      The <option>-e</option> should be used with care, as it may break
+-      the isolation of the containers if used improperly.
++      The <option>-e</option> and <option>-s</option> options should
++      be used with care, as it may break the isolation of the containers
++      if used improperly.
+     </para>
+   </refsect1>
+ 
+Index: lxc-0.8.0~rc1/src/lxc/attach.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/attach.c	2012-03-01 15:42:19.000000000 -0600
++++ lxc-0.8.0~rc1/src/lxc/attach.c	2012-08-21 16:08:59.384172156 -0500
+@@ -226,13 +226,23 @@
+ 	return 0;
+ }
+ 
+-int lxc_attach_to_ns(pid_t pid)
++int lxc_attach_to_ns(pid_t pid, int which)
+ {
+ 	char path[MAXPATHLEN];
+-	char *ns[] = { "pid", "mnt", "net", "ipc", "uts" };
+-	const int size = sizeof(ns) / sizeof(char *);
++	/* TODO: we assume that the file in /proc for attaching to user
++	 * namespaces will be called /proc/$pid/ns/usr, in accordance
++	 * with the naming convention of previous namespaces. Once the
++	 * kernel really supports setns() on a user namespace, make sure
++	 * the array here matches the array in the kernel
++	 */
++	static char *ns[] = { "mnt", "pid", "uts", "ipc", "usr", "net" };
++	static int flags[] = {
++		CLONE_NEWNS, CLONE_NEWPID, CLONE_NEWUTS, CLONE_NEWIPC,
++		CLONE_NEWUSER, CLONE_NEWNET
++	};
++	static const int size = sizeof(ns) / sizeof(char *);
+ 	int fd[size];
+-	int i;
++	int i, j, saved_errno;
+ 
+ 	snprintf(path, MAXPATHLEN, "/proc/%d/ns", pid);
+ 	if (access(path, X_OK)) {
+@@ -241,17 +251,69 @@
+ 	}
+ 
+ 	for (i = 0; i < size; i++) {
++		/* ignore if we are not supposed to attach
++		 * to that namespace
++		 */
++		if (which != -1 && !(which & flags[i])) {
++			fd[i] = -1;
++			continue;
++		}
+ 		snprintf(path, MAXPATHLEN, "/proc/%d/ns/%s", pid, ns[i]);
+ 		fd[i] = open(path, O_RDONLY);
+ 		if (fd[i] < 0) {
++			/* there is currently no support in the kernel for
++			 * attaching to user namespaces - therefore, we
++			 * ignore the error, if the file does not exist
++			 */
++			if (flags[i] == CLONE_NEWUSER && errno == ENOENT) {
++				if (which != -1) {
++					/* we don't want the error
++					 * message on every full attach,
++					 * so we only show it if the
++					 * user really requested it
++					 * explicitly
++					 */
++					ERROR("Kernel does not support "
++					      "attaching to user "
++					      "namespaces, skipping.");
++				} else {
++					/* but do show it as a debug
++					 * message otherwise, so users
++					 * aren't completely left in the
++					 * dark
++					 */
++					DEBUG("Kernel does not support "
++					      "attaching to user "
++					      "namespaces, skipping.");
++				}
++				fd[i] = -1;
++				continue;
++			}
++
++			saved_errno = errno;
++
++			/* close all already opened files before we return
++			 * an error, so we don't leak file descriptors if
++			 * the caller decides to continue nontheless
++			 */
++			for (j = 0; j < i; j++)
++				close(fd[j]);
++
+ 			SYSERROR("failed to open '%s'", path);
++			errno = saved_errno;
+ 			return -1;
+ 		}
+ 	}
+ 
+ 	for (i = 0; i < size; i++) {
+-		if (setns(fd[i], 0)) {
++		if (fd[i] >= 0 && setns(fd[i], 0)) {
++			saved_errno = errno;
++
++			for (j = i; j < size; j++)
++				close(fd[j]);
++
+ 			SYSERROR("failed to set namespace '%s'", ns[i]);
++			errno = saved_errno;
+ 			return -1;
+ 		}
+ 
+Index: lxc-0.8.0~rc1/src/lxc/attach.h
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/attach.h	2012-03-01 15:42:19.000000000 -0600
++++ lxc-0.8.0~rc1/src/lxc/attach.h	2012-08-21 16:09:21.224171360 -0500
+@@ -42,7 +42,7 @@
+ extern void lxc_proc_free_context_info(struct lxc_proc_context_info *info);
+ 
+ extern int lxc_attach_proc_to_cgroups(pid_t pid, struct lxc_proc_context_info *ctx);
+-extern int lxc_attach_to_ns(pid_t other_pid);
++extern int lxc_attach_to_ns(pid_t other_pid, int which);
+ extern int lxc_attach_drop_privs(struct lxc_proc_context_info *ctx);
+ 
+ #endif
+Index: lxc-0.8.0~rc1/src/lxc/lxc_attach.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/lxc_attach.c	2012-03-01 15:42:19.000000000 -0600
++++ lxc-0.8.0~rc1/src/lxc/lxc_attach.c	2012-08-21 16:08:59.384172156 -0500
+@@ -40,20 +40,24 @@
+ #include "start.h"
+ #include "sync.h"
+ #include "log.h"
++#include "namespace.h"
+ 
+ lxc_log_define(lxc_attach_ui, lxc);
+ 
+ static const struct option my_longopts[] = {
+ 	{"elevated-privileges", no_argument, 0, 'e'},
+ 	{"arch", required_argument, 0, 'a'},
++	{"namespaces", required_argument, 0, 's'},
+ 	LXC_COMMON_OPTIONS
+ };
+ 
+ static int elevated_privileges = 0;
+ static signed long new_personality = -1;
++static int namespace_flags = -1;
+ 
+ static int my_parser(struct lxc_arguments* args, int c, char* arg)
+ {
++	int ret;
+ 	switch (c) {
+ 	case 'e': elevated_privileges = 1; break;
+ 	case 'a':
+@@ -63,6 +67,12 @@
+ 			return -1;
+ 		}
+ 		break;
++	case 's':
++		namespace_flags = 0;
++		ret = lxc_fill_namespace_flags(arg, &namespace_flags);
++		if (ret)
++			return -1;
++		break;
+ 	}
+ 
+ 	return 0;
+@@ -83,7 +93,13 @@
+                     WARNING: This may leak privleges into the container.\n\
+                     Use with care.\n\
+   -a, --arch=ARCH   Use ARCH for program instead of container's own\n\
+-                    architecture.\n",
++                    architecture.\n\
++  -s, --namespaces=FLAGS\n\
++                    Don't attach to all the namespaces of the container\n\
++                    but just to the following OR'd list of flags:\n\
++                    MOUNT, PID, UTSNAME, IPC, USER or NETWORK\n\
++                    WARNING: Using -s implies -e, it may therefore\n\
++                    leak privileges into the container. Use with care.",
+ 	.options  = my_longopts,
+ 	.parser   = my_parser,
+ 	.checker  = NULL,
+@@ -111,7 +127,13 @@
+ 			   my_args.progname, my_args.quiet);
+ 	if (ret)
+ 		return ret;
+-
++	
++	/* if we do not attach to all namespaces, we will assume
++	 * elevated privileges by default anyway.
++	 */
++	if (namespace_flags != -1)
++		elevated_privileges = 1;
++	
+ 	init_pid = get_init_pid(my_args.name);
+ 	if (init_pid < 0) {
+ 		ERROR("failed to get the init pid");
+@@ -178,7 +200,7 @@
+ 
+ 		curdir = get_current_dir_name();
+ 
+-		ret = lxc_attach_to_ns(init_pid);
++		ret = lxc_attach_to_ns(init_pid, namespace_flags);
+ 		if (ret < 0) {
+ 			ERROR("failed to enter the namespace");
+ 			return -1;
+Index: lxc-0.8.0~rc1/src/lxc/lxc_unshare.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/lxc_unshare.c	2012-08-21 16:08:28.000000000 -0500
++++ lxc-0.8.0~rc1/src/lxc/lxc_unshare.c	2012-08-21 16:08:59.384172156 -0500
+@@ -84,52 +84,6 @@
+ 	return uid;
+ }
+ 
+-static char *namespaces_list[] = {
+-	"MOUNT", "PID", "UTSNAME", "IPC",
+-	"USER", "NETWORK"
+-};
+-static int cloneflags_list[] = {
+-	CLONE_NEWNS, CLONE_NEWPID, CLONE_NEWUTS, CLONE_NEWIPC,
+-	CLONE_NEWUSER, CLONE_NEWNET
+-};
+-
+-static int lxc_namespace_2_cloneflag(char *namespace)
+-{
+-	int i, len;
+-	len = sizeof(namespaces_list)/sizeof(namespaces_list[0]);
+-	for (i = 0; i < len; i++)
+-		if (!strcmp(namespaces_list[i], namespace))
+-			return cloneflags_list[i];
+-
+-	ERROR("invalid namespace name %s", namespace);
+-	return -1;
+-}
+-
+-static int lxc_fill_namespace_flags(char *flaglist, int *flags)
+-{
+-	char *token, *saveptr = NULL;
+-	int aflag;
+-
+-	if (!flaglist) {
+-		ERROR("need at least one namespace to unshare");
+-		return -1;
+-	}
+-
+-	token = strtok_r(flaglist, "|", &saveptr);
+-	while (token) {
+-
+-		aflag = lxc_namespace_2_cloneflag(token);
+-		if (aflag < 0)
+-			return -1;
+-
+-		*flags |= aflag;
+-
+-		token = strtok_r(NULL, "|", &saveptr);
+-	}
+-	return 0;
+-}
+-
+-
+ struct start_arg {
+ 	char ***args;
+ 	int *flags;
+Index: lxc-0.8.0~rc1/src/lxc/namespace.c
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/namespace.c	2012-03-01 15:42:19.000000000 -0600
++++ lxc-0.8.0~rc1/src/lxc/namespace.c	2012-08-21 16:08:59.384172156 -0500
+@@ -69,3 +69,49 @@
+ 
+ 	return ret;
+ }
++
++static char *namespaces_list[] = {
++	"MOUNT", "PID", "UTSNAME", "IPC",
++	"USER", "NETWORK"
++};
++static int cloneflags_list[] = {
++	CLONE_NEWNS, CLONE_NEWPID, CLONE_NEWUTS, CLONE_NEWIPC,
++	CLONE_NEWUSER, CLONE_NEWNET
++};
++
++int lxc_namespace_2_cloneflag(char *namespace)
++{
++	int i, len;
++	len = sizeof(namespaces_list)/sizeof(namespaces_list[0]);
++	for (i = 0; i < len; i++)
++		if (!strcmp(namespaces_list[i], namespace))
++			return cloneflags_list[i];
++
++	ERROR("invalid namespace name %s", namespace);
++	return -1;
++}
++
++int lxc_fill_namespace_flags(char *flaglist, int *flags)
++{
++	char *token, *saveptr = NULL;
++	int aflag;
++
++	if (!flaglist) {
++		ERROR("need at least one namespace to unshare/attach");
++		return -1;
++	}
++
++	token = strtok_r(flaglist, "|", &saveptr);
++	while (token) {
++
++		aflag = lxc_namespace_2_cloneflag(token);
++		if (aflag < 0)
++			return -1;
++
++		*flags |= aflag;
++
++		token = strtok_r(NULL, "|", &saveptr);
++	}
++	return 0;
++}
++
+Index: lxc-0.8.0~rc1/src/lxc/namespace.h
+===================================================================
+--- lxc-0.8.0~rc1.orig/src/lxc/namespace.h	2012-03-01 15:42:19.000000000 -0600
++++ lxc-0.8.0~rc1/src/lxc/namespace.h	2012-08-21 16:08:59.384172156 -0500
+@@ -50,4 +50,7 @@
+ 
+ extern pid_t lxc_clone(int (*fn)(void *), void *arg, int flags);
+ 
++extern int lxc_namespace_2_cloneflag(char *namespace);
++extern int lxc_fill_namespace_flags(char *flaglist, int *flags);
++
+ #endif

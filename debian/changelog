@@ -1,3 +1,12 @@
+lxc (0.8.0~rc1-4ubuntu27) quantal; urgency=low
+
+  * Add patches from mailing list to support per-namespace attach with
+    lxc-attach.
+    - 0104-add-option-to-lxc-attach-to-select-ns
+    - 0105-lxc-attach-add-R-option
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Tue, 21 Aug 2012 16:10:08 -0500
+
 lxc (0.8.0~rc1-4ubuntu26) quantal; urgency=low
 
   * 0100-template-cleanup-cache: clean up template cache if interrupted

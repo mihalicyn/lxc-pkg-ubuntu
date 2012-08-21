@@ -71,3 +71,5 @@
 0101-template-empty-apt-cache
 0102-lxc-start-d-check-privs
 0103-make-rootfs-location-optional
+0104-add-option-to-lxc-attach-to-select-ns
+0105-lxc-attach-add-R-option
