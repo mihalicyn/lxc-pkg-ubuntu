@@ -1,0 +1,4171 @@
+Description: liblxc work by Serge Hallyn
+
+Index: lxc-api-and-python/runapitests.bash
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/runapitests.bash	2012-08-17 20:37:37.040994657 +0000
+@@ -0,0 +1,32 @@
++#!/bin/bash
++
++cleanup() {
++    rm -f /etc/lxc/test-busybox.conf
++    rm -f liblxc.so.0
++}
++
++if [ `id -u` -ne 0 ]; then
++	echo "Run as root"
++	exit 1
++fi
++
++cat > /etc/lxc/test-busybox.conf << EOF
++lxc.network.type=veth
++lxc.network.link=lxcbr0
++lxc.network.flags=up
++EOF
++
++[ -f liblxc.so.0 ] || ln -s src/lxc/liblxc.so ./liblxc.so.0
++export LD_LIBRARY_PATH=.
++TESTS="containertests locktests startone"
++for curtest in $TESTS; do
++	echo "running $curtest"
++	./src/tests/$curtest
++	if [ $? -ne 0 ]; then
++		echo "Test $curtest failed.  Stopping"
++		cleanup
++		exit 1
++	fi
++done
++echo "All tests passed"
++cleanup
+Index: lxc-api-and-python/configure.ac
+===================================================================
+--- lxc-api-and-python.orig/configure.ac	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/configure.ac	2012-08-17 20:37:37.044994657 +0000
+@@ -179,6 +179,8 @@
+ 	src/lxc/lxc-shutdown
+ 	src/lxc/lxc-destroy
+ 
++	src/tests/Makefile
++
+ ])
+ AC_CONFIG_COMMANDS([default],[[]],[[]])
+ AC_OUTPUT
+Index: lxc-api-and-python/src/Makefile.am
+===================================================================
+--- lxc-api-and-python.orig/src/Makefile.am	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/Makefile.am	2012-08-17 20:37:37.044994657 +0000
+@@ -1 +1 @@
+-SUBDIRS = lxc 
++SUBDIRS = lxc tests
+Index: lxc-api-and-python/src/tests/Makefile.am
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/tests/Makefile.am	2012-08-17 20:37:37.044994657 +0000
+@@ -0,0 +1,17 @@
++LDADD = ../lxc/liblxc.so -lrt
++containertests_SOURCES = containertests.c
++locktests_SOURCES = locktests.c
++startone_SOURCES = startone.c
++destroytest_SOURCES = destroytest.c
++saveconfig_SOURCES = saveconfig.c
++createtest_SOURCES = createtest.c
++shutdowntest_SOURCES = shutdowntest.c
++get_item_SOURCES = get_item.c
++getkeys_SOURCES = getkeys.c
++
++AM_CFLAGS=-I$(top_srcdir)/src \
++	-DLXCROOTFSMOUNT=\"$(LXCROOTFSMOUNT)\" \
++	-DLXCPATH=\"$(LXCPATH)\" \
++	-DLXCINITDIR=\"$(LXCINITDIR)\"
++
++bin_PROGRAMS = containertests locktests startone destroytest saveconfig createtest shutdowntest get_item getkeys
+Index: lxc-api-and-python/src/tests/locktests.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/tests/locktests.c	2012-08-17 20:37:37.044994657 +0000
+@@ -0,0 +1,239 @@
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++#include "../lxc/lxclock.h"
++#include <unistd.h>
++#include <signal.h>
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <stdlib.h>
++
++#define mycontainername "lxctest.sem"
++#define TIMEOUT_SECS 3
++
++int timedout;
++int pid_to_kill;
++
++void timeouthandler(int sig)
++{
++	// timeout received
++	timedout = 1;
++	kill(pid_to_kill, SIGTERM);
++}
++
++void starttimer(int secs)
++{
++	timedout = 0;
++	signal(SIGALRM, timeouthandler);
++	alarm(secs);
++}
++void stoptimer(void)
++{
++	alarm(0);
++	signal(SIGALRM, NULL);
++}
++
++int test_one_lock(sem_t *lock)
++{
++	int ret;
++	starttimer(TIMEOUT_SECS);
++	ret = lxclock(lock, TIMEOUT_SECS*2);
++	stoptimer();
++	if (ret == 0) {
++		lxcunlock(lock);
++		return 0;
++	}
++	if (timedout)
++		fprintf(stderr, "%d: timed out waiting for lock\n", __LINE__);
++	else
++		fprintf(stderr, "%d: failed to get single lock\n", __LINE__);
++	return 1;
++}
++
++/*
++ * get one lock.  Fork a second task to try to get a second lock,
++ * with infinite timeout.  If our alarm hits, kill the second
++ * task.  If second task does not
++ */
++int test_two_locks(sem_t *lock)
++{
++	int status;
++    int ret;
++
++	ret = lxclock(lock, 1);
++	if (ret) {
++		fprintf(stderr, "%d: Error getting first lock\n", __LINE__);
++		return 2;
++	}
++
++	pid_to_kill = fork();
++	if (pid_to_kill < 0) {
++		fprintf(stderr, "%d: Failed to fork\n", __LINE__);
++		lxcunlock(lock);
++		return 3;
++	}
++
++	if (pid_to_kill == 0) { // child
++		ret = lxclock(lock, TIMEOUT_SECS*2);
++		if (ret == 0) {
++			lxcunlock(lock);
++			exit(0);
++		}
++		fprintf(stderr, "%d: child, was not able to get lock\n", __LINE__);
++		exit(1);
++	}
++	starttimer(TIMEOUT_SECS);
++	waitpid(pid_to_kill, &status, 0);
++	stoptimer();
++	if (WIFEXITED(status)) {
++		// child exited normally - timeout didn't kill it
++		if (WEXITSTATUS(status) == 0)
++			fprintf(stderr, "%d: child was able to get the lock\n", __LINE__);
++		else
++			fprintf(stderr, "%d: child timed out too early\n", __LINE__);
++		lxcunlock(lock);
++		return 1;
++	}
++	lxcunlock(lock);
++	return 0;
++}
++
++/*
++ * get one lock.  try to get second lock, but asking for timeout.  If
++ * should return failure.  If our own alarm, set at twice the lock
++ * request's timeout, hits, then lxclock() did not properly time out.
++ */
++int test_with_timeout(sem_t *lock)
++{
++	int status;
++	int ret = 0;
++
++	ret = lxclock(lock, 0);
++	if (ret) {
++		fprintf(stderr, "%d: Error getting first lock\n", __LINE__);
++		return 2;
++	}
++	pid_to_kill = fork();
++	if (pid_to_kill < 0) {
++		fprintf(stderr, "%d: Error on fork\n", __LINE__);
++		lxcunlock(lock);
++		return 2;
++	}
++	if (pid_to_kill == 0) {
++		ret = lxclock(lock, TIMEOUT_SECS);
++		if (ret == 0) {
++			lxcunlock(lock);
++			exit(0);
++		}
++		exit(1);
++	}
++	starttimer(TIMEOUT_SECS * 2);
++	waitpid(pid_to_kill, &status, 0);
++	stoptimer();
++	if (!WIFEXITED(status)) {
++		fprintf(stderr, "%d: lxclock did not honor its timeout\n", __LINE__);
++		lxcunlock(lock);
++		return 1;
++	}
++	if (WEXITSTATUS(status) == 0) {
++		fprintf(stderr, "%d: child was able to get lock, should have failed with timeout\n", __LINE__);
++		ret = 1;
++	}
++	lxcunlock(lock);
++	return ret;
++}
++
++int main(int argc, char *argv[])
++{
++	int ret, sval, r;
++	sem_t *lock;
++
++	lock = lxc_newlock(NULL);
++    if (!lock) {
++		fprintf(stderr, "%d: failed to get unnamed lock\n", __LINE__);
++		exit(1);
++    }
++    ret = lxclock(lock, 0);
++    if (ret) {
++		fprintf(stderr, "%d: failed to take unnamed lock (%d)\n", __LINE__, ret);
++		exit(1);
++    }
++
++    ret = lxcunlock(lock);
++    if (ret) {
++		fprintf(stderr, "%d: failed to put unnamed lock (%d)\n", __LINE__, ret);
++		exit(1);
++    }
++
++    sem_destroy(lock);
++    free(lock);
++
++	lock = lxc_newlock(mycontainername);
++	if (!lock) {
++		fprintf(stderr, "%d: failed to get lock\n", __LINE__);
++		exit(1);
++	}
++	r = sem_getvalue(lock, &sval);
++	if (!r) {
++		fprintf(stderr, "%d: sem value at start is %d\n", __LINE__, sval);
++	} else {
++		fprintf(stderr, "%d: failed to get initial value\n", __LINE__);
++	}
++
++	ret = test_one_lock(lock);
++	if (ret) {
++		fprintf(stderr, "%d: test failed\n", __LINE__);
++		goto out;
++	}
++	r = sem_getvalue(lock, &sval);
++	if (!r) {
++		fprintf(stderr, "%d: sem value is %d\n", __LINE__, sval);
++	} else {
++		fprintf(stderr, "%d: failed to get sem value\n", __LINE__);
++	}
++
++	ret = test_two_locks(lock);
++	if (ret) {
++		fprintf(stderr, "%d: test failed\n", __LINE__);
++		goto out;
++	}
++	r = sem_getvalue(lock, &sval);
++	if (!r) {
++		fprintf(stderr, "%d: sem value is %d\n", __LINE__, sval);
++	} else {
++		fprintf(stderr, "%d: failed to get value\n", __LINE__);
++	}
++
++	ret = test_with_timeout(lock);
++	if (ret) {
++		fprintf(stderr, "%d: test failed\n", __LINE__);
++		goto out;
++	}
++	r = sem_getvalue(lock, &sval);
++	if (!r) {
++		fprintf(stderr, "%d: sem value is %d\n", __LINE__, sval);
++	} else {
++		fprintf(stderr, "%d: failed to get value\n", __LINE__);
++	}
++
++    fprintf(stderr, "all tests passed\n");
++
++out:
++	exit(ret);
++}
+Index: lxc-api-and-python/src/tests/containertests.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/tests/containertests.c	2012-08-17 20:37:37.044994657 +0000
+@@ -0,0 +1,257 @@
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++#include "../lxc/lxccontainer.h"
++
++#include <unistd.h>
++#include <signal.h>
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <stdlib.h>
++#include <errno.h>
++#include <lxc/state.h>
++
++#define MYNAME "lxctest1"
++
++static int destroy_busybox(void)
++{
++	int status, ret;
++	pid_t pid = fork();
++
++	if (pid < 0) {
++		perror("fork");
++		return -1;
++	}
++	if (pid == 0) {
++		ret = execlp("lxc-destroy", "lxc-destroy", "-f", "-n", MYNAME, NULL);
++		// Should not return
++		perror("execl");
++		exit(1);
++	}
++again:
++	ret = waitpid(pid, &status, 0);
++	if (ret == -1) {
++		if (errno == -EINTR)
++			goto again;
++		perror("waitpid");
++		return -1;
++	}
++	if (ret != pid)
++		goto again;
++	if (!WIFEXITED(status))  { // did not exit normally
++		fprintf(stderr, "%d: lxc-create exited abnormally\n", __LINE__);
++		return -1;
++	}
++	return WEXITSTATUS(status);
++}
++
++static int create_busybox(void)
++{
++	int status, ret;
++	pid_t pid = fork();
++
++	if (pid < 0) {
++		perror("fork");
++		return -1;
++	}
++	if (pid == 0) {
++		ret = execlp("lxc-create", "lxc-create", "-t", "busybox", "-f", "/etc/lxc/lxc.conf", "-n", MYNAME, NULL);
++		// Should not return
++		perror("execl");
++		exit(1);
++	}
++again:
++	ret = waitpid(pid, &status, 0);
++	if (ret == -1) {
++		if (errno == -EINTR)
++			goto again;
++		perror("waitpid");
++		return -1;
++	}
++	if (ret != pid)
++		goto again;
++	if (!WIFEXITED(status))  { // did not exit normally
++		fprintf(stderr, "%d: lxc-create exited abnormally\n", __LINE__);
++		return -1;
++	}
++	return WEXITSTATUS(status);
++}
++
++int main(int argc, char *argv[])
++{
++	struct lxc_container *c;
++	int ret = 0;
++	const char *s;
++	bool b;
++	char *str;
++
++	ret = 1;
++	/* test refcounting */
++	c = lxc_container_new(MYNAME);
++	if (!c) {
++		fprintf(stderr, "%d: error creating lxc_container %s\n", __LINE__, MYNAME);
++		goto out;
++	}
++	if (!lxc_container_get(c)) {
++		fprintf(stderr, "%d: error getting refcount\n", __LINE__);
++		goto out;
++	}
++	/* peek in, inappropriately, make sure refcount is a we'd like */
++	if (c->numthreads != 2) {
++		fprintf(stderr, "%d: refcount is %d, not %d\n", __LINE__, c->numthreads, 2);
++		goto out;
++	}
++	if (strcmp(c->name, MYNAME) != 0) {
++		fprintf(stderr, "%d: container has wrong name (%s not %s)\n", __LINE__, c->name, MYNAME);
++		goto out;
++	}
++	str = c->config_file_name(c);
++#define CONFIGFNAM "/var/lib/lxc/" MYNAME "/config"
++	if (!str || strcmp(str, CONFIGFNAM)) {
++		fprintf(stderr, "%d: got wrong config file name (%s, not %s)\n", __LINE__, str, CONFIGFNAM);
++		goto out;
++	}
++	free(str);
++	free(c->configfile);
++	c->configfile = NULL;
++	str = c->config_file_name(c);
++	if (str) {
++		fprintf(stderr, "%d: config file name was not NULL as it should have been\n", __LINE__);
++		goto out;
++	}
++	if (lxc_container_put(c) != 0) {
++		fprintf(stderr, "%d: c was freed on non-final put\n", __LINE__);
++		goto out;
++	}
++	if (c->numthreads != 1) {
++		fprintf(stderr, "%d: refcount is %d, not %d\n", __LINE__, c->numthreads, 1);
++		goto out;
++	}
++	if (lxc_container_put(c) != 1) {
++		fprintf(stderr, "%d: c was not freed on final put\n", __LINE__);
++		goto out;
++	}
++
++	/* test a real container */
++	c = lxc_container_new(MYNAME);
++	if (!c) {
++		fprintf(stderr, "%d: error creating lxc_container %s\n", __LINE__, MYNAME);
++		ret = 1;
++		goto out;
++	}
++
++	if (c->lxc_conf != NULL) {
++		fprintf(stderr, "%d: lxc_conf is not NULL as it should be\n", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	b = c->is_defined(c);
++	if (b) {
++		fprintf(stderr, "%d: %s thought it was defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	s = c->state(c);
++	if (s && strcmp(s, "STOPPED") != 0) {
++	// liblxc says a container is STOPPED if it doesn't exist.  That's because
++	// the container may be an application container - it's not wrong, just
++	// sometimes unintuitive.
++		fprintf(stderr, "%d: %s thinks it is in state %s\n", __LINE__, c->name, s);
++		goto out;
++	}
++
++	// create a container
++	// the liblxc api does not support creation - it probably will eventually,
++	// but not yet.
++	// So we just call out to lxc-create.  We'll create a busybox container.
++	ret = create_busybox();
++	if (ret) {
++		fprintf(stderr, "%d: failed to create a busybox container\n", __LINE__);
++		goto out;
++	}
++
++	b = c->is_defined(c);
++	if (!b) {
++		fprintf(stderr, "%d: %s thought it was not defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	s = c->state(c);
++	if (!s || strcmp(s, "STOPPED")) {
++		fprintf(stderr, "%d: %s is in state %s, not in STOPPED.\n", __LINE__, c->name, s ? s : "undefined");
++		goto out;
++	}
++
++	b = c->load_config(c, NULL);
++	if (!b) {
++		fprintf(stderr, "%d: %s failed to read its config\n", __LINE__, c->name);
++		goto out;
++	}
++
++	// test wait states
++	int numstates = lxc_get_wait_states(NULL);
++	if (numstates != MAX_STATE) {
++		fprintf(stderr, "%d: lxc_get_wait_states gave %d not %d\n", __LINE__, numstates, MAX_STATE);
++		goto out;
++	}
++	char **sstr = malloc(numstates * sizeof(char *));
++	numstates = lxc_get_wait_states(sstr);
++	int i;
++	for (i=0; i<numstates; i++) {
++		fprintf(stderr, "got state %d %s\n", i, sstr[i]);
++	}
++	free(sstr);
++
++	printf("hit return to start container");
++	char mychar;
++	scanf("%c", &mychar);
++
++	/* non-daemonized is tested in 'startone' */
++	c->want_daemonize(c);
++	if (!c->startl(c, 0, NULL, NULL)) {
++		fprintf(stderr, "%d: %s failed to start daemonized\n", __LINE__, c->name);
++		goto out;
++	}
++
++	if (!c->wait(c, "RUNNING", -1)) {
++		fprintf(stderr, "%d: failed waiting for state RUNNING\n", __LINE__);
++		goto out;
++	}
++
++	sleep(3);
++	s = c->state(c);
++	if (!s || strcmp(s, "RUNNING")) {
++		fprintf(stderr, "%d: %s is in state %s, not in RUNNING.\n", __LINE__, c->name, s ? s : "undefined");
++		goto out;
++	}
++
++	printf("hit return to finish");
++	scanf("%c", &mychar);
++
++	fprintf(stderr, "all lxc_container tests passed for %s\n", c->name);
++	ret = 0;
++
++out:
++	if (c) {
++		c->stop(c);
++		destroy_busybox();
++	}
++	lxc_container_put(c);
++	exit(ret);
++}
+Index: lxc-api-and-python/src/tests/startone.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/tests/startone.c	2012-08-17 20:37:37.044994657 +0000
+@@ -0,0 +1,202 @@
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++#include "../lxc/lxccontainer.h"
++
++#include <unistd.h>
++#include <signal.h>
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <stdlib.h>
++#include <errno.h>
++
++#define MYNAME "lxctest1"
++
++static int destroy_ubuntu(void)
++{
++	int status, ret;
++	pid_t pid = fork();
++
++	if (pid < 0) {
++		perror("fork");
++		return -1;
++	}
++	if (pid == 0) {
++		ret = execlp("lxc-destroy", "lxc-destroy", "-f", "-n", MYNAME, NULL);
++		// Should not return
++		perror("execl");
++		exit(1);
++	}
++again:
++	ret = waitpid(pid, &status, 0);
++	if (ret == -1) {
++		if (errno == -EINTR)
++			goto again;
++		perror("waitpid");
++		return -1;
++	}
++	if (ret != pid)
++		goto again;
++	if (!WIFEXITED(status))  { // did not exit normally
++		fprintf(stderr, "%d: lxc-create exited abnormally\n", __LINE__);
++		return -1;
++	}
++	return WEXITSTATUS(status);
++}
++
++static int create_ubuntu(void)
++{
++	int status, ret;
++	pid_t pid = fork();
++
++	if (pid < 0) {
++		perror("fork");
++		return -1;
++	}
++	if (pid == 0) {
++		ret = execlp("lxc-create", "lxc-create", "-t", "ubuntu", "-f", "/etc/lxc/lxc.conf", "-n", MYNAME, NULL);
++		// Should not return
++		perror("execl");
++		exit(1);
++	}
++again:
++	ret = waitpid(pid, &status, 0);
++	if (ret == -1) {
++		if (errno == -EINTR)
++			goto again;
++		perror("waitpid");
++		return -1;
++	}
++	if (ret != pid)
++		goto again;
++	if (!WIFEXITED(status))  { // did not exit normally
++		fprintf(stderr, "%d: lxc-create exited abnormally\n", __LINE__);
++		return -1;
++	}
++	return WEXITSTATUS(status);
++}
++
++int main(int argc, char *argv[])
++{
++	struct lxc_container *c;
++	int ret = 0;
++	const char *s;
++	bool b;
++
++	ret = 1;
++	/* test a real container */
++	c = lxc_container_new(MYNAME);
++	if (!c) {
++		fprintf(stderr, "%d: error creating lxc_container %s\n", __LINE__, MYNAME);
++		ret = 1;
++		goto out;
++	}
++
++	if (c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	ret = create_ubuntu();
++	if (ret) {
++		fprintf(stderr, "%d: failed to create a ubuntu container\n", __LINE__);
++		goto out;
++	}
++
++	b = c->is_defined(c);
++	if (!b) {
++		fprintf(stderr, "%d: %s thought it was not defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	s = c->state(c);
++	if (!s || strcmp(s, "STOPPED")) {
++		fprintf(stderr, "%d: %s is in state %s, not in STOPPED.\n", __LINE__, c->name, s ? s : "undefined");
++		goto out;
++	}
++
++	b = c->load_config(c, NULL);
++	if (!b) {
++		fprintf(stderr, "%d: %s failed to read its config\n", __LINE__, c->name);
++		goto out;
++	}
++
++	if (!c->set_config_item(c, "lxc.utsname", "bobo")) {
++		fprintf(stderr, "%d: failed setting lxc.utsname\n", __LINE__);
++		goto out;
++	}
++
++	printf("hit return to start container");
++	char mychar;
++	scanf("%c", &mychar);
++
++	if (!lxc_container_get(c)) {
++		fprintf(stderr, "%d: failed to get extra ref to container\n", __LINE__);
++		exit(1);
++	}
++	pid_t pid = fork();
++	if (pid < 0) {
++		fprintf(stderr, "%d: fork failed\n", __LINE__);
++		goto out;
++	}
++	if (pid == 0) {
++		b = c->startl(c, 0, NULL);
++		if (!b)
++			fprintf(stderr, "%d: %s failed to start\n", __LINE__, c->name);
++		lxc_container_put(c);
++		exit(!b);
++	}
++
++	sleep(3);
++	s = c->state(c);
++	if (!s || strcmp(s, "RUNNING")) {
++		fprintf(stderr, "%d: %s is in state %s, not in RUNNING.\n", __LINE__, c->name, s ? s : "undefined");
++		goto out;
++	}
++
++	printf("hit return to finish");
++	scanf("%c", &mychar);
++	c->stop(c);
++
++	system("mkdir -p /var/lib/lxc/lxctest1/rootfs//usr/local/libexec/lxc");
++	system("mkdir -p /var/lib/lxc/lxctest1/rootfs/usr/lib/lxc/");
++	system("cp src/lxc/lxc-init /var/lib/lxc/lxctest1/rootfs//usr/local/libexec/lxc");
++	system("cp src/lxc/liblxc.so /var/lib/lxc/lxctest1/rootfs/usr/lib/lxc");
++	system("cp src/lxc/liblxc.so /var/lib/lxc/lxctest1/rootfs/usr/lib/lxc/liblxc.so.0");
++	system("cp src/lxc/liblxc.so /var/lib/lxc/lxctest1/rootfs/usr/lib");
++	system("mkdir -p /var/lib/lxc/lxctest1/rootfs/dev/shm");
++	system("chroot /var/lib/lxc/lxctest1/rootfs apt-get install --no-install-recommends lxc");
++	// next write out the config file;  does it match?
++	if (!c->startl(c, 1, "/bin/hostname", NULL)) {
++		fprintf(stderr, "%d: failed to lxc-execute /bin/hostname", __LINE__);
++		goto out;
++	}
++	//  auto-check result?  ('bobo' is printed on stdout)
++
++	fprintf(stderr, "all lxc_container tests passed for %s\n", c->name);
++	ret = 0;
++
++out:
++	if (c) {
++		c->stop(c);
++		destroy_ubuntu();
++	}
++	lxc_container_put(c);
++	exit(ret);
++}
+Index: lxc-api-and-python/src/lxc/lxc.h
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/lxc.h	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/lxc.h	2012-08-17 20:37:37.044994657 +0000
+@@ -84,6 +84,7 @@
+  * data was readen, < 0 otherwise
+  */
+ extern int lxc_monitor_read(int fd, struct lxc_msg *msg);
++extern int lxc_monitor_read_timeout(int fd, struct lxc_msg *msg, int timeout);
+ 
+ /*
+  * Close the fd associated with the monitoring
+@@ -178,6 +179,30 @@
+  */
+ extern const char const *lxc_version(void);
+ 
++/*
++ * Create and return a new lxccontainer struct.
++ */
++extern struct lxc_container *lxc_container_new(char *name);
++
++/*
++ * Returns 1 on success, 0 on failure.
++ */
++extern int lxc_container_get(struct lxc_container *c);
++
++/*
++ * Put a lxccontainer struct reference.
++ * Return -1 on error.
++ * Return 0 if this was not the last reference.
++ * If it is the last reference, free the lxccontainer and return 1.
++ */
++extern int lxc_container_put(struct lxc_container *c);
++
++/*
++ * Get a list of valid wait states.
++ * If states is NULL, simply return the number of states
++ */
++extern int lxc_get_wait_states(char **states);
++
+ #ifdef __cplusplus
+ }
+ #endif
+Index: lxc-api-and-python/src/lxc/lxclock.h
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/lxc/lxclock.h	2012-08-17 20:37:37.044994657 +0000
+@@ -0,0 +1,61 @@
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++
++#include <fcntl.h>           /* For O_* constants */
++#include <sys/stat.h>        /* For mode constants */
++#include <semaphore.h>
++#include <string.h>
++#include <time.h>
++
++/*
++ * lxc_newlock:
++ * if name is not given, create an unnamed semaphore.  We use these
++ * to protect against racing threads.
++ * Note that an unnamed sem was malloced by us and needs to be freed.
++ *
++ * If name is given, it is prepended with '/lxcapi.', and used as the
++ * name for a system-wide (well, ipcns-wide) semaphore.  We use that
++ * to protect the containers as represented on disk.
++ * A named sem should not be freed.
++ *
++ * XXX TODO
++ * We should probably introduce a lxclock_close() which detecs the type
++ * of lock and calls sem_close() or sem_destroy()+free() not as appropriate.
++ * For now, it is up to the caller to do so.
++ *
++ * sem is initialized to value of 1
++ *
++ * return NULL on failure, else a sem_t * which can be passed to
++ * lxclock() and lxcunlock().
++ */
++extern sem_t *lxc_newlock(char *name);
++
++/*
++ * lxclock: take an existing lock.  If timeout is 0, wait
++ * indefinately.  Otherwise use given timeout.
++ * return 0 if we got the lock, -2 on failure to set timeout, or -1
++ * otherwise in which case errno will be set by sem_wait()).
++ */
++extern int lxclock(sem_t *sem, int timeout);
++
++/*
++ * lxcunlock: unlock given sem.  Return 0 on success.  Otherwise returns
++ * -1 and sem_post will leave errno set.
++ */
++extern int lxcunlock(sem_t *lock);
+Index: lxc-api-and-python/src/lxc/lxc_wait.c
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/lxc_wait.c	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/lxc_wait.c	2012-08-17 20:38:32.204996196 +0000
+@@ -77,25 +77,6 @@
+ 	.checker  = my_checker,
+ };
+ 
+-static int fillwaitedstates(char *strstates, int *states)
+-{
+-	char *token, *saveptr = NULL;
+-	int state;
+-
+-	token = strtok_r(strstates, "|", &saveptr);
+-	while (token) {
+-
+-		state = lxc_str2state(token);
+-		if (state < 0)
+-			return -1;
+-
+-		states[state] = 1;
+-
+-		token = strtok_r(NULL, "|", &saveptr);
+-	}
+-	return 0;
+-}
+-
+ static void timeout_handler(int signal)
+ {
+ 	exit(-1);
+@@ -114,57 +95,5 @@
+ 			 my_args.progname, my_args.quiet))
+ 		return -1;
+ 
+-	if (fillwaitedstates(my_args.states, s))
+-		return -1;
+-
+-	fd = lxc_monitor_open();
+-	if (fd < 0)
+-		return -1;
+-
+-	/*
+-	 * if container present,
+-	 * then check if already in requested state
+-	 */
+-	ret = -1;
+-	state = lxc_getstate(my_args.name);
+-	if (state < 0) {
+-		goto out_close;
+-	} else if ((state >= 0) && (s[state])) {
+-		ret = 0;
+-		goto out_close;
+-	}
+-
+-	signal(SIGALRM, timeout_handler);
+-	alarm(my_args.timeout);
+-
+-	for (;;) {
+-		if (lxc_monitor_read(fd, &msg) < 0)
+-			goto out_close;
+-
+-		if (strcmp(my_args.name, msg.name))
+-			continue;
+-
+-		switch (msg.type) {
+-		case lxc_msg_state:
+-			if (msg.value < 0 || msg.value >= MAX_STATE) {
+-				ERROR("Receive an invalid state number '%d'",
+-					msg.value);
+-				goto out_close;
+-			}
+-
+-			if (s[msg.value]) {
+-				alarm(0);
+-				ret = 0;
+-				goto out_close;
+-			}
+-			break;
+-		default:
+-			/* just ignore garbage */
+-			break;
+-		}
+-	}
+-
+-out_close:
+-	lxc_monitor_close(fd);
+-	return ret;
++	return lxc_wait(my_args.name, my_args.states, my_args.timeout);
+ }
+Index: lxc-api-and-python/src/lxc/Makefile.am
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/Makefile.am	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/Makefile.am	2012-08-17 20:39:31.072997837 +0000
+@@ -13,7 +13,9 @@
+ 		list.h \
+ 		log.h \
+ 		state.h \
+-		attach.h
++		attach.h \
++		lxccontainer.h \
++		lxclock.h
+ 
+ sodir=$(libdir)
+ # use PROGRAMS to avoid complains from automake
+@@ -54,12 +56,15 @@
+ 	mainloop.c mainloop.h \
+ 	af_unix.c af_unix.h \
+ 	\
+-	utmp.c utmp.h
++	utmp.c utmp.h \
++	lxclock.h lxclock.c \
++	lxccontainer.c lxccontainer.h
+ 
+ AM_CFLAGS=-I$(top_srcdir)/src \
+ 	-DLXCROOTFSMOUNT=\"$(LXCROOTFSMOUNT)\" \
+ 	-DLXCPATH=\"$(LXCPATH)\" \
+-	-DLXCINITDIR=\"$(LXCINITDIR)\"
++	-DLXCINITDIR=\"$(LXCINITDIR)\" \
++	-DLXCTEMPLATEDIR=\"$(LXCTEMPLATEDIR)\"
+ 
+ if ENABLE_SECCOMP
+ AM_CFLAGS += -DHAVE_SECCOMP
+@@ -72,7 +77,7 @@
+ 	-shared \
+ 	-Wl,-soname,liblxc.so.$(firstword $(subst ., ,$(VERSION)))
+ 
+-liblxc_so_LDADD = -lutil $(CAP_LIBS) -lapparmor $(SECCOMP_LIBS)
++liblxc_so_LDADD = -lutil $(CAP_LIBS) -lapparmor $(SECCOMP_LIBS) -lrt
+ 
+ bin_SCRIPTS = \
+ 	lxc-ps \
+@@ -111,7 +116,7 @@
+ if ENABLE_RPATH
+ AM_LDFLAGS += -Wl,-rpath -Wl,$(libdir)
+ endif
+-LDADD=liblxc.so @CAP_LIBS@ -lapparmor @SECCOMP_LIBS@
++LDADD=liblxc.so @CAP_LIBS@ -lapparmor @SECCOMP_LIBS@ -lrt
+ 
+ lxc_attach_SOURCES = lxc_attach.c
+ lxc_cgroup_SOURCES = lxc_cgroup.c
+Index: lxc-api-and-python/src/lxc/state.h
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/state.h	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/state.h	2012-08-17 20:37:37.048994657 +0000
+@@ -33,5 +33,6 @@
+ 
+ extern lxc_state_t lxc_str2state(const char *state);
+ extern const char *lxc_state2str(lxc_state_t state);
++extern int lxc_wait(char *lxcname, char *states, int timeout);
+ 
+ #endif
+Index: lxc-api-and-python/src/lxc/lxclock.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/lxc/lxclock.c	2012-08-17 20:37:37.048994657 +0000
+@@ -0,0 +1,105 @@
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++
++#include "lxclock.h"
++#include <malloc.h>
++
++#define OFLAG (O_CREAT | O_RDWR)
++#define SEMMODE 0660
++#define SEMVALUE 1
++#define SEMVALUE_LOCKED 0
++#define LXCLOCK_PREFIX "/lxcapi."
++
++
++static char *lxclock_name(char *container)
++{
++	int ret;
++	int len = strlen(container) + strlen(LXCLOCK_PREFIX) + 1;
++	char *dest = malloc(len);
++	if (!dest)
++		return NULL;
++	ret = snprintf(dest, len, "%s%s", LXCLOCK_PREFIX, container);
++	if (ret < 0 || ret >= len) {
++		free(dest);
++		return NULL;
++	}
++	return dest;
++}
++
++static void lxcfree_name(char *name)
++{
++	if (name)
++		free(name);
++}
++
++static sem_t *lxc_new_unnamed_sem(void)
++{
++    sem_t *s;
++    int ret;
++
++    s = malloc(sizeof(*s));
++    if (!s)
++        return NULL;
++    ret = sem_init(s, 0, 1);
++    if (ret)
++        return NULL;
++    return s;
++}
++
++sem_t *lxc_newlock(char *name)
++{
++	char *lname;
++	sem_t *lock;
++
++	if (!name)
++		return lxc_new_unnamed_sem();
++
++	lname = lxclock_name(name);
++	if (!lname)
++		return NULL;
++	lock = sem_open(lname, OFLAG, SEMMODE, SEMVALUE);
++	lxcfree_name(lname);
++    if (lock == SEM_FAILED)
++        return NULL;
++	return lock;
++}
++
++int lxclock(sem_t *sem, int timeout)
++{
++	int ret;
++
++	if (!timeout) {
++		ret = sem_wait(sem);
++	} else {
++		struct timespec ts;
++		if (clock_gettime(CLOCK_REALTIME, &ts) == -1)
++		       return -2;
++		ts.tv_sec += timeout;
++		ret = sem_timedwait(sem, &ts);
++	}
++
++	return ret;
++}
++
++int lxcunlock(sem_t *sem)
++{
++	if (!sem)
++		return -2;
++	return sem_post(sem);
++}
+Index: lxc-api-and-python/src/lxc/lxccontainer.h
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/lxc/lxccontainer.h	2012-08-17 20:37:37.048994657 +0000
+@@ -0,0 +1,71 @@
++#include "lxclock.h"
++#include <stdlib.h>
++#include <malloc.h>
++
++#include <stdbool.h>
++
++struct lxc_container {
++	// private fields
++	char *name;
++	char *configfile;
++	sem_t *slock;
++	sem_t *privlock;
++	int numthreads; /* protected by privlock. */
++	struct lxc_conf *lxc_conf; // maybe we'll just want the whole lxc_handler?
++
++	// public fields
++	char *error_string;
++	int error_num;
++	int daemonize;
++
++#define LXCDIR "/var/lib/lxc"
++	bool (*is_defined)(struct lxc_container *c);  // did /var/lib/lxc/$name/config exist
++	const char *(*state)(struct lxc_container *c);
++	bool (*is_running)(struct lxc_container *c);  // true so long as defined and not stopped
++	bool (*freeze)(struct lxc_container *c);
++	bool (*unfreeze)(struct lxc_container *c);
++	pid_t (*init_pid)(struct lxc_container *c);
++	bool (*load_config)(struct lxc_container *c, char *alt_file);
++	/* The '...' is the command line.  If provided, it must be ended with a NULL */
++	bool (*start)(struct lxc_container *c, int useinit, char ** argv);
++	bool (*startl)(struct lxc_container *c, int useinit, ...);
++	bool (*stop)(struct lxc_container *c);
++	void (*want_daemonize)(struct lxc_container *c);
++	// Return current config file name.  The result is strdup()d, so free the result.
++	char *(*config_file_name)(struct lxc_container *c);
++	// for wait, timeout == -1 means wait forever, timeout == 0 means don't wait.
++	// otherwise timeout is seconds to wait.
++	bool (*wait)(struct lxc_container *c, char *state, int timeout);
++	bool (*set_config_item)(struct lxc_container *c, char *key, char *value);
++	bool (*destroy)(struct lxc_container *c);
++	bool (*save_config)(struct lxc_container *c, char *alt_file);
++	bool (*create)(struct lxc_container *c, char *t, char **argv);
++	bool (*createl)(struct lxc_container *c, char *t, ...);
++	/* send SIGPWR.  if timeout is not 0 or -1, do a hard stop after timeout seconds */
++	bool (*shutdown)(struct lxc_container *c, int timeout);
++	/* clear all network or capability items in the in-memory configuration */
++	bool (*clear_config_item)(struct lxc_container *c, char *key);
++	/* print a config item to a in-memory string allocated by the caller.  Return
++	 * the length which was our would be printed. */
++	int (*get_config_item)(struct lxc_container *c, char *key, char *retv, int inlen);
++	int (*get_keys)(struct lxc_container *c, char *key, char *retv, int inlen);
++
++#if 0
++	bool (*commit_cgroups)(struct lxc_container *c);
++	bool (*reread_cgroups)(struct lxc_container *c);
++	// question with clone: how do we handle non-standard config file in orig?
++	struct lxc_container (*clone)(struct container *c);
++	int (*ns_attach)(struct lxc_container *c, int ns_mask);
++	// we'll need some plumbing to support lxc-console
++#endif
++};
++
++struct lxc_container *lxc_container_new(char *name);
++int lxc_container_get(struct lxc_container *c);
++int lxc_container_put(struct lxc_container *c);
++int lxc_get_wait_states(char **states);
++
++#if 0
++char ** lxc_get_valid_keys();
++char ** lxc_get_valid_values(char *key);
++#endif
+Index: lxc-api-and-python/src/lxc/confile.h
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/confile.h	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/confile.h	2012-08-17 20:37:37.048994657 +0000
+@@ -27,6 +27,15 @@
+ struct lxc_conf;
+ struct lxc_list;
+ 
++typedef int (*config_cb)(const char *, char *, struct lxc_conf *);
++struct lxc_config_t {
++	char *name;
++	config_cb cb;
++};
++
++extern struct lxc_config_t *lxc_getconfig(const char *key);
++extern int lxc_list_nicconfigs(struct lxc_conf *c, char *key, char *retv, int inlen);
++extern int lxc_listconfigs(char *retv, int inlen);
+ extern int lxc_config_read(const char *file, struct lxc_conf *conf);
+ extern int lxc_config_readline(char *buffer, struct lxc_conf *conf);
+ 
+@@ -37,4 +46,7 @@
+ /* needed for lxc-attach */
+ extern signed long lxc_config_parse_arch(const char *arch);
+ 
++extern int lxc_get_config_item(struct lxc_conf *c, char *key, char *retv, int inlen);
++extern int lxc_clear_config_item(struct lxc_conf *c, char *key);
++extern void write_config(FILE *fout, struct lxc_conf *c);
+ #endif
+Index: lxc-api-and-python/src/lxc/lxccontainer.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/lxc/lxccontainer.c	2012-08-17 20:37:37.048994657 +0000
+@@ -0,0 +1,912 @@
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++
++#include "lxc.h"
++#include "state.h"
++#include "lxccontainer.h"
++#include "conf.h"
++#include "config.h"
++#include "confile.h"
++#include "cgroup.h"
++#include "commands.h"
++#include "log.h"
++#include <unistd.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <errno.h>
++
++lxc_log_define(lxc_container, lxc);
++
++/* LOCKING
++ * c->privlock protects the struct lxc_container from multiple threads.
++ * c->slock protects the on-disk container data
++ * NOTHING mutexes two independent programs with their own struct
++ * lxc_container for the same c->name, between API calls.  For instance,
++ * c->config_read(); c->start();  Between those calls, data on disk
++ * could change (which shouldn't bother the caller unless for instance
++ * the rootfs get moved).  c->config_read(); update; c->config_write();
++ * Two such updaters could race.  The callers should therefore check their
++ * results.  Trying to prevent that would necessarily expose us to deadlocks
++ * due to hung callers.  So I prefer to keep the locks only within our own
++ * functions, not across functions.
++ *
++ * If you're going to fork while holding a lxccontainer, increment
++ * c->numthreads (under privlock) before forking.  When deleting,
++ * decrement numthreads under privlock, then if it hits 0 you can delete.
++ * Do not ever use a lxccontainer whose numthreads you did not bump.
++ */
++
++static void lxc_container_free(struct lxc_container *c)
++{
++	if (!c)
++		return;
++
++	if (c->configfile) {
++		free(c->configfile);
++		c->configfile = NULL;
++	}
++	if (c->error_string) {
++		free(c->error_string);
++		c->error_string = NULL;
++	}
++	if (c->privlock) {
++		sem_destroy(c->privlock);
++		free(c->privlock);
++		c->privlock = NULL;
++	}
++	if (c->name) {
++		free(c->name);
++		c->name = NULL;
++	}
++	/*
++	 * XXX TODO
++	 * note, c->lxc_conf is going to have to be freed, but the fn
++	 * to do that hasn't been written yet near as I can tell
++	 */
++	free(c);
++}
++
++int lxc_container_get(struct lxc_container *c)
++{
++	if (!c)
++		return 0;
++
++	if (lxclock(c->privlock, 0))
++		return 0;
++	if (c->numthreads < 1) {
++		// bail without trying to unlock, bc the privlock is now probably
++		// in freed memory
++		return 0;
++	}
++	c->numthreads++;
++	lxcunlock(c->privlock);
++	return 1;
++}
++
++int lxc_container_put(struct lxc_container *c)
++{
++	if (!c)
++		return -1;
++	if (lxclock(c->privlock, 0))
++		return -1;
++	if (--c->numthreads < 1) {
++		lxcunlock(c->privlock);
++		lxc_container_free(c);
++		return 1;
++	}
++	lxcunlock(c->privlock);
++	return 0;
++}
++
++static bool file_exists(char *f)
++{
++	struct stat statbuf;
++
++	return stat(f, &statbuf) == 0;
++}
++
++static bool lxcapi_is_defined(struct lxc_container *c)
++{
++	struct stat statbuf;
++	bool ret = false;
++	int statret;
++
++	if (!c)
++		return false;
++
++	if (lxclock(c->privlock, 0))
++		return false;
++	if (!c->configfile)
++		goto out;
++	statret = stat(c->configfile, &statbuf);
++	if (statret != 0)
++		goto out;
++	ret = true;
++
++out:
++	lxcunlock(c->privlock);
++	return ret;
++}
++
++static const char *lxcapi_state(struct lxc_container *c)
++{
++	const char *ret;
++	lxc_state_t s;
++
++	if (!c)
++		return NULL;
++	if (lxclock(c->slock, 0))
++		return NULL;
++	s = lxc_getstate(c->name);
++	ret = lxc_state2str(s);
++	lxcunlock(c->slock);
++
++	return ret;
++}
++
++static bool lxcapi_is_running(struct lxc_container *c)
++{
++	const char *s;
++
++	if (!c)
++		return false;
++	s = lxcapi_state(c);
++	if (!s || strcmp(s, "STOPPED") == 0)
++		return false;
++	return true;
++}
++
++static bool lxcapi_freeze(struct lxc_container *c)
++{
++	int ret;
++	if (!c)
++		return false;
++
++	if (lxclock(c->slock, 0))
++		return false;
++	ret = lxc_freeze(c->name);
++	lxcunlock(c->slock);
++	if (ret)
++		return false;
++	return true;
++}
++
++static bool lxcapi_unfreeze(struct lxc_container *c)
++{
++	int ret;
++	if (!c)
++		return false;
++
++	if (lxclock(c->slock, 0))
++		return false;
++	ret = lxc_unfreeze(c->name);
++	lxcunlock(c->slock);
++	if (ret)
++		return false;
++	return true;
++}
++
++static pid_t lxcapi_init_pid(struct lxc_container *c)
++{
++	pid_t ret;
++	if (!c)
++		return -1;
++
++	if (lxclock(c->slock, 0))
++		return -1;
++	ret = get_init_pid(c->name);
++	lxcunlock(c->slock);
++	return ret;
++}
++
++static bool lxcapi_load_config(struct lxc_container *c, char *alt_file)
++{
++	bool ret = false;
++	char *fname;
++	if (!c)
++		return false;
++
++	fname = c->configfile;
++	if (alt_file)
++		fname = alt_file;
++	if (!fname)
++		return false;
++	if (lxclock(c->slock, 0))
++		return false;
++	if (!c->lxc_conf)
++		c->lxc_conf = lxc_conf_init();
++	if (c->lxc_conf && !lxc_config_read(fname, c->lxc_conf))
++		ret = true;
++	lxcunlock(c->slock);
++	return ret;
++}
++
++static void lxcapi_want_daemonize(struct lxc_container *c)
++{
++	if (!c)
++		return;
++	c->daemonize = 1;
++}
++
++/*
++ * I can't decide if it'd be more convenient for callers if we accept '...',
++ * or a null-terminated array (i.e. execl vs execv)
++ */
++static bool lxcapi_start(struct lxc_container *c, int useinit, char ** argv)
++{
++	int ret;
++	struct lxc_conf *conf;
++	int daemonize = 0;
++	char *default_args[] = {
++		"/sbin/init",
++		'\0',
++	};
++	bool needreboot;
++
++	/* container exists */
++	if (!c)
++		return false;
++	/* container has been setup */
++	if (!c->lxc_conf)
++		return false;
++
++	/* is this app meant to be run through lxcinit, as in lxc-execute? */
++	if (useinit && !argv)
++		return false;
++
++	if (lxclock(c->privlock, 0))
++		return false;
++	conf = c->lxc_conf;
++	daemonize = c->daemonize;
++	lxcunlock(c->privlock);
++
++	if (useinit) {
++		ret = lxc_execute(c->name, argv, 1, conf);
++		return ret == 0 ? true : false;
++	}
++
++	if (!argv)
++		argv = default_args;
++
++	/*
++	* say, I'm not sure - what locks do we want here?  Any?
++	* Is liblxc's locking enough here to protect the on disk
++	* container?  We don't want to exclude things like lxc_info
++	* while container is running...
++	*/
++	if (daemonize) {
++		if (!lxc_container_get(c))
++			return false;
++		pid_t pid = fork();
++		if (pid < 0) {
++			lxc_container_put(c);
++			return false;
++		}
++		if (pid != 0)
++			return true;
++		/* like daemon(), chdir to / and redirect 0,1,2 to /dev/null */
++		chdir("/");
++		close(0);
++		close(1);
++		close(2);
++		open("/dev/null", O_RDONLY);
++		open("/dev/null", O_RDWR);
++		open("/dev/null", O_RDWR);
++		setsid();
++	}
++
++	if (putenv("container=lxc")) {
++		fprintf(stderr, "failed to set environment variable");
++		if (daemonize) {
++			lxc_container_put(c);
++			exit(1);
++		} else {
++			return false;
++		}
++	}
++
++reboot:
++	ret = lxc_start(c->name, argv, conf);
++
++	needreboot = false;
++	if (lxclock(c->privlock, 0))
++		return true;
++	conf = c->lxc_conf;
++	if (conf && conf->reboot) {
++		INFO("container requested reboot");
++		conf->reboot = 0;
++		if (conf->maincmd_fd)
++			close(conf->maincmd_fd);
++		conf->maincmd_fd = 0;
++		needreboot = true;
++	}
++	lxcunlock(c->privlock);
++	if (needreboot)
++		goto reboot;
++
++	if (daemonize) {
++		lxc_container_put(c);
++		exit (ret == 0 ? true : false);
++	} else {
++		return (ret == 0 ? true : false);
++	}
++}
++
++/*
++ * note there MUST be an ending NULL
++ */
++static bool lxcapi_startl(struct lxc_container *c, int useinit, ...)
++{
++	va_list ap;
++	char **inargs = NULL, **temp;
++	int n_inargs = 0;
++	bool bret = false;
++
++	/* container exists */
++	if (!c)
++		return false;
++
++	/* build array of arguments if any */
++	va_start(ap, useinit);
++	while (1) {
++		char *arg;
++		arg = va_arg(ap, char *);
++		if (!arg)
++			break;
++		n_inargs++;
++		temp = realloc(inargs, n_inargs * sizeof(*inargs));
++		if (!temp)
++			goto out;
++		inargs = temp;
++		inargs[n_inargs - 1] = strdup(arg);  // not sure if it's safe not to copy
++	}
++	va_end(ap);
++
++	/* add trailing NULL */
++	if (n_inargs) {
++		n_inargs++;
++		temp = realloc(inargs, n_inargs * sizeof(*inargs));
++		if (!temp)
++			goto out;
++		inargs = temp;
++		inargs[n_inargs - 1] = NULL;
++	}
++
++	bret = lxcapi_start(c, useinit, inargs);
++
++out:
++	if (inargs) {
++		int i;
++		for (i = 0; i < n_inargs; i++) {
++			if (inargs[i])
++				free(inargs[i]);
++		}
++		free(inargs);
++	}
++
++	return bret;
++}
++
++static bool lxcapi_stop(struct lxc_container *c)
++{
++	int ret;
++
++	if (!c)
++		return false;
++
++	ret = lxc_stop(c->name);
++
++	return ret == 0;
++}
++
++static bool lxcapi_wait(struct lxc_container *c, char *state, int timeout)
++{
++	int ret;
++
++	if (!c)
++		return false;
++
++	ret = lxc_wait(c->name, state, timeout);
++	return ret == 0;
++}
++
++static bool valid_template(char *t)
++{
++	struct stat statbuf;
++	int statret;
++
++	statret = stat(t, &statbuf);
++	if (statret == 0)
++		return true;
++	return false;
++}
++
++/*
++ * create the standard expected container dir
++ */
++static bool create_container_dir(struct lxc_container *c)
++{
++	char *s;
++	int len, ret;
++
++	len = strlen(LXCPATH) + strlen(c->name) + 2;
++	s = malloc(len);
++	if (!s)
++		return false;
++	ret = snprintf(s, len, "%s/%s", LXCPATH, c->name);
++	if (ret < 0 || ret >= len) {
++		free(s);
++		return false;
++	}
++	ret = mkdir(s, 0755);
++	if (ret) {
++		if (errno == EEXIST)
++			ret = 0;
++		else
++			SYSERROR("failed to create container path for %s\n", c->name);
++	}
++	free(s);
++	return ret == 0;
++}
++
++/*
++ * backing stores not (yet) supported
++ * for ->create, argv contains the arguments to pass to the template,
++ * terminated by NULL.  If no arguments, you can just pass NULL.
++ */
++static bool lxcapi_create(struct lxc_container *c, char *t, char **argv)
++{
++	bool bret = false;
++	pid_t pid;
++	int ret, status;
++	char *tpath = NULL;
++	int len, nargs = 0;
++	char **newargv;
++
++	if (!c)
++		return false;
++
++	len = strlen(LXCTEMPLATEDIR) + strlen(t) + strlen("/lxc-") + 1;
++	tpath = malloc(len);
++	if (!tpath)
++		return false;
++	ret = snprintf(tpath, len, "%s/lxc-%s", LXCTEMPLATEDIR, t);
++	if (ret < 0 || ret >= len)
++		goto out;
++	if (!valid_template(tpath)) {
++		ERROR("bad template: %s\n", t);
++		goto out;
++	}
++
++	if (!create_container_dir(c))
++		goto out;
++
++	if (!c->save_config(c, NULL)) {
++		ERROR("failed to save starting configuration for %s\n", c->name);
++		goto out;
++	}
++
++	/* we're going to fork.  but since we'll wait for our child, we
++	   don't need to lxc_container_get */
++
++	if (lxclock(c->slock, 0)) {
++		ERROR("failed to grab global container lock for %s\n", c->name);
++		goto out;
++	}
++
++	pid = fork();
++	if (pid < 0) {
++		SYSERROR("failed to fork task for container creation template\n");
++		goto out_unlock;
++	}
++
++	if (pid == 0) { // child
++		char *patharg, *namearg;
++		int i;
++
++		close(0);
++		close(1);
++		close(2);
++		open("/dev/null", O_RDONLY);
++		open("/dev/null", O_RDWR);
++		open("/dev/null", O_RDWR);
++
++		/*
++		 * create our new array, pre-pend the template name and
++		 * base args
++		 */
++		if (argv)
++			for (; argv[nargs]; nargs++) ;
++		nargs += 3;  // template, path and name args
++		newargv = malloc(nargs * sizeof(*newargv));
++		if (!newargv)
++			exit(1);
++		newargv[0] = t;
++
++		len = strlen(LXCPATH) + strlen(c->name) + strlen("--path=") + 2;
++		patharg = malloc(len);
++		if (!patharg)
++			exit(1);
++		ret = snprintf(patharg, len, "--path=%s/%s", LXCPATH, c->name);
++		if (ret < 0 || ret >= len)
++			exit(1);
++		newargv[1] = patharg;
++		len = strlen("--name=") + strlen(c->name) + 1;
++		namearg = malloc(len);
++		if (!namearg)
++			exit(1);
++		ret = snprintf(namearg, len, "--name=%s", c->name);
++		if (ret < 0 || ret >= len)
++			exit(1);
++		newargv[2] = namearg;
++
++		/* add passed-in args */
++		if (argv)
++			for (i = 3; i < nargs; i++)
++				newargv[i] = argv[i-3];
++
++		/* add trailing NULL */
++		nargs++;
++		newargv = realloc(newargv, nargs * sizeof(*newargv));
++		if (!newargv)
++			exit(1);
++		newargv[nargs - 1] = NULL;
++
++		/* execute */
++		ret = execv(tpath, newargv);
++		SYSERROR("failed to execute template %s", tpath);
++		exit(1);
++	}
++
++again:
++	ret = waitpid(pid, &status, 0);
++	if (ret == -1) {
++		if (errno == -EINTR)
++			goto again;
++		SYSERROR("waitpid failed");
++		goto out_unlock;
++	}
++	if (ret != pid)
++		goto again;
++	if (!WIFEXITED(status))  { // did not exit normally
++		// we could set an error code and string inside the
++		// container_struct here if we like
++		ERROR("container creation template exited abnormally\n");
++		goto out_unlock;
++	}
++
++	if (WEXITSTATUS(status) != 0)
++		ERROR("container creation template for %s exited with %d\n",
++		      c->name, WEXITSTATUS(status));
++	else
++		bret = true;
++
++out_unlock:
++	lxcunlock(c->slock);
++out:
++	if (tpath)
++		free(tpath);
++	return bret;
++}
++
++static bool lxcapi_shutdown(struct lxc_container *c, int timeout)
++{
++	bool retv;
++	pid_t pid;
++
++	if (!c)
++		return false;
++
++	if (!timeout)
++		timeout = -1;
++	if (!c->is_running(c))
++		return true;
++	pid = c->init_pid(c);
++	if (pid <= 0)
++		return true;
++	kill(pid, SIGPWR);
++	retv = c->wait(c, "STOPPED", timeout);
++	if (timeout > 0) {
++		c->stop(c);
++		retv = c->wait(c, "STOPPED", 0); // 0 means don't wait
++	}
++	return retv;
++}
++
++static bool lxcapi_createl(struct lxc_container *c, char *t, ...)
++{
++	bool bret = false;
++	char **args = NULL, **temp;
++	va_list ap;
++	int nargs = 0;
++
++	if (!c)
++		return false;
++
++	/*
++	 * since we're going to wait for create to finish, I don't think we
++	 * need to get a copy of the arguments.
++	 */
++	va_start(ap, t);
++	while (1) {
++		char *arg;
++		arg = va_arg(ap, char *);
++		if (!arg)
++			break;
++		nargs++;
++		temp = realloc(args, nargs * sizeof(*args));
++		if (!temp)
++			goto out;
++		args = temp;
++		args[nargs - 1] = arg;
++	}
++	va_end(ap);
++
++	bret = c->create(c, t, args);
++
++out:
++	if (args)
++		free(args);
++	return bret;
++}
++
++static bool lxcapi_clear_config_item(struct lxc_container *c, char *key)
++{
++	int ret;
++
++	if (!c || !c->lxc_conf)
++		return false;
++	if (lxclock(c->privlock, 0)) {
++		return false;
++	}
++	ret = lxc_clear_config_item(c->lxc_conf, key);
++	lxcunlock(c->privlock);
++	return ret == 0;
++}
++
++static int lxcapi_get_config_item(struct lxc_container *c, char *key, char *retv, int inlen)
++{
++	int ret;
++
++	if (!c || !c->lxc_conf)
++		return -1;
++	if (lxclock(c->privlock, 0)) {
++		return -1;
++	}
++	ret = lxc_get_config_item(c->lxc_conf, key, retv, inlen);
++	lxcunlock(c->privlock);
++	return ret;
++}
++
++static int lxcapi_get_keys(struct lxc_container *c, char *key, char *retv, int inlen)
++{
++	if (!key)
++		return lxc_listconfigs(retv, inlen);
++	/*
++	 * Support 'lxc.network.<idx>', i.e. 'lxc.network.0'
++	 * This is an intelligent result to show which keys are valid given
++	 * the type of nic it is
++	 */
++	if (!c || !c->lxc_conf)
++		return -1;
++	if (lxclock(c->privlock, 0))
++		return -1;
++	int ret = -1;
++	if (strncmp(key, "lxc.network.", 12) == 0)
++		ret =  lxc_list_nicconfigs(c->lxc_conf, key, retv, inlen);
++	lxcunlock(c->privlock);
++	return ret;
++}
++
++
++/* default config file - should probably come through autoconf */
++#define LXC_DEFAULT_CONFIG "/etc/lxc/lxc.conf"
++static bool lxcapi_save_config(struct lxc_container *c, char *alt_file)
++{
++	if (!alt_file)
++		alt_file = c->configfile;
++	if (!alt_file)
++		return false;  // should we write to stdout if no file is specified?
++	if (!c->lxc_conf)
++		if (!c->load_config(c, LXC_DEFAULT_CONFIG)) {
++			ERROR("Error loading default configuration file %s while saving %s\n", LXC_DEFAULT_CONFIG, c->name);
++			return false;
++		}
++
++	FILE *fout = fopen(alt_file, "w");
++	if (!fout)
++		return false;
++	if (lxclock(c->privlock, 0)) {
++		fclose(fout);
++		return false;
++	}
++	write_config(fout, c->lxc_conf);
++	fclose(fout);
++	lxcunlock(c->privlock);
++	return true;
++}
++
++static bool lxcapi_destroy(struct lxc_container *c)
++{
++	pid_t pid;
++	int ret, status;
++
++	if (!c)
++		return false;
++
++	pid = fork();
++	if (pid < 0)
++		return false;
++	if (pid == 0) { // child
++		ret = execlp("lxc-destroy", "lxc-destroy", "-n", c->name, NULL);
++		perror("execl");
++		exit(1);
++	}
++
++again:
++	ret = waitpid(pid, &status, 0);
++	if (ret == -1) {
++		if (errno == -EINTR)
++			goto again;
++		perror("waitpid");
++		return false;
++	}
++	if (ret != pid)
++		goto again;
++	if (!WIFEXITED(status))  { // did not exit normally
++		// we could set an error code and string inside the
++		// container_struct here if we like
++		return false;
++	}
++
++	return WEXITSTATUS(status) == 0;
++}
++
++static bool lxcapi_set_config_item(struct lxc_container *c, char *key, char *v)
++{
++	int ret;
++	bool b = false;
++	struct lxc_config_t *config;
++
++	if (!c)
++		return false;
++
++	if (lxclock(c->privlock, 0))
++		return false;
++
++	if (!c->lxc_conf)
++		c->lxc_conf = lxc_conf_init();
++	if (!c->lxc_conf)
++		goto err;
++	config = lxc_getconfig(key);
++	if (!config)
++		goto err;
++	ret = config->cb(key, v, c->lxc_conf);
++	if (!ret)
++		b = true;
++
++err:
++	lxcunlock(c->privlock);
++	return b;
++}
++
++static char *lxcapi_config_file_name(struct lxc_container *c)
++{
++	if (!c || !c->configfile)
++		return NULL;
++	return strdup(c->configfile);
++}
++
++struct lxc_container *lxc_container_new(char *name)
++{
++	struct lxc_container *c;
++	int ret, len;
++
++	c = malloc(sizeof(*c));
++	if (!c) {
++		fprintf(stderr, "failed to malloc lxc_container\n");
++		return NULL;
++	}
++	memset(c, 0, sizeof(*c));
++
++	c->name = malloc(strlen(name)+1);
++	if (!c->name) {
++		fprintf(stderr, "Error allocating lxc_container name\n");
++		goto err;
++	}
++	strcpy(c->name, name);
++
++	c->numthreads = 1;
++	c->slock = lxc_newlock(name);
++	if (!c->slock) {
++		fprintf(stderr, "failed to create lock\n");
++		goto err;
++	}
++
++	c->privlock = lxc_newlock(NULL);
++	if (!c->privlock) {
++		fprintf(stderr, "failed to alloc privlock\n");
++		goto err;
++	}
++
++	len = strlen(LXCDIR)+strlen(c->name)+strlen("/config")+2;
++	c->configfile = malloc(len);
++	if (!c->configfile) {
++		fprintf(stderr, "Error allocating config file pathname\n");
++		goto err;
++	}
++	ret = snprintf(c->configfile, len, "%s/%s/config", LXCDIR, c->name);
++	if (ret < 0 || ret >= len) {
++		fprintf(stderr, "Error printing out config file name\n");
++		goto err;
++	}
++
++	if (file_exists(c->configfile))
++		lxcapi_load_config(c, NULL);
++
++	// assign the member functions
++	c->is_defined = lxcapi_is_defined;
++	c->state = lxcapi_state;
++	c->is_running = lxcapi_is_running;
++	c->freeze = lxcapi_freeze;
++	c->unfreeze = lxcapi_unfreeze;
++	c->init_pid = lxcapi_init_pid;
++	c->load_config = lxcapi_load_config;
++	c->want_daemonize = lxcapi_want_daemonize;
++	c->start = lxcapi_start;
++	c->startl = lxcapi_startl;
++	c->stop = lxcapi_stop;
++	c->config_file_name = lxcapi_config_file_name;
++	c->wait = lxcapi_wait;
++	c->set_config_item = lxcapi_set_config_item;
++	c->destroy = lxcapi_destroy;
++	c->save_config = lxcapi_save_config;
++	c->get_keys = lxcapi_get_keys;
++	c->create = lxcapi_create;
++	c->createl = lxcapi_createl;
++	c->shutdown = lxcapi_shutdown;
++	c->clear_config_item = lxcapi_clear_config_item;
++	c->get_config_item = lxcapi_get_config_item;
++
++	/* we'll allow the caller to update these later */
++	if (lxc_log_init("/var/log/lxccontainer.log", "trace", "lxc_container", 0)) {
++		fprintf(stderr, "failed to open log\n");
++		goto err;
++	}
++
++	/*
++	 * default configuration file is $LXCDIR/$NAME/config
++	 */
++
++	return c;
++
++err:
++	lxc_container_free(c);
++	return NULL;
++}
++
++int lxc_get_wait_states(char **states)
++{
++	int i;
++
++	if (states)
++		for (i=0; i<MAX_STATE; i++)
++			states[i] = lxc_state2str(i);
++	return MAX_STATE;
++}
+Index: lxc-api-and-python/src/lxc/confile.c
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/confile.c	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/confile.c	2012-08-17 20:40:57.869000259 +0000
+@@ -42,6 +42,7 @@
+ 
+ #include <lxc/log.h>
+ #include <lxc/conf.h>
++#include "network.h"
+ 
+ lxc_log_define(lxc_confile, lxc);
+ 
+@@ -75,15 +76,11 @@
+ static int config_console(const char *, char *, struct lxc_conf *);
+ static int config_seccomp(const char *, char *, struct lxc_conf *);
+ static int config_includefile(const char *, char *, struct lxc_conf *);
++static int config_network_nic(const char *, char *, struct lxc_conf *);
+ 
+ typedef int (*config_cb)(const char *, char *, struct lxc_conf *);
+ 
+-struct config {
+-	char *name;
+-	config_cb cb;
+-};
+-
+-static struct config config[] = {
++static struct lxc_config_t config[] = {
+ 
+ 	{ "lxc.arch",                 config_personality          },
+ 	{ "lxc.pts",                  config_pts                  },
+@@ -114,15 +111,17 @@
+ 	{ "lxc.network.ipv4",         config_network_ipv4         },
+ 	{ "lxc.network.ipv6.gateway", config_network_ipv6_gateway },
+ 	{ "lxc.network.ipv6",         config_network_ipv6         },
++	/* config_network_nic must come after all other 'lxc.network.*' entries */
++	{ "lxc.network.",             config_network_nic          },
+ 	{ "lxc.cap.drop",             config_cap_drop             },
+ 	{ "lxc.console",              config_console              },
+ 	{ "lxc.seccomp",              config_seccomp              },
+ 	{ "lxc.include",              config_includefile          },
+ };
+ 
+-static const size_t config_size = sizeof(config)/sizeof(struct config);
++static const size_t config_size = sizeof(config)/sizeof(struct lxc_config_t);
+ 
+-static struct config *getconfig(const char *key)
++extern struct lxc_config_t *lxc_getconfig(const char *key)
+ {
+ 	int i;
+ 
+@@ -133,6 +132,76 @@
+ 	return NULL;
+ }
+ 
++#define strprint(str, inlen, ...) \
++	do { \
++		len = snprintf(str, inlen, ##__VA_ARGS__); \
++		if (len < 0) { SYSERROR("snprintf"); return -1; }; \
++		fulllen += len; \
++		if (inlen > 0) { \
++			if (str) str += len; \
++			inlen -= len; \
++			if (inlen < 0) inlen = 0; \
++		} \
++	} while (0);
++
++int lxc_listconfigs(char *retv, int inlen)
++{
++	int i, fulllen = 0, len;
++
++	if (!retv)
++		inlen = 0;
++	else
++		memset(retv, 0, inlen);
++	for (i = 0; i < config_size; i++) {
++		char *s = config[i].name;
++		if (s[strlen(s)-1] == '.')
++			continue;
++		strprint(retv, inlen, "%s\n", s);
++	}
++	return fulllen;
++}
++
++/*
++ * config entry is something like "lxc.network.0.ipv4"
++ * the key 'lxc.network.' was found.  So we make sure next
++ * comes an integer, find the right callback (by rewriting
++ * the key), and call it.
++ */
++static int config_network_nic(const char *key, char *value,
++			       struct lxc_conf *lxc_conf)
++{
++	char *copy = strdup(key), *p;
++	int ret = -1;
++	struct lxc_config_t *config;
++
++	if (!copy) {
++		SYSERROR("failed to allocate memory");
++		return -1;
++	}
++	/*
++	 * ok we know that to get here we've got "lxc.network."
++	 * and it isn't any of the other network entries.  So
++	 * after the second . should come an integer (# of defined
++	 * nic) followed by a valid entry.
++	 */
++	if (*(key+12) < '0' || *(key+12) > '9')
++		goto out;
++	p = index(key+12, '.');
++	if (!p)
++		goto out;
++	strcpy(copy+12, p+1);
++	config = lxc_getconfig(copy);
++	if (!config) {
++		ERROR("unknown key %s", key);
++		goto out;
++	}
++	ret = config->cb(key, value, lxc_conf);
++
++out:
++	free(copy);
++	return ret;
++}
++
+ static int config_network_type(const char *key, char *value,
+ 			       struct lxc_conf *lxc_conf)
+ {
+@@ -190,10 +259,89 @@
+ 	return 0;
+ }
+ 
++/*
++ * if you have p="lxc.network.0.link", pass it p+12
++ * to get back '0' (the index of the nic)
++ */
++static int get_network_netdev_idx(const char *key)
++{
++	int ret, idx;
++
++	if (*key < '0' || *key > '9')
++		return -1;
++	ret = sscanf(key, "%d", &idx);
++	if (ret != 1)
++		return -1;
++	return idx;
++}
++
++/*
++ * if you have p="lxc.network.0", pass this p+12 and it will return
++ * the netdev of the first configured nic
++ */
++static struct lxc_netdev *get_netdev_from_key(const char *key,
++					      struct lxc_list *network)
++{
++	int i = 0, idx = get_network_netdev_idx(key);
++	struct lxc_netdev *netdev = NULL;
++	struct lxc_list *it;
++	if (idx == -1)
++		return NULL;
++	lxc_list_for_each(it, network) {
++		if (idx == i++) {
++			netdev = it->elem;
++			break;
++		}
++	}
++	return netdev;
++}
++
++extern int lxc_list_nicconfigs(struct lxc_conf *c, char *key, char *retv, int inlen)
++{
++	struct lxc_netdev *netdev;
++	int fulllen = 0, len;
++
++	netdev = get_netdev_from_key(key+12, &c->network);
++	if (!netdev)
++		return -1;
++
++	if (!retv)
++		inlen = 0;
++	else
++		memset(retv, 0, inlen);
++
++	strprint(retv, inlen, "script.up\n");
++	if (netdev->type != LXC_NET_EMPTY) {
++		strprint(retv, inlen, "flags\n");
++		strprint(retv, inlen, "link\n");
++		strprint(retv, inlen, "name\n");
++		strprint(retv, inlen, "hwaddr\n");
++		strprint(retv, inlen, "mtu\n");
++		strprint(retv, inlen, "ipv6\n");
++		strprint(retv, inlen, "ipv6_gateway\n");
++		strprint(retv, inlen, "ipv4\n");
++		strprint(retv, inlen, "ipv4_gateway\n");
++	}
++	switch(netdev->type) {
++	case LXC_NET_VETH:
++		strprint(retv, inlen, "veth.pair\n");
++		break;
++	case LXC_NET_MACVLAN:
++		strprint(retv, inlen, "macvlan.mode\n");
++		break;
++	case LXC_NET_VLAN:
++		strprint(retv, inlen, "vlan.id\n");
++		break;
++	case LXC_NET_PHYS:
++		break;
++	}
++	return fulllen;
++}
++
+ static struct lxc_netdev *network_netdev(const char *key, const char *value,
+ 					 struct lxc_list *network)
+ {
+-	struct lxc_netdev *netdev;
++	struct lxc_netdev *netdev = NULL;
+ 
+ 	if (lxc_list_empty(network)) {
+ 		ERROR("network is not created for '%s' = '%s' option",
+@@ -201,7 +349,11 @@
+ 		return NULL;
+ 	}
+ 
+-	netdev = lxc_list_last_elem(network);
++	if (get_network_netdev_idx(key+12) == -1)
++		netdev = lxc_list_last_elem(network);
++	else
++		netdev = get_netdev_from_key(key+12, network);
++
+ 	if (!netdev) {
+ 		ERROR("no network device defined for '%s' = '%s' option",
+ 		      key, value);
+@@ -586,7 +738,7 @@
+ 		SYSERROR("failed to dup string '%s'", value);
+ 		return -1;
+ 	}
+-	if (strcmp(key, "lxc.network.script.up") == 0) {
++	if (strstr(key, "script.up") != NULL) {
+ 		netdev->upscript = copy;
+ 		return 0;
+ 	}
+@@ -859,6 +1011,10 @@
+ 			break;
+ 		}
+ 
++		/* note - i do believe we're losing memory here,
++		   note that token is already pointing into dropcaps
++		   which is strdup'd.  we never free that bit.
++		 */
+ 		droplist->elem = strdup(token);
+ 		if (!droplist->elem) {
+ 			SYSERROR("failed to dup '%s'", token);
+@@ -968,7 +1124,7 @@
+ 
+ static int parse_line(char *buffer, void *data)
+ {
+-	struct config *config;
++	struct lxc_config_t *config;
+ 	char *line, *linep;
+ 	char *dot;
+ 	char *key;
+@@ -1013,7 +1169,7 @@
+ 	value += lxc_char_left_gc(value, strlen(value));
+ 	value[lxc_char_right_gc(value, strlen(value))] = '\0';
+ 
+-	config = getconfig(key);
++	config = lxc_getconfig(key);
+ 	if (!config) {
+ 		ERROR("unknown key %s", key);
+ 		goto out;
+@@ -1090,3 +1246,425 @@
+ 
+ 	return -1;
+ }
++
++static int lxc_get_conf_int(struct lxc_conf *c, char *retv, int inlen, int v)
++{
++	if (!retv)
++		inlen = 0;
++	else
++		memset(retv, 0, inlen);
++	return snprintf(retv, inlen, "%d", v);
++}
++
++static int lxc_get_arch_entry(struct lxc_conf *c, char *retv, int inlen)
++{
++	int len, fulllen = 0;
++
++	if (!retv)
++		inlen = 0;
++	else
++		memset(retv, 0, inlen);
++
++	switch(c->personality) {
++	case PER_LINUX32: strprint(retv, inlen, "x86"); break;
++	case PER_LINUX: strprint(retv, inlen, "x86_64"); break;
++	default: break;
++	}
++
++	return fulllen;
++}
++
++/*
++ * If you ask for a specific cgroup value, i.e. lxc.cgroup.devices.list,
++ * then just the value(s) will be printed.  Since there still could be
++ * more than one, it is newline-separated.
++ * (Maybe that's ambigous, since some values, i.e. devices.list, will
++ * already have newlines?)
++ * If you ask for 'lxc.cgroup", then all cgroup entries will be printed,
++ * in 'lxc.cgroup.subsystem.key = value' format.
++ */
++static int lxc_get_cgroup_entry(struct lxc_conf *c, char *retv, int inlen, char *key)
++{
++	int fulllen = 0, len;
++	int all = 0;
++	struct lxc_list *it;
++
++	if (!retv)
++		inlen = 0;
++	else
++		memset(retv, 0, inlen);
++
++	if (strcmp(key, "all") == 0)
++		all = 1;
++
++	lxc_list_for_each(it, &c->cgroup) {
++		struct lxc_cgroup *cg = it->elem;
++		if (all) {
++			strprint(retv, inlen, "lxc.cgroup.%s = %s\n", cg->subsystem, cg->value);
++		} else if (strcmp(cg->subsystem, key) == 0) {
++			strprint(retv, inlen, "%s\n", cg->value);
++		}
++	}
++	return fulllen;
++}
++
++static int lxc_get_item_hooks(struct lxc_conf *c, char *retv, int inlen, char *key)
++{
++	char *subkey;
++	int len, fulllen = 0, found = -1;
++	struct lxc_list *it;
++	int i;
++
++	/* "lxc.hook.mount" */
++	subkey = index(key, '.');
++	if (subkey) subkey = index(subkey+1, '.');
++	if (!subkey)
++		return -1;
++	subkey++;
++	if (!*subkey)
++		return -1;
++	for (i=0; i<NUM_LXC_HOOKS; i++) {
++		if (strcmp(lxchook_names[i], subkey) == 0) {
++			found=i;
++			break;
++		}
++	}
++	if (found == -1)
++		return -1;
++
++	if (!retv)
++		inlen = 0;
++	else
++		memset(retv, 0, inlen);
++
++	lxc_list_for_each(it, &c->hooks[found]) {
++		strprint(retv, inlen, "%s\n", (char *)it->elem);
++	}
++	return fulllen;
++}
++
++static int lxc_get_item_cap_drop(struct lxc_conf *c, char *retv, int inlen)
++{
++	int len, fulllen = 0;
++	struct lxc_list *it;
++
++	if (!retv)
++		inlen = 0;
++	else
++		memset(retv, 0, inlen);
++
++	lxc_list_for_each(it, &c->caps) {
++		strprint(retv, inlen, "%s\n", (char *)it->elem);
++	}
++	return fulllen;
++}
++
++static int lxc_get_mount_entries(struct lxc_conf *c, char *retv, int inlen)
++{
++	int len, fulllen = 0;
++	struct lxc_list *it;
++
++	if (!retv)
++		inlen = 0;
++	else
++		memset(retv, 0, inlen);
++
++	lxc_list_for_each(it, &c->mount_list) {
++		strprint(retv, inlen, "%s\n", (char *)it->elem);
++	}
++	return fulllen;
++}
++
++/*
++ * lxc.network.0.XXX, where XXX can be: name, type, link, flags, type,
++ * macvlan.mode, veth.pair, vlan, ipv4, ipv6, upscript, hwaddr, mtu,
++ * ipv4_gateway, ipv6_gateway.  ipvX_gateway can return 'auto' instead
++ * of an address.  ipv4 and ipv6 return lists (newline-separated).
++ * things like veth.pair return '' if invalid (i.e. if called for vlan
++ * type).
++ */
++static int lxc_get_item_nic(struct lxc_conf *c, char *retv, int inlen, char *key)
++{
++	char *p1;
++	int i, len, fulllen = 0;
++	struct lxc_netdev *netdev;
++
++	if (!retv)
++		inlen = 0;
++	else
++		memset(retv, 0, inlen);
++
++	p1 = index(key, '.');
++	if (!p1 || *(p1+1) == '\0') return -1;
++	p1++;
++
++	netdev = get_netdev_from_key(key, &c->network);
++	if (!netdev)
++		return -1;
++	if (strcmp(p1, "name") == 0) {
++		if (netdev->name)
++			strprint(retv, inlen, "%s", netdev->name);
++	} else if (strcmp(p1, "type") == 0) {
++		strprint(retv, inlen, "%s", lxc_net_type_to_str(netdev->type));
++	} else if (strcmp(p1, "link") == 0) {
++		if (netdev->link)
++			strprint(retv, inlen, "%s", netdev->link);
++	} else if (strcmp(p1, "flags") == 0) {
++		if (netdev->flags & IFF_UP)
++			strprint(retv, inlen, "up");
++	} else if (strcmp(p1, "upscript") == 0) {
++		if (netdev->upscript)
++			strprint(retv, inlen, "%s", netdev->upscript);
++	} else if (strcmp(p1, "hwaddr") == 0) {
++		if (netdev->hwaddr)
++			strprint(retv, inlen, "%s", netdev->hwaddr);
++	} else if (strcmp(p1, "mtu") == 0) {
++		if (netdev->mtu)
++			strprint(retv, inlen, "%s", netdev->mtu);
++	} else if (strcmp(p1, "macvlan.mode") == 0) {
++		if (netdev->type == LXC_NET_MACVLAN) {
++			const char *mode;
++			switch (netdev->priv.macvlan_attr.mode) {
++			case MACVLAN_MODE_PRIVATE: mode = "private"; break;
++			case MACVLAN_MODE_VEPA: mode = "vepa"; break;
++			case MACVLAN_MODE_BRIDGE: mode = "bridge"; break;
++			default: mode = "(invalid)"; break;
++			}
++			strprint(retv, inlen, "%s", mode);
++		}
++	} else if (strcmp(p1, "veth.pair") == 0) {
++		if (netdev->type == LXC_NET_VETH && netdev->priv.veth_attr.pair)
++			strprint(retv, inlen, "%s", netdev->priv.veth_attr.pair);
++	} else if (strcmp(p1, "vlan") == 0) {
++		if (netdev->type == LXC_NET_VLAN) {
++			strprint(retv, inlen, "%d", netdev->priv.vlan_attr.vid);
++		}
++	} else if (strcmp(p1, "ipv4_gateway") == 0) {
++		if (netdev->ipv4_gateway_auto) {
++			strprint(retv, inlen, "auto");
++		} else if (netdev->ipv4_gateway) {
++			char buf[INET_ADDRSTRLEN];
++			inet_ntop(AF_INET, netdev->ipv4_gateway, buf, sizeof(buf));
++			strprint(retv, inlen, "%s", buf);
++		}
++	} else if (strcmp(p1, "ipv4") == 0) {
++		struct lxc_list *it2;
++		lxc_list_for_each(it2, &netdev->ipv4) {
++			struct lxc_inetdev *i = it2->elem;
++			char buf[INET_ADDRSTRLEN];
++			inet_ntop(AF_INET, &i->addr, buf, sizeof(buf));
++			strprint(retv, inlen, "%s\n", buf);
++		}
++	} else if (strcmp(p1, "ipv6_gateway") == 0) {
++		if (netdev->ipv6_gateway_auto) {
++			strprint(retv, inlen, "auto");
++		} else if (netdev->ipv6_gateway) {
++			char buf[INET_ADDRSTRLEN];
++			inet_ntop(AF_INET, netdev->ipv6_gateway, buf, sizeof(buf));
++			strprint(retv, inlen, "%s", buf);
++		}
++	} else if (strcmp(p1, "ipv6") == 0) {
++		struct lxc_list *it2;
++		lxc_list_for_each(it2, &netdev->ipv6) {
++			struct lxc_inetdev *i = it2->elem;
++			char buf[INET_ADDRSTRLEN];
++			inet_ntop(AF_INET6, &i->addr, buf, sizeof(buf));
++			strprint(retv, inlen, "%s\n", buf);
++		}
++	}
++	return fulllen;
++}
++
++static int lxc_get_item_network(struct lxc_conf *c, char *retv, int inlen)
++{
++	int len, fulllen = 0;
++	struct lxc_list *it;
++
++	if (!retv)
++		inlen = 0;
++	else
++		memset(retv, 0, inlen);
++
++	lxc_list_for_each(it, &c->network) {
++		struct lxc_netdev *n = it->elem;
++		const char *t = lxc_net_type_to_str(n->type);
++		strprint(retv, inlen, "%s\n", t ? t : "(invalid)");
++	}
++	return fulllen;
++}
++
++int lxc_get_config_item(struct lxc_conf *c, char *key, char *retv, int inlen)
++{
++	char *v = NULL;
++
++	if (strcmp(key, "lxc.mount.entry") == 0)
++		return lxc_get_mount_entries(c, retv, inlen);
++	else if (strcmp(key, "lxc.mount") == 0)
++		v = c->fstab;
++	else if (strcmp(key, "lxc.tty") == 0)
++		return lxc_get_conf_int(c, retv, inlen, c->tty);
++	else if (strcmp(key, "lxc.pts") == 0)
++		return lxc_get_conf_int(c, retv, inlen, c->pts);
++	else if (strcmp(key, "lxc.devttydir") == 0)
++		v = c->ttydir;
++	else if (strcmp(key, "lxc.arch") == 0)
++		return lxc_get_arch_entry(c, retv, inlen);
++	else if (strcmp(key, "lxc.aa_profile") == 0)
++		v = c->aa_profile;
++	else if (strcmp(key, "lxc.cgroup") == 0) // all cgroup info
++		return lxc_get_cgroup_entry(c, retv, inlen, "all");
++	else if (strncmp(key, "lxc.cgroup.", 11) == 0) // specific cgroup info
++		return lxc_get_cgroup_entry(c, retv, inlen, key + 11);
++	else if (strcmp(key, "lxc.utsname") == 0)
++		v = c->utsname->nodename;
++	else if (strcmp(key, "lxc.console") == 0)
++		v = c->console.path;
++	else if (strcmp(key, "lxc.rootfs.mount") == 0)
++		v = c->rootfs.mount;
++	else if (strcmp(key, "lxc.rootfs") == 0)
++		v = c->rootfs.path;
++	else if (strcmp(key, "lxc.pivotdir") == 0)
++		v = c->rootfs.pivot;
++	else if (strcmp(key, "lxc.cap.drop") == 0)
++		return lxc_get_item_cap_drop(c, retv, inlen);
++	else if (strncmp(key, "lxc.hook", 8) == 0)
++		return lxc_get_item_hooks(c, retv, inlen, key);
++	else if (strcmp(key, "lxc.network") == 0)
++		return lxc_get_item_network(c, retv, inlen);
++	else if (strncmp(key, "lxc.network.", 12) == 0)
++		return lxc_get_item_nic(c, retv, inlen, key + 12);
++	else return -1;
++
++	if (!v)
++		return 0;
++	if (retv && inlen >= strlen(v) + 1)
++		strncpy(retv, v, strlen(v)+1);
++	return strlen(v);
++}
++
++int lxc_clear_config_item(struct lxc_conf *c, char *key)
++{
++	if (strcmp(key, "lxc.network") == 0)
++		return lxc_clear_config_network(c);
++	else if (strncmp(key, "lxc.network.", 12) == 0)
++		return lxc_clear_nic(c, key + 12);
++	else if (strcmp(key, "lxc.cap.drop") == 0)
++		return lxc_clear_config_caps(c);
++	else if (strncmp(key, "lxc.cgroup", 10) == 0)
++		return lxc_clear_cgroups(c, key);
++	else if (strcmp(key, "lxc.mount.entries") == 0)
++		return lxc_clear_mount_entries(c);
++	else if (strcmp(key, "lxc.hook") == 0)
++		return lxc_clear_hooks(c);
++
++	return -1;
++}
++
++/*
++ * writing out a confile.
++ */
++void write_config(FILE *fout, struct lxc_conf *c)
++{
++	struct lxc_list *it;
++	int i;
++
++	if (c->fstab)
++		fprintf(fout, "lxc.mount = %s\n", c->fstab);
++	lxc_list_for_each(it, &c->mount_list) {
++		fprintf(fout, "lxc.mount.entry = %s\n", (char *)it->elem);
++	}
++	if (c->tty)
++		fprintf(fout, "lxc.tty = %d\n", c->tty);
++	if (c->pts)
++		fprintf(fout, "lxc.pts = %d\n", c->pts);
++	if (c->ttydir)
++		fprintf(fout, "lxc.devttydir = %s\n", c->ttydir);
++	switch(c->personality) {
++	case PER_LINUX32: fprintf(fout, "lxc.arch = x86\n"); break;
++	case PER_LINUX: fprintf(fout, "lxc.arch = x86_64\n"); break;
++	default: break;
++	}
++	if (c->aa_profile)
++		fprintf(fout, "lxc.aa_profile = %s\n", c->aa_profile);
++	lxc_list_for_each(it, &c->cgroup) {
++		struct lxc_cgroup *cg = it->elem;
++		fprintf(fout, "lxc.cgroup.%s = %s\n", cg->subsystem, cg->value);
++	}
++	if (c->utsname)
++		fprintf(fout, "lxc.utsname = %s\n", c->utsname->nodename);
++	lxc_list_for_each(it, &c->network) {
++		struct lxc_netdev *n = it->elem;
++		const char *t = lxc_net_type_to_str(n->type);
++		struct lxc_list *it2;
++		fprintf(fout, "lxc.network.type = %s\n", t ? t : "(invalid)");
++		if (n->flags & IFF_UP)
++			fprintf(fout, "lxc.network.flags = up\n");
++		if (n->link)
++			fprintf(fout, "lxc.network.link = %s\n", n->link);
++		if (n->name)
++			fprintf(fout, "lxc.network.name = %s\n", n->name);
++		if (n->type == LXC_NET_MACVLAN) {
++			const char *mode;
++			switch (n->priv.macvlan_attr.mode) {
++			case MACVLAN_MODE_PRIVATE: mode = "private"; break;
++			case MACVLAN_MODE_VEPA: mode = "vepa"; break;
++			case MACVLAN_MODE_BRIDGE: mode = "bridge"; break;
++			default: mode = "(invalid)"; break;
++			}
++			fprintf(fout, "lxc.network.macvlan.mode = %s\n", mode);
++		} else if (n->type == LXC_NET_VETH) {
++			if (n->priv.veth_attr.pair)
++				fprintf(fout, "lxc.network.veth.pair = %s\n",
++					n->priv.veth_attr.pair);
++		} else if (n->type == LXC_NET_VLAN) {
++			fprintf(fout, "lxc.network.vlan.id = %d\n", n->priv.vlan_attr.vid);
++		}
++		if (n->upscript)
++			fprintf(fout, "lxc.network.script.up = %s\n", n->upscript);
++		if (n->hwaddr)
++			fprintf(fout, "lxc.network.hwaddr = %s\n", n->hwaddr);
++		if (n->mtu)
++			fprintf(fout, "lxc.network.mtu = %s\n", n->mtu);
++		if (n->ipv4_gateway_auto)
++			fprintf(fout, "lxc.network.ipv4.gateway = auto\n");
++		else if (n->ipv4_gateway) {
++			char buf[INET_ADDRSTRLEN];
++			inet_ntop(AF_INET, n->ipv4_gateway, buf, sizeof(buf));
++			fprintf(fout, "lxc.network.ipv4.gateway = %s\n", buf);
++		}
++		lxc_list_for_each(it2, &n->ipv4) {
++			struct lxc_inetdev *i = it2->elem;
++			char buf[INET_ADDRSTRLEN];
++			inet_ntop(AF_INET, &i->addr, buf, sizeof(buf));
++			fprintf(fout, "lxc.network.ipv4 = %s\n", buf);
++		}
++		if (n->ipv6_gateway_auto)
++			fprintf(fout, "lxc.network.ipv6.gateway = auto\n");
++		else if (n->ipv6_gateway) {
++			char buf[INET6_ADDRSTRLEN];
++			inet_ntop(AF_INET6, n->ipv6_gateway, buf, sizeof(buf));
++			fprintf(fout, "lxc.network.ipv6.gateway = %s\n", buf);
++		}
++		lxc_list_for_each(it2, &n->ipv6) {
++			struct lxc_inet6dev *i = it2->elem;
++			char buf[INET6_ADDRSTRLEN];
++			inet_ntop(AF_INET, &i->addr, buf, sizeof(buf));
++			fprintf(fout, "lxc.network.ipv6 = %s\n", buf);
++		}
++	}
++	lxc_list_for_each(it, &c->caps)
++		fprintf(fout, "lxc.cap.drop = %s\n", (char *)it->elem);
++	for (i=0; i<NUM_LXC_HOOKS; i++) {
++		lxc_list_for_each(it, &c->hooks[i])
++			fprintf(fout, "lxc.hook.%s = %s\n",
++				lxchook_names[i], (char *)it->elem);
++	}
++	if (c->console.path)
++		fprintf(fout, "lxc.console = %s\n", c->console.path);
++	if (c->rootfs.path)
++		fprintf(fout, "lxc.rootfs = %s\n", c->rootfs.path);
++	if (c->rootfs.mount && strcmp(c->rootfs.mount, LXCROOTFSMOUNT) != 0)
++		fprintf(fout, "lxc.rootfs.mount = %s\n", c->rootfs.mount);
++	if (c->rootfs.pivot)
++		fprintf(fout, "lxc.pivotdir = %s\n", c->rootfs.pivot);
++}
+Index: lxc-api-and-python/src/lxc/state.c
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/state.c	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/state.c	2012-08-17 20:37:37.052994657 +0000
+@@ -31,9 +31,11 @@
+ #include <sys/stat.h>
+ #include <sys/file.h>
+ 
++#include <lxc/lxc.h>
+ #include <lxc/log.h>
+ #include <lxc/start.h>
+ #include <lxc/cgroup.h>
++#include <lxc/monitor.h>
+ #include "commands.h"
+ #include "config.h"
+ 
+@@ -162,3 +164,108 @@
+ 	return ret;
+ }
+ 
++static int fillwaitedstates(char *strstates, int *states)
++{
++	char *token, *saveptr = NULL;
++	int state;
++
++	token = strtok_r(strstates, "|", &saveptr);
++	while (token) {
++
++		state = lxc_str2state(token);
++		if (state < 0)
++			return -1;
++
++		states[state] = 1;
++
++		token = strtok_r(NULL, "|", &saveptr);
++	}
++	return 0;
++}
++
++extern int lxc_wait(char *lxcname, char *states, int timeout)
++{
++	struct lxc_msg msg;
++	int state, ret;
++	int s[MAX_STATE] = { }, fd;
++
++	if (fillwaitedstates(states, s))
++		return -1;
++
++	fd = lxc_monitor_open();
++	if (fd < 0)
++		return -1;
++
++	/*
++	 * if container present,
++	 * then check if already in requested state
++	 */
++	ret = -1;
++	state = lxc_getstate(lxcname);
++	if (state < 0) {
++		goto out_close;
++	} else if ((state >= 0) && (s[state])) {
++		ret = 0;
++		goto out_close;
++	}
++
++	for (;;) {
++		int elapsed_time, curtime;
++		struct timeval tv;
++		int stop = 0;
++		int retval;
++
++		if (timeout != -1) {
++			retval = gettimeofday(&tv, NULL);
++			if (retval)
++				goto out_close;
++			curtime = tv.tv_sec;
++		}
++		if (lxc_monitor_read_timeout(fd, &msg, timeout) < 0)
++			goto out_close;
++
++		if (timeout != -1) {
++			retval = gettimeofday(&tv, NULL);
++			if (retval)
++				goto out_close;
++			elapsed_time = tv.tv_sec - curtime;
++			if (timeout - elapsed_time <= 0)
++				stop = 1;
++			timeout -= elapsed_time;
++		}
++
++		if (strcmp(lxcname, msg.name)) {
++			if (stop) {
++				ret = -2;
++				goto out_close;
++			}
++			continue;
++		}
++
++		switch (msg.type) {
++		case lxc_msg_state:
++			if (msg.value < 0 || msg.value >= MAX_STATE) {
++				ERROR("Receive an invalid state number '%d'",
++					msg.value);
++				goto out_close;
++			}
++
++			if (s[msg.value]) {
++				ret = 0;
++				goto out_close;
++			}
++			break;
++		default:
++			if (stop) {
++				ret = -2;
++				goto out_close;
++			}
++			/* just ignore garbage */
++			break;
++		}
++	}
++
++out_close:
++	lxc_monitor_close(fd);
++	return ret;
++}
+Index: lxc-api-and-python/src/tests/destroytest.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/tests/destroytest.c	2012-08-17 20:37:37.052994657 +0000
+@@ -0,0 +1,104 @@
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++#include "../lxc/lxccontainer.h"
++
++#include <unistd.h>
++#include <signal.h>
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <stdlib.h>
++#include <errno.h>
++
++#define MYNAME "lxctest1"
++
++static int create_ubuntu(void)
++{
++	int status, ret;
++	pid_t pid = fork();
++
++	if (pid < 0) {
++		perror("fork");
++		return -1;
++	}
++	if (pid == 0) {
++		ret = execlp("lxc-create", "lxc-create", "-t", "ubuntu", "-f", "/etc/lxc/lxc.conf", "-n", MYNAME, NULL);
++		// Should not return
++		perror("execl");
++		exit(1);
++	}
++again:
++	ret = waitpid(pid, &status, 0);
++	if (ret == -1) {
++		if (errno == -EINTR)
++			goto again;
++		perror("waitpid");
++		return -1;
++	}
++	if (ret != pid)
++		goto again;
++	if (!WIFEXITED(status))  { // did not exit normally
++		fprintf(stderr, "%d: lxc-create exited abnormally\n", __LINE__);
++		return -1;
++	}
++	return WEXITSTATUS(status);
++}
++
++int main(int argc, char *argv[])
++{
++	struct lxc_container *c;
++	int ret = 1;
++
++	if ((c = lxc_container_new(MYNAME)) == NULL) {
++		fprintf(stderr, "%d: error opening lxc_container %s\n", __LINE__, MYNAME);
++		ret = 1;
++		goto out;
++	}
++
++	if (c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	if (create_ubuntu()) {
++		fprintf(stderr, "%d: failed to create a ubuntu container\n", __LINE__);
++		goto out;
++	}
++
++	if (!c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was not defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	if (!c->destroy(c)) {
++		fprintf(stderr, "%d: error deleting %s\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	if (c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	fprintf(stderr, "all lxc_container tests passed for %s\n", c->name);
++	ret = 0;
++out:
++	lxc_container_put(c);
++	exit(ret);
++}
+Index: lxc-api-and-python/src/lxc/conf.c
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/conf.c	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/conf.c	2012-08-17 20:37:37.052994657 +0000
+@@ -105,6 +105,9 @@
+ #define PR_CAPBSET_DROP 24
+ #endif
+ 
++char *lxchook_names[NUM_LXC_HOOKS] = {
++	"pre-start", "mount", "start", "post-stop" };
++
+ extern int pivot_root(const char * new_root, const char * put_old);
+ 
+ typedef int (*instanciate_cb)(struct lxc_handler *, struct lxc_netdev *);
+@@ -1618,7 +1621,7 @@
+ 				      ifname, strerror(-err));
+ 			if (netdev->ipv6_gateway_auto) {
+ 				char buf[INET6_ADDRSTRLEN];
+-				inet_ntop(AF_INET, netdev->ipv6_gateway, buf, sizeof(buf));
++				inet_ntop(AF_INET6, netdev->ipv6_gateway, buf, sizeof(buf));
+ 				ERROR("tried to set autodetected ipv6 gateway '%s'", buf);
+ 			}
+ 			return -1;
+@@ -2267,3 +2270,195 @@
+ 	}
+ 	return 0;
+ }
++
++static int lxc_remove_nic(struct lxc_list *it)
++{
++	struct lxc_netdev *netdev = it->elem;
++	struct lxc_list *it2;
++
++	lxc_list_del(it);
++
++	if (netdev->link)
++		free(netdev->link);
++	if (netdev->name)
++		free(netdev->name);
++	if (netdev->upscript)
++		free(netdev->upscript);
++	if (netdev->hwaddr)
++		free(netdev->hwaddr);
++	if (netdev->mtu)
++		free(netdev->mtu);
++	if (netdev->ipv4_gateway)
++		free(netdev->ipv4_gateway);
++	if (netdev->ipv6_gateway)
++		free(netdev->ipv6_gateway);
++	lxc_list_for_each(it2, &netdev->ipv4) {
++		lxc_list_del(it2);
++		free(it2->elem);
++		free(it2);
++	}
++	lxc_list_for_each(it2, &netdev->ipv6) {
++		lxc_list_del(it2);
++		free(it2->elem);
++		free(it2);
++	}
++	free(it);
++}
++
++/* we get passed in something like '0', '0.ipv4' or '1.ipv6' */
++int lxc_clear_nic(struct lxc_conf *c, char *key)
++{
++	char *p1;
++	int ret, idx, i;
++	struct lxc_list *it;
++	struct lxc_netdev *netdev;
++
++	p1 = index(key, '.');
++	if (!p1 || *(p1+1) == '\0')
++		p1 = NULL;
++
++	ret = sscanf(key, "%d", &idx);
++	if (ret != 1) return -1;
++	if (idx < 0)
++		return -1;
++
++	i = 0;
++	lxc_list_for_each(it, &c->network) {
++		if (i == idx)
++			break;
++		i++;
++	}
++	if (i < idx)  // we don't have that many nics defined
++		return -1;
++
++	if (!it || !it->elem)
++		return -1;
++
++	netdev = it->elem;
++
++	if (!p1) {
++		lxc_remove_nic(it);
++	} else if (strcmp(p1, "ipv4") == 0) {
++		struct lxc_list *it2;
++		lxc_list_for_each(it2, &netdev->ipv4) {
++			lxc_list_del(it2);
++			free(it2->elem);
++			free(it2);
++		}
++	} else if (strcmp(p1, "ipv6") == 0) {
++		struct lxc_list *it2;
++		lxc_list_for_each(it2, &netdev->ipv6) {
++			lxc_list_del(it2);
++			free(it2->elem);
++			free(it2);
++		}
++	} else if (strcmp(p1, "link") == 0) {
++		if (netdev->link) {
++			free(netdev->link);
++			netdev->link = NULL;
++		}
++	} else if (strcmp(p1, "name") == 0) {
++		if (netdev->name) {
++			free(netdev->name);
++			netdev->name = NULL;
++		}
++	} else if (strcmp(p1, "script.up") == 0) {
++		if (netdev->upscript) {
++			free(netdev->upscript);
++			netdev->upscript = NULL;
++		}
++	} else if (strcmp(p1, "hwaddr") == 0) {
++		if (netdev->hwaddr) {
++			free(netdev->hwaddr);
++			netdev->hwaddr = NULL;
++		}
++	} else if (strcmp(p1, "mtu") == 0) {
++		if (netdev->mtu) {
++			free(netdev->mtu);
++			netdev->mtu = NULL;
++		}
++	} else if (strcmp(p1, "ipv4_gateway") == 0) {
++		if (netdev->ipv4_gateway) {
++			free(netdev->ipv4_gateway);
++			netdev->ipv4_gateway = NULL;
++		}
++	} else if (strcmp(p1, "ipv6_gateway") == 0) {
++		if (netdev->ipv6_gateway) {
++			free(netdev->ipv6_gateway);
++			netdev->ipv6_gateway = NULL;
++		}
++	}
++		else return -1;
++
++	return 0;
++}
++
++int lxc_clear_config_network(struct lxc_conf *c)
++{
++	struct lxc_list *it;
++	lxc_list_for_each(it, &c->network) {
++		lxc_remove_nic(it);
++	}
++	return 0;
++}
++
++int lxc_clear_config_caps(struct lxc_conf *c)
++{
++	struct lxc_list *it;
++
++	lxc_list_for_each(it, &c->caps) {
++		lxc_list_del(it);
++		free(it->elem);
++		free(it);
++	}
++	return 0;
++}
++
++int lxc_clear_cgroups(struct lxc_conf *c, char *key)
++{
++	struct lxc_list *it;
++	bool all = false;
++	char *k = key + 11;
++
++	if (strcmp(key, "lxc.cgroup") == 0)
++		all = true;
++
++	lxc_list_for_each(it, &c->cgroup) {
++		struct lxc_cgroup *cg = it->elem;
++		if (!all && strcmp(cg->subsystem, k) != 0)
++			continue;
++		lxc_list_del(it);
++		free(cg->subsystem);
++		free(cg->value);
++		free(cg);
++		free(it);
++	}
++	return 0;
++}
++
++int lxc_clear_mount_entries(struct lxc_conf *c)
++{
++	struct lxc_list *it;
++
++	lxc_list_for_each(it, &c->mount_list) {
++		lxc_list_del(it);
++		free(it->elem);
++		free(it);
++	}
++	return 0;
++}
++
++int lxc_clear_hooks(struct lxc_conf *c)
++{
++	struct lxc_list *it;
++	int i;
++
++	for (i=0; i<NUM_LXC_HOOKS; i++) {
++		lxc_list_for_each(it, &c->hooks[i]) {
++			lxc_list_del(it);
++			free(it->elem);
++			free(it);
++		}
++	}
++	return 0;
++}
+Index: lxc-api-and-python/src/lxc/network.c
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/network.c	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/network.c	2012-08-17 20:37:37.052994657 +0000
+@@ -47,6 +47,7 @@
+ 
+ #include "nl.h"
+ #include "network.h"
++#include "conf.h"
+ 
+ #ifndef IFLA_LINKMODE
+ #  define IFLA_LINKMODE 17
+@@ -1004,3 +1005,18 @@
+ 
+ 	return err;
+ }
++
++static char* lxc_network_types[LXC_NET_MAXCONFTYPE + 1] = {
++	[LXC_NET_VETH]    = "veth",
++	[LXC_NET_MACVLAN] = "macvlan",
++	[LXC_NET_VLAN]    = "vlan",
++	[LXC_NET_PHYS]    = "phys",
++	[LXC_NET_EMPTY]   = "empty",
++};
++
++const char *lxc_net_type_to_str(int type)
++{
++	if (type < 0 || type > LXC_NET_MAXCONFTYPE)
++		return NULL;
++	return lxc_network_types[type];
++}
+Index: lxc-api-and-python/src/lxc/network.h
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/network.h	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/network.h	2012-08-17 20:37:37.056994657 +0000
+@@ -122,4 +122,5 @@
+  */
+ extern int lxc_neigh_proxy_off(const char *name, int family);
+ 
++extern const char *lxc_net_type_to_str(int type);
+ #endif
+Index: lxc-api-and-python/src/tests/saveconfig.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/tests/saveconfig.c	2012-08-17 20:37:37.056994657 +0000
+@@ -0,0 +1,106 @@
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++#include "../lxc/lxccontainer.h"
++
++#include <unistd.h>
++#include <signal.h>
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <stdlib.h>
++#include <errno.h>
++
++#define MYNAME "lxctest1"
++
++static int create_ubuntu(void)
++{
++	int status, ret;
++	pid_t pid = fork();
++
++	if (pid < 0) {
++		perror("fork");
++		return -1;
++	}
++	if (pid == 0) {
++		ret = execlp("lxc-create", "lxc-create", "-t", "ubuntu", "-f", "/etc/lxc/lxc.conf", "-n", MYNAME, NULL);
++		// Should not return
++		perror("execl");
++		exit(1);
++	}
++again:
++	ret = waitpid(pid, &status, 0);
++	if (ret == -1) {
++		if (errno == -EINTR)
++			goto again;
++		perror("waitpid");
++		return -1;
++	}
++	if (ret != pid)
++		goto again;
++	if (!WIFEXITED(status))  { // did not exit normally
++		fprintf(stderr, "%d: lxc-create exited abnormally\n", __LINE__);
++		return -1;
++	}
++	return WEXITSTATUS(status);
++}
++
++int main(int argc, char *argv[])
++{
++	struct lxc_container *c;
++	int ret = 1;
++
++	if ((c = lxc_container_new(MYNAME)) == NULL) {
++		fprintf(stderr, "%d: error opening lxc_container %s\n", __LINE__, MYNAME);
++		ret = 1;
++		goto out;
++	}
++
++	if (c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	if (create_ubuntu()) {
++		fprintf(stderr, "%d: failed to create a ubuntu container\n", __LINE__);
++		goto out;
++	}
++
++	if (!c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was not defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	c->load_config(c, NULL);
++	unlink("/tmp/lxctest1");
++	if (!c->save_config(c, "/tmp/lxctest1")) {
++		fprintf(stderr, "%d: failed writing config file /tmp/lxctest1\n", __LINE__);
++		goto out;
++	}
++	rename("/var/lib/lxc/" MYNAME "/config", "/var/lib/lxc/" MYNAME "/config.bak");
++	if (!c->save_config(c, NULL)) {
++		fprintf(stderr, "%d: failed writing config file\n", __LINE__);
++		goto out;
++	}
++
++	fprintf(stderr, "all lxc_container tests passed for %s\n", c->name);
++	ret = 0;
++out:
++	lxc_container_put(c);
++	exit(ret);
++}
+Index: lxc-api-and-python/src/tests/createtest.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/tests/createtest.c	2012-08-17 20:37:37.056994657 +0000
+@@ -0,0 +1,92 @@
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++#include "../lxc/lxccontainer.h"
++
++#include <unistd.h>
++#include <signal.h>
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <stdlib.h>
++#include <errno.h>
++
++#define MYNAME "lxctest1"
++
++int main(int argc, char *argv[])
++{
++	struct lxc_container *c;
++	int ret = 1;
++
++	if ((c = lxc_container_new(MYNAME)) == NULL) {
++		fprintf(stderr, "%d: error opening lxc_container %s\n", __LINE__, MYNAME);
++		ret = 1;
++		goto out;
++	}
++
++	if (c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	if (!c->set_config_item(c, "lxc.network.type", "veth")) {
++		fprintf(stderr, "%d: failed to set network type\n", __LINE__);
++		goto out;
++	}
++	c->set_config_item(c, "lxc.network.link", "lxcbr0");
++	c->set_config_item(c, "lxc.network.flags", "up");
++	if (!c->createl(c, "ubuntu", "-r", "lucid", NULL)) {
++		fprintf(stderr, "%d: failed to create a lucid container\n", __LINE__);
++		goto out;
++	}
++
++	if (!c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was not defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	c->load_config(c, NULL);
++	c->want_daemonize(c);
++	if (!c->startl(c, 0, NULL)) {
++		fprintf(stderr, "%d: failed to start %s\n", __LINE__, MYNAME);
++		goto out;
++	}
++	fprintf(stderr, "%d: %s started, you have 60 seconds to test a console\n", __LINE__, MYNAME);
++	sleep(60);  // wait a minute to let user connect to console
++
++	if (!c->stop(c)) {
++		fprintf(stderr, "%d: failed to stop %s\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	if (!c->destroy(c)) {
++		fprintf(stderr, "%d: error deleting %s\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	if (c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	fprintf(stderr, "all lxc_container tests passed for %s\n", c->name);
++	ret = 0;
++out:
++	lxc_container_put(c);
++	exit(ret);
++}
+Index: lxc-api-and-python/src/lxc/monitor.c
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/monitor.c	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/monitor.c	2012-08-17 20:37:37.056994657 +0000
+@@ -98,11 +98,28 @@
+ 	return fd;
+ }
+ 
+-int lxc_monitor_read(int fd, struct lxc_msg *msg)
++/* timeout of 0 means return immediately;  -1 means wait forever */
++int lxc_monitor_read_timeout(int fd, struct lxc_msg *msg, int timeout)
+ {
+ 	struct sockaddr_un from;
+ 	socklen_t len = sizeof(from);
+ 	int ret;
++	fd_set rfds;
++	struct timeval tv;
++
++	if (timeout != -1) {
++		FD_ZERO(&rfds);
++		FD_SET(fd, &rfds);
++
++		tv.tv_sec = timeout;
++		tv.tv_usec = 0;
++
++		ret = select(fd+1, &rfds, NULL, NULL, &tv);
++		if (ret == -1)
++			return -1;
++		else if (!ret)
++			return -2;  // timed out
++	}
+ 
+ 	ret = recvfrom(fd, msg, sizeof(*msg), 0,
+ 		       (struct sockaddr *)&from, &len);
+@@ -114,6 +131,11 @@
+ 	return ret;
+ }
+ 
++int lxc_monitor_read(int fd, struct lxc_msg *msg)
++{
++	return lxc_monitor_read_timeout(fd, msg, -1);
++}
++
+ int lxc_monitor_close(int fd)
+ {
+ 	return close(fd);
+Index: lxc-api-and-python/src/tests/shutdowntest.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/tests/shutdowntest.c	2012-08-17 20:37:37.056994657 +0000
+@@ -0,0 +1,93 @@
++
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++#include "../lxc/lxccontainer.h"
++
++#include <unistd.h>
++#include <signal.h>
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <stdlib.h>
++#include <errno.h>
++
++#define MYNAME "lxctest1"
++
++int main(int argc, char *argv[])
++{
++	struct lxc_container *c;
++	int ret = 1;
++
++	if ((c = lxc_container_new(MYNAME)) == NULL) {
++		fprintf(stderr, "%d: error opening lxc_container %s\n", __LINE__, MYNAME);
++		ret = 1;
++		goto out;
++	}
++
++	if (c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	if (!c->set_config_item(c, "lxc.network.type", "veth")) {
++		fprintf(stderr, "%d: failed to set network type\n", __LINE__);
++		goto out;
++	}
++	c->set_config_item(c, "lxc.network.link", "lxcbr0");
++	c->set_config_item(c, "lxc.network.flags", "up");
++	if (!c->createl(c, "ubuntu", "-r", "lucid", NULL)) {
++		fprintf(stderr, "%d: failed to create a lucid container\n", __LINE__);
++		goto out;
++	}
++
++	if (!c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was not defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	c->load_config(c, NULL);
++	c->want_daemonize(c);
++	if (!c->startl(c, 0, NULL)) {
++		fprintf(stderr, "%d: failed to start %s\n", __LINE__, MYNAME);
++		goto out;
++	}
++	fprintf(stderr, "%d: %s started, you have 60 seconds to test a console\n", __LINE__, MYNAME);
++	sleep(60);  // wait a minute to let user connect to console
++
++	if (!c->shutdown(c, 60)) {
++		fprintf(stderr, "%d: failed to shut down %s\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	if (!c->destroy(c)) {
++		fprintf(stderr, "%d: error deleting %s\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	if (c->is_defined(c)) {
++		fprintf(stderr, "%d: %s thought it was defined\n", __LINE__, MYNAME);
++		goto out;
++	}
++
++	fprintf(stderr, "all lxc_container tests passed for %s\n", c->name);
++	ret = 0;
++out:
++	lxc_container_put(c);
++	exit(ret);
++}
+Index: lxc-api-and-python/src/lxc/conf.h
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/conf.h	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/conf.h	2012-08-17 20:39:10.168997254 +0000
+@@ -203,6 +203,8 @@
+ enum lxchooks {
+ 	LXCHOOK_PRESTART, LXCHOOK_MOUNT, LXCHOOK_START,
+ 	LXCHOOK_POSTSTOP, NUM_LXC_HOOKS};
++extern char *lxchook_names[NUM_LXC_HOOKS];
++
+ struct lxc_conf {
+ 	char *fstab;
+ 	int tty;
+@@ -224,6 +226,7 @@
+ 	int umount_proc;
+ 	struct lxc_list hooks[NUM_LXC_HOOKS];
+ 	char *seccomp;  // filename with the seccomp rules
++	int maincmd_fd;
+ };
+ 
+ int run_lxc_hooks(const char *name, char *hook, struct lxc_conf *conf);
+@@ -248,6 +251,13 @@
+ extern int lxc_create_tty(const char *name, struct lxc_conf *conf);
+ extern void lxc_delete_tty(struct lxc_tty_info *tty_info);
+ 
++extern int lxc_clear_config_network(struct lxc_conf *c);
++extern int lxc_clear_nic(struct lxc_conf *c, char *key);
++extern int lxc_clear_config_caps(struct lxc_conf *c);
++extern int lxc_clear_cgroups(struct lxc_conf *c, char *key);
++extern int lxc_clear_mount_entries(struct lxc_conf *c);
++extern int lxc_clear_hooks(struct lxc_conf *c);
++
+ /*
+  * Configure the container from inside
+  */
+Index: lxc-api-and-python/doc/rootfs/Makefile.am
+===================================================================
+--- lxc-api-and-python.orig/doc/rootfs/Makefile.am	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/doc/rootfs/Makefile.am	2012-08-17 20:37:37.056994657 +0000
+@@ -1,3 +1,3 @@
+ READMEdir=@LXCROOTFSMOUNT@
+ 
+-README_DATA=README
+\ No newline at end of file
++README_DATA=
+Index: lxc-api-and-python/src/tests/get_item.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/tests/get_item.c	2012-08-17 20:37:37.056994657 +0000
+@@ -0,0 +1,308 @@
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++#include "../lxc/lxccontainer.h"
++
++#include <unistd.h>
++#include <signal.h>
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <stdlib.h>
++#include <errno.h>
++#include <lxc/state.h>
++
++#define MYNAME "lxctest1"
++
++int main(int argc, char *argv[])
++{
++	struct lxc_container *c;
++	int ret;
++	char v1[2], v2[256], v3[2048];
++
++	if ((c = lxc_container_new("testxyz")) == NULL) {
++		fprintf(stderr, "%d: error opening lxc_container %s\n", __LINE__, MYNAME);
++		ret = 1;
++		goto out;
++	}
++
++	if (!c->set_config_item(c, "lxc.hook.pre-start", "hi there")) {
++		fprintf(stderr, "%d: failed to set hook.pre-start\n", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	ret = c->get_config_item(c, "lxc.hook.pre-start", v2, 255);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item(lxc.hook.pre-start) returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	fprintf(stderr, "lxc.hook.pre-start returned %d %s\n", ret, v2);
++
++	ret = c->get_config_item(c, "lxc.network", v2, 255);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	fprintf(stderr, "%d: get_config_item(lxc.network) returned %d %s\n", __LINE__, ret, v2);
++	if (!c->set_config_item(c, "lxc.tty", "4")) {
++		fprintf(stderr, "%d: failed to set tty\n", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	ret = c->get_config_item(c, "lxc.tty", v2, 255);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item(lxc.tty) returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	fprintf(stderr, "lxc.tty returned %d %s\n", ret, v2);
++
++	if (!c->set_config_item(c, "lxc.arch", "x86")) {
++		fprintf(stderr, "%d: failed to set arch\n", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	ret = c->get_config_item(c, "lxc.arch", v2, 255);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item(lxc.arch) returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	printf("lxc.arch returned %d %s\n", ret, v2);
++
++#define HNAME "hostname1"
++	// demonstrate proper usage:
++	char *alloced;
++	if (!c->set_config_item(c, "lxc.utsname", HNAME)) {
++		fprintf(stderr, "%d: failed to set utsname\n", __LINE__);
++		ret = 1;
++		goto out;
++	}
++
++	int len;
++	len = c->get_config_item(c, "lxc.utsname", NULL, 0);  // query the size of the string
++	if (len < 0) {
++		fprintf(stderr, "%d: get_config_item(lxc.utsname) returned %d\n", __LINE__, len);
++		ret = 1;
++		goto out;
++	}
++	printf("lxc.utsname returned %d\n", len);
++
++	// allocate the length of string + 1 for trailing \0
++	alloced = malloc(len+1);
++	if (!alloced) {
++		fprintf(stderr, "%d: failed to allocate %d bytes for utsname\n", __LINE__, len);
++		ret = 1;
++		goto out;
++	}
++	// now pass in the malloc'd array, and pass in length of string + 1: again
++	// because we need room for the trailing \0
++	ret = c->get_config_item(c, "lxc.utsname", alloced, len+1);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item(lxc.utsname) returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	if (strcmp(alloced, HNAME) != 0 || ret != len) {
++		fprintf(stderr, "lxc.utsname returned wrong value: %d %s not %d %s\n", ret, alloced, len, HNAME);
++		ret = 1;
++		goto out;
++	}
++	printf("lxc.utsname returned %d %s\n", len, alloced);
++	free(alloced);
++
++	if (!c->set_config_item(c, "lxc.mount.entry", "hi there")) {
++		fprintf(stderr, "%d: failed to set mount.entry\n", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	ret = c->get_config_item(c, "lxc.mount.entry", v2, 255);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item(lxc.mount.entry) returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	printf("lxc.mount.entry returned %d %s\n", ret, v2);
++
++	if (!c->set_config_item(c, "lxc.aa_profile", "unconfined")) {
++		fprintf(stderr, "%d: failed to set aa_profile\n", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	ret = c->get_config_item(c, "lxc.aa_profile", v2, 255);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item(lxc.aa_profile) returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	printf("lxc.aa_profile returned %d %s\n", ret, v2);
++
++	lxc_container_put(c);
++
++	// new test with real container
++	if ((c = lxc_container_new(MYNAME)) == NULL) {
++		fprintf(stderr, "%d: error opening lxc_container %s\n", __LINE__, MYNAME);
++		ret = 1;
++		goto out;
++	}
++	c->destroy(c);
++	lxc_container_put(c);
++
++	if ((c = lxc_container_new(MYNAME)) == NULL) {
++		fprintf(stderr, "%d: error opening lxc_container %s\n", __LINE__, MYNAME);
++		ret = 1;
++		goto out;
++	}
++	if (!c->createl(c, "ubuntu", "-r", "lucid", NULL)) {
++		fprintf(stderr, "%d: failed to create a lucid container\n", __LINE__);
++		ret = 1;
++		goto out;
++	}
++
++	lxc_container_put(c);
++
++	/* XXX TODO load_config needs to clear out any old config first */
++	if ((c = lxc_container_new(MYNAME)) == NULL) {
++		fprintf(stderr, "%d: error opening lxc_container %s\n", __LINE__, MYNAME);
++		ret = 1;
++		goto out;
++	}
++
++	ret = c->get_config_item(c, "lxc.cap.drop", NULL, 300);
++	if (ret < 5 || ret > 255) {
++		fprintf(stderr, "%d: get_config_item(lxc.cap.drop) with NULL returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	ret = c->get_config_item(c, "lxc.cap.drop", v1, 1);
++	if (ret < 5 || ret > 255) {
++		fprintf(stderr, "%d: get_config_item(lxc.cap.drop) returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	ret = c->get_config_item(c, "lxc.cap.drop", v2, 255);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item(lxc.cap.drop) returned %d %s\n", __LINE__, ret, v2);
++		ret = 1;
++		goto out;
++	}
++	printf("%d: get_config_item(lxc.cap.drop) returned %d %s\n", __LINE__, ret, v2);
++	ret = c->get_config_item(c, "lxc.network", v2, 255);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	printf("%d: get_config_item(lxc.network) returned %d %s\n", __LINE__, ret, v2);
++
++	if (!c->set_config_item(c, "lxc.network.ipv4", "10.2.3.4")) {
++		fprintf(stderr, "%d: failed to set ipv4\n", __LINE__);
++		ret = 1;
++		goto out;
++	}
++
++	ret = c->get_config_item(c, "lxc.network.0.ipv4", v2, 255);
++	if (ret <= 0) {
++		fprintf(stderr, "%d: lxc.network.0.ipv4 returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	if (!c->clear_config_item(c, "lxc.network.0.ipv4")) {
++		fprintf(stderr, "%d: failed clearing all ipv4 entries\n", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	ret = c->get_config_item(c, "lxc.network.0.ipv4", v2, 255);
++	if (ret != 0) {
++		fprintf(stderr, "%d: after clearing ipv4 entries get_item(lxc.network.0.ipv4 returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++
++	ret = c->get_config_item(c, "lxc.network.0.link", v2, 255);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	printf("%d: get_config_item (link) returned %d %s\n", __LINE__, ret, v2);
++	ret = c->get_config_item(c, "lxc.network.0.name", v2, 255);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	printf("%d: get_config_item (name) returned %d %s\n", __LINE__, ret, v2);
++
++	if (!c->clear_config_item(c, "lxc.network")) {
++		fprintf(stderr, "%d: clear_config_item failed\n", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	ret = c->get_config_item(c, "lxc.network", v2, 255);
++	if (ret != 0) {
++		fprintf(stderr, "%d: network was not actually cleared (get_network returned %d)\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++
++	ret = c->get_config_item(c, "lxc.cgroup", v3, 2047);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item(cgroup.devices) returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	printf("%d: get_config_item (cgroup.devices) returned %d %s\n", __LINE__, ret, v3);
++
++	ret = c->get_config_item(c, "lxc.cgroup.devices.allow", v3, 2047);
++	if (ret < 0) {
++		fprintf(stderr, "%d: get_config_item(cgroup.devices.devices.allow) returned %d\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	printf("%d: get_config_item (cgroup.devices.devices.allow) returned %d %s\n", __LINE__, ret, v3);
++
++	if (!c->clear_config_item(c, "lxc.cgroup")) {
++		fprintf(stderr, "%d: failed clearing lxc.cgroup", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	if (!c->clear_config_item(c, "lxc.cap.drop")) {
++		fprintf(stderr, "%d: failed clearing lxc.cap.drop", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	if (!c->clear_config_item(c, "lxc.mount.entries")) {
++		fprintf(stderr, "%d: failed clearing lxc.mount.entries", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	if (!c->clear_config_item(c, "lxc.hook")) {
++		fprintf(stderr, "%d: failed clearing lxc.hook", __LINE__);
++		ret = 1;
++		goto out;
++	}
++	c->destroy(c);
++	printf("All get_item tests passed\n");
++	ret = 0;
++out:
++	lxc_container_put(c);
++	exit(ret);
++};
+Index: lxc-api-and-python/src/lxc/commands.c
+===================================================================
+--- lxc-api-and-python.orig/src/lxc/commands.c	2012-08-17 20:30:14.000000000 +0000
++++ lxc-api-and-python/src/lxc/commands.c	2012-08-17 20:37:37.056994657 +0000
+@@ -305,5 +305,6 @@
+ 		close(fd);
+ 	}
+ 
++	handler->conf->maincmd_fd = fd;
+ 	return ret;
+ }
+Index: lxc-api-and-python/src/tests/getkeys.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc-api-and-python/src/tests/getkeys.c	2012-08-17 20:37:37.056994657 +0000
+@@ -0,0 +1,71 @@
++/* liblxcapi
++ *
++ * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
++ * Copyright © 2012 Canonical Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2, as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++#include "../lxc/lxccontainer.h"
++
++#include <unistd.h>
++#include <signal.h>
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/wait.h>
++#include <stdlib.h>
++#include <errno.h>
++#include <lxc/state.h>
++
++#define MYNAME "lxctest1"
++
++int main(int argc, char *argv[])
++{
++	struct lxc_container *c;
++	int len, ret;
++	char v1[2], v2[256], v3[2048];
++
++	if ((c = lxc_container_new(MYNAME)) == NULL) {
++		fprintf(stderr, "%d: error opening lxc_container %s\n", __LINE__, MYNAME);
++		ret = 1;
++		goto out;
++	}
++
++	c->set_config_item(c, "lxc.network.type", "veth");
++
++	len = c->get_keys(c, NULL, NULL, 0);
++	if (len < 0) {
++		fprintf(stderr, "%d: failed to get length of all keys (%d)\n", __LINE__, len);
++		ret = 1;
++		goto out;
++	}
++	ret = c->get_keys(c, NULL, v3, len+1);
++	if (ret != len) {
++		fprintf(stderr, "%d: failed to get keys (%d)\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	printf("get_keys returned %d\n%s", ret, v3);
++
++	ret = c->get_keys(c, "lxc.network.0", v3, 2000);
++	if (ret < 0) {
++		fprintf(stderr, "%d: failed to get nic 0 keys(%d)\n", __LINE__, ret);
++		ret = 1;
++		goto out;
++	}
++	printf("get_keys for nic 1 returned %d\n%s", ret, v3);
++
++out:
++	lxc_container_put(c);
++	exit(ret);
++}

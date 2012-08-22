@@ -63,7 +63,7 @@ cleanup() {
         sudo lxc-stop -n $LXC_NAME
     fi
     if [ $LXC_MOUNTED -eq 1 ]; then
-	    cleanup_dirs
+        cleanup_dirs
     fi
     exit 1
 }
@@ -91,47 +91,47 @@ eval set -- "$getopt"
 
 while true; do
         case "$1" in
-	    -h|--help)
-		help
-		exit 1
-		;;
-	    -o|--orig)
-		shift
-		LXC_BASE=$1
-		shift
-		;;
-	    -b|--bdir)
-		shift
-		LXC_BIND=$1
-		shift
-		;;
-	    -u|--user)
-		shift
-		LXC_USER=$1
-		shift
-		;;
-	    -S|--ssh-key)
-		shift
-		LXC_KEY="-i $1"
-		shift
-		;;
-            -d|--detach)
-		DAEMON=1
-		shift
-		;;
-	    -U|--union)
-		shift
-		UNION=$1
-		shift
-		;;
-            --)
-		shift
-		break;;
-            *)
-		echo $1
-		usage
-		exit 1
-		;;
+            -h|--help)
+            help
+            exit 1
+        ;;
+        -o|--orig)
+            shift
+            LXC_BASE=$1
+            shift
+        ;;
+        -b|--bdir)
+            shift
+            LXC_BIND=$1
+            shift
+        ;;
+        -u|--user)
+            shift
+            LXC_USER=$1
+            shift
+        ;;
+        -S|--ssh-key)
+            shift
+            LXC_KEY="-i $1"
+            shift
+        ;;
+        -d|--detach)
+            DAEMON=1
+            shift
+        ;;
+        -U|--union)
+            shift
+            UNION=$1
+            shift
+        ;;
+        --)
+            shift
+            break;;
+        *)
+            echo $1
+            usage
+            exit 1
+        ;;
         esac
 done
 
@@ -162,8 +162,9 @@ setup_container()
     OVERLAY_DIR=`mktemp -d /tmp/lxc-lp-XXXXXXX`
     sudo mount -t tmpfs none $OVERLAY_DIR
     LXC_DIR=`sudo mktemp -d --tmpdir=/var/lib/lxc $LXC_BASE-temp-XXXXXXX`
+    sudo chmod 755 ${LXC_DIR}
     LXC_NAME=`basename $LXC_DIR`
-    mkdir ${LXC_DIR}/rootfs
+    sudo mkdir ${LXC_DIR}/rootfs
     do_mount "/var/lib/lxc/$LXC_BASE/rootfs" "${OVERLAY_DIR}" ${LXC_DIR}/rootfs
     EPHEMERAL_BIND_DIR=$LXC_DIR/ephemeralbind
     sudo mkdir $EPHEMERAL_BIND_DIR
@@ -173,7 +174,7 @@ setup_container()
         d1=/var/lib/lxc/${LXC_BASE}
         for f in ${d1}/*; do
             if [ -f $f ]; then
-                cp $f $LXC_DIR/
+                sudo cp $f $LXC_DIR/
             fi
         done
     }
@@ -199,7 +200,7 @@ setup_container()
                 sudo mkdir -p $upperdir
                 sudo chown `sudo stat -c '%U.%G' $source` $upperdir
                 if [ $UNION = "overlayfs" ]; then
-                    echo "none	$path	overlayfs upperdir=$upperdir,lowerdir=$source 0 0";
+                    echo "none $path overlayfs upperdir=$upperdir,lowerdir=$source 0 0";
                 else
                     echo "none $path aufs br=${upperdir}=rw:${lowerdir}=ro,noplink 0 0";
                 fi
@@ -213,7 +214,7 @@ setup_container()
     # If LXC_BIND is defined, add it to fstab.
     if [ -n "$LXC_BIND" ]; then
         sudo mkdir -p $LXC_DIR/rootfs$LXC_BIND
-        echo "$LXC_BIND	$LXC_DIR/rootfs$LXC_BIND	none bind 0 0" | sudo tee -a $LXC_DIR/fstab >/dev/null
+        echo "$LXC_BIND $LXC_DIR/rootfs$LXC_BIND none bind 0 0" | sudo tee -a $LXC_DIR/fstab >/dev/null
     fi
 
     # update the ephemeral container's MAC address (lifted from lxc-clone)

@@ -1,3 +1,27 @@
+lxc (0.8.0~rc1-4ubuntu28) quantal; urgency=low
+
+  [ Stéphane Graber ]
+  * Merge liblxc changes:
+    - Build-depend on automake as autogen.sh is now run at build time.
+    - Introduce new liblxc0 binary package
+    - Make lxc to depend on liblxc0
+    - Move library to the new binary package
+    - Change libdir to be the public multi-arch path
+    - Build with --disable-rpath
+    - Move all the test binaries to a lxc-test-* namespace
+  * Merge python3-lxc changes:
+    - Introduce new python3-lxc binary package
+    - Update debian/rules to build the python3 code
+  * Update lxc-start-ephemeral:
+    - Replace tabs by 4 spaces, fix indentation
+    - Fix code to work properly as non-root (calling sudo where needed)
+
+  [ Serge Hallyn ]
+  * confile.c: support hooks in save_config().
+  * conf.h: Add array of hook names
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Wed, 22 Aug 2012 11:50:51 -0400
+
 lxc (0.8.0~rc1-4ubuntu27) quantal; urgency=low
 
   * Add patches from mailing list to support per-namespace attach with

@@ -26,8 +26,19 @@ override_dh_auto_clean:
 		$${_FILE} > debian/apparmor/$$(basename $${_FILE} .in); \
 	done
 
+	rm -rf debian/python-lxc/build
+
+override_dh_auto_build:
+	dh_auto_build
+
+	set -ex; for python in $(shell py3versions -r); do \
+		cd debian/python-lxc/; \
+		CFLAGS="-I ../../src -L../../src/lxc/" $$python setup.py build; \
+		cd ../../; \
+	done
+
 override_dh_auto_configure:
-	dh_auto_configure -- --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc --libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) --with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc --enable-doc --enable-seccomp=check
+	dh_auto_configure -- --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) --libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) --with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc --enable-doc --disable-rpath --enable-seccomp=check
 
 override_dh_auto_install:
 	dh_auto_install
@@ -41,6 +52,13 @@ override_dh_auto_install:
 
 	# removing useless files
 	rm -f debian/tmp/usr/share/lxc/templates/lxc-lenny
+
+	set -ex; for python in $(shell py3versions -r); do \
+		cd debian/python-lxc/; \
+		$$python setup.py install --root=$(CURDIR)/debian/python3-lxc --install-layout=deb; \
+		cd ../../; \
+	done
+	rm -Rf debian/python3-lxc/usr/lib/python3/dist-packages/lxc/__pycache__/
 
 override_dh_builddeb:
 	dh_builddeb -- -Zgzip -z9
@@ -84,6 +102,17 @@ override_dh_install:
 
 	# replace upstream lxc-wait which can only run one-at-a-time
 	cp -f debian/local/lxc-wait debian/lxc/usr/bin/
+
+	# move the tests to their separate namespace
+	mv debian/lxc/usr/bin/startone debian/lxc/usr/bin/lxc-test-startone
+	mv debian/lxc/usr/bin/containertests debian/lxc/usr/bin/lxc-test-containertests
+	mv debian/lxc/usr/bin/destroytest debian/lxc/usr/bin/lxc-test-destroytest
+	mv debian/lxc/usr/bin/saveconfig debian/lxc/usr/bin/lxc-test-saveconfig
+	mv debian/lxc/usr/bin/createtest debian/lxc/usr/bin/lxc-test-createtest
+	mv debian/lxc/usr/bin/shutdowntest debian/lxc/usr/bin/lxc-test-shutdowntest
+	mv debian/lxc/usr/bin/locktests debian/lxc/usr/bin/lxc-test-locktests
+	mv debian/lxc/usr/bin/get_item debian/lxc/usr/bin/lxc-test-get-item
+	mv debian/lxc/usr/bin/getkeys debian/lxc/usr/bin/lxc-test-getkeys
 
 override_dh_installinit:
 	dh_installinit --no-restart-on-upgrade --name=lxc
