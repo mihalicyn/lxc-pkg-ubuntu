@@ -1,9 +1,9 @@
 Description: liblxc work by Serge Hallyn
 
-Index: lxc-api-and-python/runapitests.bash
+Index: lxc/runapitests.bash
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/runapitests.bash	2012-08-17 20:37:37.040994657 +0000
++++ lxc/runapitests.bash	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,32 @@
 +#!/bin/bash
 +
@@ -37,10 +37,10 @@ Index: lxc-api-and-python/runapitests.bash
 +done
 +echo "All tests passed"
 +cleanup
-Index: lxc-api-and-python/configure.ac
+Index: lxc/configure.ac
 ===================================================================
---- lxc-api-and-python.orig/configure.ac	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/configure.ac	2012-08-17 20:37:37.044994657 +0000
+--- lxc.orig/configure.ac	2012-08-24 09:23:58.516340000 -0500
++++ lxc/configure.ac	2012-08-24 09:23:58.516340000 -0500
 @@ -179,6 +179,8 @@
  	src/lxc/lxc-shutdown
  	src/lxc/lxc-destroy
@@ -50,17 +50,17 @@ Index: lxc-api-and-python/configure.ac
  ])
  AC_CONFIG_COMMANDS([default],[[]],[[]])
  AC_OUTPUT
-Index: lxc-api-and-python/src/Makefile.am
+Index: lxc/src/Makefile.am
 ===================================================================
---- lxc-api-and-python.orig/src/Makefile.am	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/Makefile.am	2012-08-17 20:37:37.044994657 +0000
+--- lxc.orig/src/Makefile.am	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/Makefile.am	2012-08-24 09:23:58.516340000 -0500
 @@ -1 +1 @@
 -SUBDIRS = lxc 
 +SUBDIRS = lxc tests
-Index: lxc-api-and-python/src/tests/Makefile.am
+Index: lxc/src/tests/Makefile.am
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/tests/Makefile.am	2012-08-17 20:37:37.044994657 +0000
++++ lxc/src/tests/Makefile.am	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,17 @@
 +LDADD = ../lxc/liblxc.so -lrt
 +containertests_SOURCES = containertests.c
@@ -79,10 +79,10 @@ Index: lxc-api-and-python/src/tests/Makefile.am
 +	-DLXCINITDIR=\"$(LXCINITDIR)\"
 +
 +bin_PROGRAMS = containertests locktests startone destroytest saveconfig createtest shutdowntest get_item getkeys
-Index: lxc-api-and-python/src/tests/locktests.c
+Index: lxc/src/tests/locktests.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/tests/locktests.c	2012-08-17 20:37:37.044994657 +0000
++++ lxc/src/tests/locktests.c	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,239 @@
 +/* liblxcapi
 + *
@@ -323,10 +323,10 @@ Index: lxc-api-and-python/src/tests/locktests.c
 +out:
 +	exit(ret);
 +}
-Index: lxc-api-and-python/src/tests/containertests.c
+Index: lxc/src/tests/containertests.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/tests/containertests.c	2012-08-17 20:37:37.044994657 +0000
++++ lxc/src/tests/containertests.c	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,257 @@
 +/* liblxcapi
 + *
@@ -585,10 +585,10 @@ Index: lxc-api-and-python/src/tests/containertests.c
 +	lxc_container_put(c);
 +	exit(ret);
 +}
-Index: lxc-api-and-python/src/tests/startone.c
+Index: lxc/src/tests/startone.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/tests/startone.c	2012-08-17 20:37:37.044994657 +0000
++++ lxc/src/tests/startone.c	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,202 @@
 +/* liblxcapi
 + *
@@ -792,10 +792,10 @@ Index: lxc-api-and-python/src/tests/startone.c
 +	lxc_container_put(c);
 +	exit(ret);
 +}
-Index: lxc-api-and-python/src/lxc/lxc.h
+Index: lxc/src/lxc/lxc.h
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/lxc.h	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/lxc.h	2012-08-17 20:37:37.044994657 +0000
+--- lxc.orig/src/lxc/lxc.h	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/lxc.h	2012-08-24 09:23:58.516340000 -0500
 @@ -84,6 +84,7 @@
   * data was readen, < 0 otherwise
   */
@@ -835,10 +835,10 @@ Index: lxc-api-and-python/src/lxc/lxc.h
  #ifdef __cplusplus
  }
  #endif
-Index: lxc-api-and-python/src/lxc/lxclock.h
+Index: lxc/src/lxc/lxclock.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/lxc/lxclock.h	2012-08-17 20:37:37.044994657 +0000
++++ lxc/src/lxc/lxclock.h	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,61 @@
 +/* liblxcapi
 + *
@@ -901,10 +901,10 @@ Index: lxc-api-and-python/src/lxc/lxclock.h
 + * -1 and sem_post will leave errno set.
 + */
 +extern int lxcunlock(sem_t *lock);
-Index: lxc-api-and-python/src/lxc/lxc_wait.c
+Index: lxc/src/lxc/lxc_wait.c
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/lxc_wait.c	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/lxc_wait.c	2012-08-17 20:38:32.204996196 +0000
+--- lxc.orig/src/lxc/lxc_wait.c	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/lxc_wait.c	2012-08-24 09:23:58.516340000 -0500
 @@ -77,25 +77,6 @@
  	.checker  = my_checker,
  };
@@ -990,10 +990,10 @@ Index: lxc-api-and-python/src/lxc/lxc_wait.c
 -	return ret;
 +	return lxc_wait(my_args.name, my_args.states, my_args.timeout);
  }
-Index: lxc-api-and-python/src/lxc/Makefile.am
+Index: lxc/src/lxc/Makefile.am
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/Makefile.am	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/Makefile.am	2012-08-17 20:39:31.072997837 +0000
+--- lxc.orig/src/lxc/Makefile.am	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/Makefile.am	2012-08-24 09:23:58.516340000 -0500
 @@ -13,7 +13,9 @@
  		list.h \
  		log.h \
@@ -1041,10 +1041,10 @@ Index: lxc-api-and-python/src/lxc/Makefile.am
  
  lxc_attach_SOURCES = lxc_attach.c
  lxc_cgroup_SOURCES = lxc_cgroup.c
-Index: lxc-api-and-python/src/lxc/state.h
+Index: lxc/src/lxc/state.h
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/state.h	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/state.h	2012-08-17 20:37:37.048994657 +0000
+--- lxc.orig/src/lxc/state.h	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/state.h	2012-08-24 09:23:58.516340000 -0500
 @@ -33,5 +33,6 @@
  
  extern lxc_state_t lxc_str2state(const char *state);
@@ -1052,10 +1052,10 @@ Index: lxc-api-and-python/src/lxc/state.h
 +extern int lxc_wait(char *lxcname, char *states, int timeout);
  
  #endif
-Index: lxc-api-and-python/src/lxc/lxclock.c
+Index: lxc/src/lxc/lxclock.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/lxc/lxclock.c	2012-08-17 20:37:37.048994657 +0000
++++ lxc/src/lxc/lxclock.c	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,105 @@
 +/* liblxcapi
 + *
@@ -1162,10 +1162,10 @@ Index: lxc-api-and-python/src/lxc/lxclock.c
 +		return -2;
 +	return sem_post(sem);
 +}
-Index: lxc-api-and-python/src/lxc/lxccontainer.h
+Index: lxc/src/lxc/lxccontainer.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/lxc/lxccontainer.h	2012-08-17 20:37:37.048994657 +0000
++++ lxc/src/lxc/lxccontainer.h	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,71 @@
 +#include "lxclock.h"
 +#include <stdlib.h>
@@ -1238,10 +1238,10 @@ Index: lxc-api-and-python/src/lxc/lxccontainer.h
 +char ** lxc_get_valid_keys();
 +char ** lxc_get_valid_values(char *key);
 +#endif
-Index: lxc-api-and-python/src/lxc/confile.h
+Index: lxc/src/lxc/confile.h
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/confile.h	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/confile.h	2012-08-17 20:37:37.048994657 +0000
+--- lxc.orig/src/lxc/confile.h	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/confile.h	2012-08-24 09:23:58.516340000 -0500
 @@ -27,6 +27,15 @@
  struct lxc_conf;
  struct lxc_list;
@@ -1266,11 +1266,11 @@ Index: lxc-api-and-python/src/lxc/confile.h
 +extern int lxc_clear_config_item(struct lxc_conf *c, char *key);
 +extern void write_config(FILE *fout, struct lxc_conf *c);
  #endif
-Index: lxc-api-and-python/src/lxc/lxccontainer.c
+Index: lxc/src/lxc/lxccontainer.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/lxc/lxccontainer.c	2012-08-17 20:37:37.048994657 +0000
-@@ -0,0 +1,912 @@
++++ lxc/src/lxc/lxccontainer.c	2012-08-24 09:26:55.474310854 -0500
+@@ -0,0 +1,905 @@
 +/* liblxcapi
 + *
 + * Copyright © 2012 Serge Hallyn <serge.hallyn@ubuntu.com>.
@@ -1530,7 +1530,6 @@ Index: lxc-api-and-python/src/lxc/lxccontainer.c
 +		"/sbin/init",
 +		'\0',
 +	};
-+	bool needreboot;
 +
 +	/* container exists */
 +	if (!c)
@@ -1595,23 +1594,17 @@ Index: lxc-api-and-python/src/lxc/lxccontainer.c
 +	}
 +
 +reboot:
++	conf->reboot = 0;
 +	ret = lxc_start(c->name, argv, conf);
 +
-+	needreboot = false;
-+	if (lxclock(c->privlock, 0))
-+		return true;
-+	conf = c->lxc_conf;
-+	if (conf && conf->reboot) {
++	if (conf->reboot) {
 +		INFO("container requested reboot");
 +		conf->reboot = 0;
 +		if (conf->maincmd_fd)
 +			close(conf->maincmd_fd);
 +		conf->maincmd_fd = 0;
-+		needreboot = true;
-+	}
-+	lxcunlock(c->privlock);
-+	if (needreboot)
 +		goto reboot;
++	}
 +
 +	if (daemonize) {
 +		lxc_container_put(c);
@@ -2183,10 +2176,10 @@ Index: lxc-api-and-python/src/lxc/lxccontainer.c
 +			states[i] = lxc_state2str(i);
 +	return MAX_STATE;
 +}
-Index: lxc-api-and-python/src/lxc/confile.c
+Index: lxc/src/lxc/confile.c
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/confile.c	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/confile.c	2012-08-17 20:40:57.869000259 +0000
+--- lxc.orig/src/lxc/confile.c	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/confile.c	2012-08-24 09:23:58.516340000 -0500
 @@ -42,6 +42,7 @@
  
  #include <lxc/log.h>
@@ -2878,10 +2871,10 @@ Index: lxc-api-and-python/src/lxc/confile.c
 +	if (c->rootfs.pivot)
 +		fprintf(fout, "lxc.pivotdir = %s\n", c->rootfs.pivot);
 +}
-Index: lxc-api-and-python/src/lxc/state.c
+Index: lxc/src/lxc/state.c
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/state.c	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/state.c	2012-08-17 20:37:37.052994657 +0000
+--- lxc.orig/src/lxc/state.c	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/state.c	2012-08-24 09:23:58.516340000 -0500
 @@ -31,9 +31,11 @@
  #include <sys/stat.h>
  #include <sys/file.h>
@@ -3003,10 +2996,10 @@ Index: lxc-api-and-python/src/lxc/state.c
 +	lxc_monitor_close(fd);
 +	return ret;
 +}
-Index: lxc-api-and-python/src/tests/destroytest.c
+Index: lxc/src/tests/destroytest.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/tests/destroytest.c	2012-08-17 20:37:37.052994657 +0000
++++ lxc/src/tests/destroytest.c	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,104 @@
 +/* liblxcapi
 + *
@@ -3112,10 +3105,10 @@ Index: lxc-api-and-python/src/tests/destroytest.c
 +	lxc_container_put(c);
 +	exit(ret);
 +}
-Index: lxc-api-and-python/src/lxc/conf.c
+Index: lxc/src/lxc/conf.c
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/conf.c	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/conf.c	2012-08-17 20:37:37.052994657 +0000
+--- lxc.orig/src/lxc/conf.c	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/conf.c	2012-08-24 09:23:58.516340000 -0500
 @@ -105,6 +105,9 @@
  #define PR_CAPBSET_DROP 24
  #endif
@@ -3331,10 +3324,10 @@ Index: lxc-api-and-python/src/lxc/conf.c
 +	}
 +	return 0;
 +}
-Index: lxc-api-and-python/src/lxc/network.c
+Index: lxc/src/lxc/network.c
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/network.c	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/network.c	2012-08-17 20:37:37.052994657 +0000
+--- lxc.orig/src/lxc/network.c	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/network.c	2012-08-24 09:23:58.516340000 -0500
 @@ -47,6 +47,7 @@
  
  #include "nl.h"
@@ -3362,20 +3355,20 @@ Index: lxc-api-and-python/src/lxc/network.c
 +		return NULL;
 +	return lxc_network_types[type];
 +}
-Index: lxc-api-and-python/src/lxc/network.h
+Index: lxc/src/lxc/network.h
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/network.h	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/network.h	2012-08-17 20:37:37.056994657 +0000
+--- lxc.orig/src/lxc/network.h	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/network.h	2012-08-24 09:23:58.516340000 -0500
 @@ -122,4 +122,5 @@
   */
  extern int lxc_neigh_proxy_off(const char *name, int family);
  
 +extern const char *lxc_net_type_to_str(int type);
  #endif
-Index: lxc-api-and-python/src/tests/saveconfig.c
+Index: lxc/src/tests/saveconfig.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/tests/saveconfig.c	2012-08-17 20:37:37.056994657 +0000
++++ lxc/src/tests/saveconfig.c	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,106 @@
 +/* liblxcapi
 + *
@@ -3483,10 +3476,10 @@ Index: lxc-api-and-python/src/tests/saveconfig.c
 +	lxc_container_put(c);
 +	exit(ret);
 +}
-Index: lxc-api-and-python/src/tests/createtest.c
+Index: lxc/src/tests/createtest.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/tests/createtest.c	2012-08-17 20:37:37.056994657 +0000
++++ lxc/src/tests/createtest.c	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,92 @@
 +/* liblxcapi
 + *
@@ -3580,10 +3573,10 @@ Index: lxc-api-and-python/src/tests/createtest.c
 +	lxc_container_put(c);
 +	exit(ret);
 +}
-Index: lxc-api-and-python/src/lxc/monitor.c
+Index: lxc/src/lxc/monitor.c
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/monitor.c	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/monitor.c	2012-08-17 20:37:37.056994657 +0000
+--- lxc.orig/src/lxc/monitor.c	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/monitor.c	2012-08-24 09:23:58.516340000 -0500
 @@ -98,11 +98,28 @@
  	return fd;
  }
@@ -3626,10 +3619,10 @@ Index: lxc-api-and-python/src/lxc/monitor.c
  int lxc_monitor_close(int fd)
  {
  	return close(fd);
-Index: lxc-api-and-python/src/tests/shutdowntest.c
+Index: lxc/src/tests/shutdowntest.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/tests/shutdowntest.c	2012-08-17 20:37:37.056994657 +0000
++++ lxc/src/tests/shutdowntest.c	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,93 @@
 +
 +/* liblxcapi
@@ -3724,10 +3717,10 @@ Index: lxc-api-and-python/src/tests/shutdowntest.c
 +	lxc_container_put(c);
 +	exit(ret);
 +}
-Index: lxc-api-and-python/src/lxc/conf.h
+Index: lxc/src/lxc/conf.h
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/conf.h	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/conf.h	2012-08-17 20:39:10.168997254 +0000
+--- lxc.orig/src/lxc/conf.h	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/conf.h	2012-08-24 09:23:58.516340000 -0500
 @@ -203,6 +203,8 @@
  enum lxchooks {
  	LXCHOOK_PRESTART, LXCHOOK_MOUNT, LXCHOOK_START,
@@ -3759,20 +3752,20 @@ Index: lxc-api-and-python/src/lxc/conf.h
  /*
   * Configure the container from inside
   */
-Index: lxc-api-and-python/doc/rootfs/Makefile.am
+Index: lxc/doc/rootfs/Makefile.am
 ===================================================================
---- lxc-api-and-python.orig/doc/rootfs/Makefile.am	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/doc/rootfs/Makefile.am	2012-08-17 20:37:37.056994657 +0000
+--- lxc.orig/doc/rootfs/Makefile.am	2012-08-24 09:23:58.516340000 -0500
++++ lxc/doc/rootfs/Makefile.am	2012-08-24 09:23:58.516340000 -0500
 @@ -1,3 +1,3 @@
  READMEdir=@LXCROOTFSMOUNT@
  
 -README_DATA=README
 \ No newline at end of file
 +README_DATA=
-Index: lxc-api-and-python/src/tests/get_item.c
+Index: lxc/src/tests/get_item.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/tests/get_item.c	2012-08-17 20:37:37.056994657 +0000
++++ lxc/src/tests/get_item.c	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,308 @@
 +/* liblxcapi
 + *
@@ -4082,10 +4075,10 @@ Index: lxc-api-and-python/src/tests/get_item.c
 +	lxc_container_put(c);
 +	exit(ret);
 +};
-Index: lxc-api-and-python/src/lxc/commands.c
+Index: lxc/src/lxc/commands.c
 ===================================================================
---- lxc-api-and-python.orig/src/lxc/commands.c	2012-08-17 20:30:14.000000000 +0000
-+++ lxc-api-and-python/src/lxc/commands.c	2012-08-17 20:37:37.056994657 +0000
+--- lxc.orig/src/lxc/commands.c	2012-08-24 09:23:58.516340000 -0500
++++ lxc/src/lxc/commands.c	2012-08-24 09:23:58.516340000 -0500
 @@ -305,5 +305,6 @@
  		close(fd);
  	}
@@ -4093,10 +4086,10 @@ Index: lxc-api-and-python/src/lxc/commands.c
 +	handler->conf->maincmd_fd = fd;
  	return ret;
  }
-Index: lxc-api-and-python/src/tests/getkeys.c
+Index: lxc/src/tests/getkeys.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ lxc-api-and-python/src/tests/getkeys.c	2012-08-17 20:37:37.056994657 +0000
++++ lxc/src/tests/getkeys.c	2012-08-24 09:23:58.516340000 -0500
 @@ -0,0 +1,71 @@
 +/* liblxcapi
 + *

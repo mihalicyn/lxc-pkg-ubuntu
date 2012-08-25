@@ -27,7 +27,10 @@ import os
 import subprocess
 import tempfile
 import time
+import warnings
 
+warnings.warn("The python-lxc API isn't yet stable "
+              "and may change at any point in the future.", Warning, 2)
 
 class ContainerNetwork():
     props = {}
@@ -261,6 +264,9 @@ class Container(_lxc.Container):
 
         count = 0
         while count < timeout:
+            if count != 0:
+                time.sleep(1)
+
             base_cmd = ["ip", "netns", "exec", path.split("/")[-1], "ip"]
 
             # Get IPv6
@@ -298,7 +304,6 @@ class Container(_lxc.Container):
             if ips:
                 break
 
-            time.sleep(1)
             count += 1
 
         os.remove(path)

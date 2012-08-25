@@ -1,3 +1,20 @@
+lxc (0.8.0~rc1-4ubuntu29) quantal; urgency=low
+
+  [ Serge Hallyn ]
+  * fix lxcapi_start to not return true when it container failed to start.
+  * 0201-fix-mkdir-race: don't raise error if mkdir fails with EEXIST.
+  * 0202-make-api-start-reliable: have daemonized start through the api
+    wait until the container is RUNNING before returning true.  If a 5
+    second timeout is hit before the container is RUNNING, return false.
+
+  [ Stéphane Graber ]
+  * python-lxc: in get_ips() if timeout is 1 don't wait one second before
+    returning.
+  * python-lxc: Add import time warning that the API isn't yet stable and
+    so may change at any point in the future.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Sat, 25 Aug 2012 12:44:17 -0400
+
 lxc (0.8.0~rc1-4ubuntu28) quantal; urgency=low
 
   [ Stéphane Graber ]
