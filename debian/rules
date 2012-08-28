@@ -26,19 +26,8 @@ override_dh_auto_clean:
 		$${_FILE} > debian/apparmor/$$(basename $${_FILE} .in); \
 	done
 
-	rm -rf debian/python-lxc/build
-
-override_dh_auto_build:
-	dh_auto_build
-
-	set -ex; for python in $(shell py3versions -r); do \
-		cd debian/python-lxc/; \
-		CFLAGS="-I ../../src -L../../src/lxc/" $$python setup.py build; \
-		cd ../../; \
-	done
-
 override_dh_auto_configure:
-	dh_auto_configure -- --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) --libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) --with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc --enable-doc --disable-rpath --enable-seccomp=check
+	dh_auto_configure -- --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) --libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) --with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc --disable-doc --disable-rpath --enable-seccomp=check --enable-python
 
 override_dh_auto_install:
 	dh_auto_install
@@ -52,13 +41,6 @@ override_dh_auto_install:
 
 	# removing useless files
 	rm -f debian/tmp/usr/share/lxc/templates/lxc-lenny
-
-	set -ex; for python in $(shell py3versions -r); do \
-		cd debian/python-lxc/; \
-		$$python setup.py install --root=$(CURDIR)/debian/python3-lxc --install-layout=deb; \
-		cd ../../; \
-	done
-	rm -Rf debian/python3-lxc/usr/lib/python3/dist-packages/lxc/__pycache__/
 
 override_dh_builddeb:
 	dh_builddeb -- -Zgzip -z9

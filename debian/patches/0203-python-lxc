@@ -1,0 +1,1086 @@
+Description: Initial implementation of python-lxc on top of liblxc
+    This patch introduces the initial python bindong for liblxc.
+Author: Stéphane Graber <stgraber@ubuntu.com>
+
+Origin: vendor
+Forwarded: no
+
+Index: lxc/configure.ac
+===================================================================
+--- lxc.orig/configure.ac	2012-08-27 17:12:13.000000000 -0400
++++ lxc/configure.ac	2012-08-27 17:38:07.215872629 -0400
+@@ -12,6 +12,11 @@
+ AC_GNU_SOURCE
+ AC_CHECK_PROG(SETCAP, setcap, yes, no, $PATH$PATH_SEPARATOR/sbin)
+ 
++if test -f /etc/debian_version; then
++    osname="debian"
++fi
++AM_CONDITIONAL([HAVE_DEBIAN], [test x"$osname" == xdebian])
++
+ AC_ARG_ENABLE([rpath],
+ 	[AC_HELP_STRING([--disable-rpath], [do not set rpath in executables])],
+ 	[], [enable_rpath=yes])
+@@ -53,6 +58,17 @@
+ 
+ AM_CONDITIONAL([ENABLE_EXAMPLES], [test "x$enable_examples" = "xyes"])
+ 
++AC_ARG_ENABLE([python],
++	[AC_HELP_STRING([--enable-python], [enable python binding])],
++	[enable_python=yes], [enable_python=no])
++
++AM_CONDITIONAL([ENABLE_PYTHON], [test "x$enable_python" = "xyes"])
++
++AM_COND_IF([ENABLE_PYTHON],
++    [AM_PATH_PYTHON([3.2], [], [AC_MSG_ERROR([You must install python3])])
++     AC_CHECK_HEADER([python$PYTHON_VERSION/Python.h],[],[AC_MSG_ERROR([You must install python3-dev])])
++     AC_DEFINE_UNQUOTED([ENABLE_PYTHON], 1, [Python3 is available])])
++
+ AS_AC_EXPAND(PREFIX, $prefix)
+ AS_AC_EXPAND(LIBDIR, $libdir)
+ AS_AC_EXPAND(BINDIR, $bindir)
+@@ -179,6 +195,8 @@
+ 	src/lxc/lxc-shutdown
+ 	src/lxc/lxc-destroy
+ 
++	src/python-lxc/Makefile
++
+ 	src/tests/Makefile
+ 
+ ])
+Index: lxc/src/Makefile.am
+===================================================================
+--- lxc.orig/src/Makefile.am	2012-08-27 17:12:13.000000000 -0400
++++ lxc/src/Makefile.am	2012-08-27 17:12:13.000000000 -0400
+@@ -1 +1 @@
+-SUBDIRS = lxc tests
++SUBDIRS = lxc tests python-lxc
+Index: lxc/src/python-lxc/test.py
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc/src/python-lxc/test.py	2012-08-27 17:12:13.000000000 -0400
+@@ -0,0 +1,28 @@
++import lxc
++
++t1 = lxc.Container("test")
++print("Name set properly: %s" % (t1.name == "test"))
++print("Test config loaded properly: %s" % t1.load_config("/etc/lxc/lxc.conf"))
++print("Real config loaded properly: %s" % t1.load_config())
++print("Test config path: %s" % (t1.config_file_name == "/var/lib/lxc/test/config"))
++print("Set config item: %s" % t1.set_config_item("lxc.utsname", "blabla"))
++print("Container defined: %s" % (t1.defined))
++print("Started properly: %s" % t1.start())
++print("Container running: %s" % t1.wait("RUNNING"))
++print("Container state: %s" % t1.state)
++print("Container running: %s" % t1.running)
++print("Container init process: %s" % t1.init_pid)
++print("Freezing: %s" % t1.freeze())
++print("Container frozen: %s" % t1.wait("FROZEN"))
++print("Container state: %s" % t1.state)
++print("Unfreezing: %s" % t1.unfreeze())
++print("Container running: %s" % t1.wait("RUNNING"))
++print("Container state: %s" % t1.state)
++print("Stopped properly: %s" % t1.stop())
++print("Container state: %s" % t1.state)
++
++#print("Started properly: %s" % t1.start(useinit=True))
++#print("Container running: %s" % t1.wait("RUNNING"))
++#print("Container state: %s" % t1.state)
++#print("Stopped properly: %s" % t1.stop())
++#print("Container state: %s" % t1.state)
+Index: lxc/src/python-lxc/Makefile.am
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc/src/python-lxc/Makefile.am	2012-08-27 17:40:12.787876132 -0400
+@@ -0,0 +1,18 @@
++if ENABLE_PYTHON
++
++if HAVE_DEBIAN
++    DISTSETUPOPTS=--install-layout=deb
++else
++    DISTSETUPOPTS=
++endif
++
++all:
++	CFLAGS="$(CFLAGS) -I ../../src -L../../src/lxc/" $(PYTHON) setup.py build
++
++install:
++	python3 setup.py install --root=$(DESTDIR) --prefix=$(PREFIX) --no-compile $(DISTSETUPOPTS)
++
++clean:
++	rm -rf build
++
++endif
+Index: lxc/src/python-lxc/lxc.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc/src/python-lxc/lxc.c	2012-08-27 17:12:13.000000000 -0400
+@@ -0,0 +1,576 @@
++/*
++ * python-lxc: Python bindings for LXC
++ *
++ * (C) Copyright Canonical Ltd. 2012
++ *
++ * Authors:
++ * Stéphane Graber <stgraber@ubuntu.com>
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++ */
++
++#include <Python.h>
++#include "structmember.h"
++#include <lxc/lxccontainer.h>
++#include <stdio.h>
++#include <sys/wait.h>
++
++typedef struct {
++    PyObject_HEAD
++    struct lxc_container *container;
++} Container;
++
++char**
++convert_tuple_to_char_pointer_array(PyObject *argv) {
++    int argc = PyTuple_Size(argv);
++    int i;
++
++    char **result = (char**) malloc(sizeof(char*)*argc + 1);
++
++    for (i = 0; i < argc; i++) {
++        PyObject *pyobj = PyTuple_GetItem(argv, i);
++
++        char *str = NULL;
++        PyObject *pystr;
++        if (!PyUnicode_Check(pyobj)) {
++            PyErr_SetString(PyExc_ValueError, "Expected a string");
++            return NULL;
++        }
++
++        pystr = PyUnicode_AsUTF8String(pyobj);
++        str = PyBytes_AsString(pystr);
++        memcpy((char *) &result[i], (char *) &str, sizeof(str));
++    }
++
++    result[argc] = NULL;
++
++    return result;
++}
++
++void zombie_handler(int sig)
++{
++    signal(SIGCHLD,zombie_handler);
++    int status;
++
++    waitpid(-1, &status, WNOHANG);
++}
++
++static void
++Container_dealloc(Container* self)
++{
++    Py_TYPE(self)->tp_free((PyObject*)self);
++}
++
++static PyObject *
++Container_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
++{
++    Container *self;
++
++    self = (Container *)type->tp_alloc(type, 0);
++
++    return (PyObject *)self;
++}
++
++static int
++Container_init(Container *self, PyObject *args, PyObject *kwds)
++{
++    static char *kwlist[] = {"name", NULL};
++    char *name = NULL;
++
++    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|", kwlist,
++                                      &name))
++        return -1;
++
++    self->container = lxc_container_new(name);
++    if (!self->container) {
++        fprintf(stderr, "%d: error creating lxc_container %s\n", __LINE__, name);
++        return -1;
++    }
++
++    return 0;
++}
++
++// Container properties
++static PyObject *
++Container_config_file_name(Container *self, PyObject *args, PyObject *kwds)
++{
++    return PyUnicode_FromString(self->container->config_file_name(self->container));
++}
++
++static PyObject *
++Container_defined(Container *self, PyObject *args, PyObject *kwds)
++{
++    if (self->container->is_defined(self->container)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_init_pid(Container *self, PyObject *args, PyObject *kwds)
++{
++    return Py_BuildValue("i", self->container->init_pid(self->container));
++}
++
++static PyObject *
++Container_name(Container *self, PyObject *args, PyObject *kwds)
++{
++    return PyUnicode_FromString(self->container->name);
++}
++
++static PyObject *
++Container_running(Container *self, PyObject *args, PyObject *kwds)
++{
++    if (self->container->is_running(self->container)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_state(Container *self, PyObject *args, PyObject *kwds)
++{
++    return PyUnicode_FromString(self->container->state(self->container));
++}
++
++// Container Functions
++static PyObject *
++Container_clear_config_item(Container *self, PyObject *args, PyObject *kwds)
++{
++    static char *kwlist[] = {"key", NULL};
++    char *key = NULL;
++
++    if (! PyArg_ParseTupleAndKeywords(args, kwds, "s|", kwlist,
++                                      &key))
++        Py_RETURN_FALSE;
++
++    if (self->container->clear_config_item(self->container, key)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_create(Container *self, PyObject *args, PyObject *kwds)
++{
++    char* template_name = NULL;
++    char** create_args = {NULL};
++    PyObject *vargs = NULL;
++    static char *kwlist[] = {"template", "args", NULL};
++
++    if (! PyArg_ParseTupleAndKeywords(args, kwds, "s|O", kwlist,
++                                      &template_name, &vargs))
++        Py_RETURN_FALSE;
++
++    if (vargs && PyTuple_Check(vargs)) {
++        create_args = convert_tuple_to_char_pointer_array(vargs);
++        if (!create_args) {
++            return NULL;
++        }
++    }
++
++    if (self->container->create(self->container, template_name, create_args)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_destroy(Container *self, PyObject *args, PyObject *kwds)
++{
++    if (self->container->destroy(self->container)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_freeze(Container *self, PyObject *args, PyObject *kwds)
++{
++    if (self->container->freeze(self->container)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_get_config_item(Container *self, PyObject *args, PyObject *kwds)
++{
++    static char *kwlist[] = {"key", NULL};
++    char* key = NULL;
++    int len = 0;
++
++    if (! PyArg_ParseTupleAndKeywords(args, kwds, "|s", kwlist,
++                                      &key))
++        Py_RETURN_FALSE;
++
++    len = self->container->get_config_item(self->container, key, NULL, 0);
++
++    if (len <= 0) {
++        Py_RETURN_FALSE;
++    }
++
++    char* value = (char*) malloc(sizeof(char)*len + 1);
++    if (self->container->get_config_item(self->container, key, value, len + 1) != len) {
++        Py_RETURN_FALSE;
++    }
++
++    return PyUnicode_FromString(value);
++}
++
++static PyObject *
++Container_get_keys(Container *self, PyObject *args, PyObject *kwds)
++{
++    static char *kwlist[] = {"key", NULL};
++    char* key = NULL;
++    int len = 0;
++
++    if (! PyArg_ParseTupleAndKeywords(args, kwds, "|s", kwlist,
++                                      &key))
++        Py_RETURN_FALSE;
++
++    len = self->container->get_keys(self->container, key, NULL, 0);
++
++    if (len <= 0) {
++        Py_RETURN_FALSE;
++    }
++
++    char* value = (char*) malloc(sizeof(char)*len + 1);
++    if (self->container->get_keys(self->container, key, value, len + 1) != len) {
++        Py_RETURN_FALSE;
++    }
++
++    return PyUnicode_FromString(value);
++}
++
++static PyObject *
++Container_load_config(Container *self, PyObject *args, PyObject *kwds)
++{
++    static char *kwlist[] = {"path", NULL};
++    char* path = NULL;
++
++    if (! PyArg_ParseTupleAndKeywords(args, kwds, "|s", kwlist,
++                                      &path))
++        Py_RETURN_FALSE;
++
++    if (self->container->load_config(self->container, path)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_save_config(Container *self, PyObject *args, PyObject *kwds)
++{
++    static char *kwlist[] = {"path", NULL};
++    char* path = NULL;
++
++    if (! PyArg_ParseTupleAndKeywords(args, kwds, "|s", kwlist,
++                                      &path))
++        Py_RETURN_FALSE;
++
++    if (self->container->save_config(self->container, path)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_set_config_item(Container *self, PyObject *args, PyObject *kwds)
++{
++    static char *kwlist[] = {"key", "value", NULL};
++    char *key = NULL;
++    char *value = NULL;
++
++    if (! PyArg_ParseTupleAndKeywords(args, kwds, "ss|", kwlist,
++                                      &key, &value))
++        Py_RETURN_FALSE;
++
++    if (self->container->set_config_item(self->container, key, value)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_shutdown(Container *self, PyObject *args, PyObject *kwds)
++{
++    static char *kwlist[] = {"timeout", NULL};
++    int timeout = -1;
++
++    if (! PyArg_ParseTupleAndKeywords(args, kwds, "|i", kwlist,
++                                      &timeout))
++        Py_RETURN_FALSE;
++
++    if (self->container->shutdown(self->container, timeout)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_start(Container *self, PyObject *args, PyObject *kwds)
++{
++    char** init_args = {NULL};
++    PyObject *useinit = NULL, *vargs = NULL;
++    int init_useinit = 0;
++    static char *kwlist[] = {"useinit", "cmd", NULL};
++
++    if (! PyArg_ParseTupleAndKeywords(args, kwds, "|OO", kwlist,
++                                      &useinit, &vargs))
++        Py_RETURN_FALSE;
++
++    if (useinit && useinit == Py_True) {
++        init_useinit = 1;
++    }
++
++    if (vargs && PyTuple_Check(vargs)) {
++        init_args = convert_tuple_to_char_pointer_array(vargs);
++        if (!init_args) {
++            return NULL;
++        }
++    }
++
++    signal(SIGCHLD, zombie_handler);
++    self->container->want_daemonize(self->container);
++
++    if (self->container->start(self->container, init_useinit, init_args)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_stop(Container *self, PyObject *args, PyObject *kwds)
++{
++    if (self->container->stop(self->container)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_unfreeze(Container *self, PyObject *args, PyObject *kwds)
++{
++    if (self->container->unfreeze(self->container)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyObject *
++Container_wait(Container *self, PyObject *args, PyObject *kwds)
++{
++    static char *kwlist[] = {"state", "timeout", NULL};
++    char *state = NULL;
++    int timeout = -1;
++
++    if (! PyArg_ParseTupleAndKeywords(args, kwds, "s|i", kwlist,
++                                      &state, &timeout))
++        Py_RETURN_FALSE;
++
++    if (self->container->wait(self->container, state, timeout)) {
++        Py_RETURN_TRUE;
++    }
++
++    Py_RETURN_FALSE;
++}
++
++static PyGetSetDef Container_getseters[] = {
++    {"config_file_name",
++     (getter)Container_config_file_name, 0,
++     "Path to the container configuration",
++     NULL},
++    {"defined",
++     (getter)Container_defined, 0,
++     "Boolean indicating whether the container configuration exists",
++     NULL},
++    {"init_pid",
++     (getter)Container_init_pid, 0,
++     "PID of the container's init process in the host's PID namespace",
++     NULL},
++    {"name",
++     (getter)Container_name, 0,
++     "Container name",
++     NULL},
++    {"running",
++     (getter)Container_running, 0,
++     "Boolean indicating whether the container is running or not",
++     NULL},
++    {"state",
++     (getter)Container_state, 0,
++     "Container state",
++     NULL},
++};
++
++static PyMethodDef Container_methods[] = {
++    {"clear_config_item", (PyCFunction)Container_clear_config_item, METH_VARARGS | METH_KEYWORDS,
++     "clear_config_item(key) -> boolean\n"
++     "\n"
++     "Clear the current value of a config key."
++    },
++    {"create", (PyCFunction)Container_create, METH_VARARGS | METH_KEYWORDS,
++     "create(template, args = (,)) -> boolean\n"
++     "\n"
++     "Create a new rootfs for the container, using the given template "
++     "and passing some optional arguments to it."
++    },
++    {"destroy", (PyCFunction)Container_destroy, METH_NOARGS,
++     "destroy() -> boolean\n"
++     "\n"
++     "Destroys the container."
++    },
++    {"freeze", (PyCFunction)Container_freeze, METH_NOARGS,
++     "freeze() -> boolean\n"
++     "\n"
++     "Freezes the container and returns its return code."
++    },
++    {"get_config_item", (PyCFunction)Container_get_config_item, METH_VARARGS | METH_KEYWORDS,
++     "get_config_item(key) -> string\n"
++     "\n"
++     "Get the current value of a config key."
++    },
++    {"get_keys", (PyCFunction)Container_get_keys, METH_VARARGS | METH_KEYWORDS,
++     "get_keys(key) -> string\n"
++     "\n"
++     "Get a list of valid sub-keys for a key."
++    },
++    {"load_config", (PyCFunction)Container_load_config, METH_VARARGS | METH_KEYWORDS,
++     "load_config(path = DEFAULT) -> boolean\n"
++     "\n"
++     "Read the container configuration from its default "
++     "location or from an alternative location if provided."
++    },
++    {"save_config", (PyCFunction)Container_save_config, METH_VARARGS | METH_KEYWORDS,
++     "save_config(path = DEFAULT) -> boolean\n"
++     "\n"
++     "Save the container configuration to its default "
++     "location or to an alternative location if provided."
++    },
++    {"set_config_item", (PyCFunction)Container_set_config_item, METH_VARARGS | METH_KEYWORDS,
++     "set_config_item(key, value) -> boolean\n"
++     "\n"
++     "Set a config key to the provided value."
++    },
++    {"shutdown", (PyCFunction)Container_shutdown, METH_VARARGS | METH_KEYWORDS,
++     "shutdown(timeout = -1) -> boolean\n"
++     "\n"
++     "Sends SIGPWR to the container and wait for it to shutdown "
++     "unless timeout is set to a positive value, in which case "
++     "the container will be killed when the timeout is reached."
++    },
++    {"start", (PyCFunction)Container_start, METH_VARARGS | METH_KEYWORDS,
++     "start(useinit = False, cmd = (,)) -> boolean\n"
++     "\n"
++     "Start the container, optionally using lxc-init and"
++     "an alternate init command, then returns its return code."
++    },
++    {"stop", (PyCFunction)Container_stop, METH_NOARGS,
++     "stop() -> boolean\n"
++     "\n"
++     "Stop the container and returns its return code."
++    },
++    {"unfreeze", (PyCFunction)Container_unfreeze, METH_NOARGS,
++     "unfreeze() -> boolean\n"
++     "\n"
++     "Unfreezes the container and returns its return code."
++    },
++    {"wait", (PyCFunction)Container_wait, METH_VARARGS | METH_KEYWORDS,
++     "wait(state, timeout = -1) -> boolean\n"
++     "\n"
++     "Wait for the container to reach a given state or timeout."
++    },
++    {NULL}  /* Sentinel */
++};
++
++static PyTypeObject _lxc_ContainerType = {
++PyVarObject_HEAD_INIT(NULL, 0)
++    "lxc.Container",                /* tp_name */
++    sizeof(Container),              /* tp_basicsize */
++    0,                              /* tp_itemsize */
++    (destructor)Container_dealloc,  /* tp_dealloc */
++    0,                              /* tp_print */
++    0,                              /* tp_getattr */
++    0,                              /* tp_setattr */
++    0,                              /* tp_reserved */
++    0,                              /* tp_repr */
++    0,                              /* tp_as_number */
++    0,                              /* tp_as_sequence */
++    0,                              /* tp_as_mapping */
++    0,                              /* tp_hash  */
++    0,                              /* tp_call */
++    0,                              /* tp_str */
++    0,                              /* tp_getattro */
++    0,                              /* tp_setattro */
++    0,                              /* tp_as_buffer */
++    Py_TPFLAGS_DEFAULT |
++        Py_TPFLAGS_BASETYPE,        /* tp_flags */
++    "Container objects",            /* tp_doc */
++    0,                              /* tp_traverse */
++    0,                              /* tp_clear */
++    0,                              /* tp_richcompare */
++    0,                              /* tp_weaklistoffset */
++    0,                              /* tp_iter */
++    0,                              /* tp_iternext */
++    Container_methods,              /* tp_methods */
++    0,                              /* tp_members */
++    Container_getseters,            /* tp_getset */
++    0,                              /* tp_base */
++    0,                              /* tp_dict */
++    0,                              /* tp_descr_get */
++    0,                              /* tp_descr_set */
++    0,                              /* tp_dictoffset */
++    (initproc)Container_init,       /* tp_init */
++    0,                              /* tp_alloc */
++    Container_new,                  /* tp_new */
++};
++
++static PyModuleDef _lxcmodule = {
++    PyModuleDef_HEAD_INIT,
++    "_lxc",
++    "Binding for liblxc in python",
++    -1,
++    NULL, NULL, NULL, NULL, NULL
++};
++
++PyMODINIT_FUNC
++PyInit__lxc(void)
++{
++    PyObject* m;
++
++    if (PyType_Ready(&_lxc_ContainerType) < 0)
++        return NULL;
++
++    m = PyModule_Create(&_lxcmodule);
++    if (m == NULL)
++        return NULL;
++
++    Py_INCREF(&_lxc_ContainerType);
++    PyModule_AddObject(m, "Container", (PyObject *)&_lxc_ContainerType);
++    return m;
++}
+Index: lxc/src/python-lxc/setup.py
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc/src/python-lxc/setup.py	2012-08-27 17:12:13.000000000 -0400
+@@ -0,0 +1,10 @@
++from distutils.core import setup, Extension
++
++module = Extension('_lxc', sources = ['lxc.c'], libraries = ['lxc'])
++
++setup (name = '_lxc',
++        version = '0.1',
++        description = 'LXC',
++        packages = ['lxc'],
++        package_dir = {'lxc':'lxc'},
++        ext_modules = [module])
+Index: lxc/src/python-lxc/lxc/__init__.py
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ lxc/src/python-lxc/lxc/__init__.py	2012-08-27 17:12:13.000000000 -0400
+@@ -0,0 +1,372 @@
++#
++# python-lxc: Python bindings for LXC
++#
++# (C) Copyright Canonical Ltd. 2012
++#
++# Authors:
++# Stéphane Graber <stgraber@ubuntu.com>
++#
++# This library is free software; you can redistribute it and/or
++# modify it under the terms of the GNU Lesser General Public
++# License as published by the Free Software Foundation; either
++# version 2.1 of the License, or (at your option) any later version.
++#
++# This library is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++# Lesser General Public License for more details.
++#
++# You should have received a copy of the GNU Lesser General Public
++# License along with this library; if not, write to the Free Software
++# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++#
++
++import _lxc
++import glob
++import os
++import subprocess
++import tempfile
++import time
++import warnings
++
++warnings.warn("The python-lxc API isn't yet stable "
++              "and may change at any point in the future.", Warning, 2)
++
++class ContainerNetwork():
++    props = {}
++
++    def __init__(self, container, index):
++        self.container = container
++        self.index = index
++
++        for key in self.container.get_keys("lxc.network.%s" % self.index):
++            if "." in key:
++                self.props[key.replace(".", "_")] = key
++            else:
++                self.props[key] = key
++
++        if not self.props:
++            return False
++
++    def __delattr__(self, key):
++        if key in ["container", "index", "props"]:
++            return object.__delattr__(self, key)
++
++        if key not in self.props:
++            raise AttributeError("'%s' network has no attribute '%s'" % (
++                    self.__get_network_item("type"), key))
++
++        return self.__clear_network_item(self.props[key])
++
++    def __dir__(self):
++        return sorted(self.props.keys())
++
++    def __getattr__(self, key):
++        if key in ["container", "index", "props"]:
++            return object.__getattribute__(self, key)
++
++        if key not in self.props:
++            raise AttributeError("'%s' network has no attribute '%s'" % (
++                    self.__get_network_item("type"), key))
++
++        return self.__get_network_item(self.props[key])
++
++    def __hasattr__(self, key):
++        if key in ["container", "index", "props"]:
++            return object.__hasattr__(self, key)
++
++        if key not in self.props:
++            raise AttributeError("'%s' network has no attribute '%s'" % (
++                    self.__get_network_item("type"), key))
++
++        return True
++
++    def __repr__(self):
++        return "'%s' network at index '%s'" % (
++            self.__get_network_item("type"), self.index)
++
++    def __setattr__(self, key, value):
++        if key in ["container", "index", "props"]:
++            return object.__setattr__(self, key, value)
++
++        if key not in self.props:
++            raise AttributeError("'%s' network has no attribute '%s'" % (
++                    self.__get_network_item("type"), key))
++
++        return self.__set_network_item(self.props[key], value)
++
++    def __clear_network_item(self, key):
++        return self.container.clear_config_item("lxc.network.%s.%s" % (
++                    self.index, key))
++
++    def __get_network_item(self, key):
++        return self.container.get_config_item("lxc.network.%s.%s" % (
++                    self.index, key))
++
++    def __set_network_item(self, key, value):
++        return self.container.set_config_item("lxc.network.%s.%s" % (
++                    self.index, key), value)
++
++
++class ContainerNetworkList():
++    def __init__(self, container):
++        self.container = container
++
++    def __getitem__(self, index):
++        count = len(self.container.get_config_item("lxc.network"))
++        if index >= count:
++            raise IndexError("list index out of range")
++
++        return ContainerNetwork(self.container, index)
++
++    def __len__(self):
++        return len(self.container.get_config_item("lxc.network"))
++
++    def add(self, network_type):
++        index = len(self.container.get_config_item("lxc.network"))
++
++        return self.container.set_config_item("lxc.network.%s.type" % index,
++                    network_type)
++
++    def remove(self, index):
++        count = len(self.container.get_config_item("lxc.network"))
++        if index >= count:
++            raise IndexError("list index out of range")
++
++        return self.container.clear_config_item("lxc.network.%s" % index)
++
++
++class Container(_lxc.Container):
++    def __init__(self, name):
++        """
++            Creates a new Container instance.
++        """
++
++        _lxc.Container.__init__(self, name)
++        self.network = ContainerNetworkList(self)
++
++    def append_config_item(self, key, value):
++        """
++            Append 'value' to 'key', assuming 'key' is a list.
++            If 'key' isn't a list, 'value' will be set as the value of 'key'.
++        """
++
++        return _lxc.Container.set_config_item(self, key, value)
++
++    def attach(self, namespace="ALL", *cmd):
++        """
++            Attach to a running container.
++        """
++
++        if not self.running:
++            return False
++
++        attach = ["lxc-attach", "-n", self.name]
++        if namespace != "ALL":
++            attach += ["-s", namespace]
++
++        if cmd:
++            attach += ["--"] + list(cmd)
++
++        if subprocess.call(
++                attach,
++                universal_newlines=True) != 0:
++            return False
++        return True
++
++    def create(self, template, args={}):
++        """
++            Create a new rootfs for the container.
++
++            "template" must be a valid template name.
++
++            "args" (optional) is a dictionary of parameters and values to pass
++            to the template.
++        """
++
++        template_args = []
++        for item in args.items():
++            template_args.append("--%s" % item[0])
++            template_args.append("%s" % item[1])
++
++        return _lxc.Container.create(self, template, tuple(template_args))
++
++    def clone(self, container):
++        """
++            Clone an existing container into a new one.
++        """
++
++        if self.defined:
++            return False
++
++        if isinstance(container, Container):
++            source = container
++        else:
++            source = Container(container)
++
++        if not source.defined:
++            return False
++
++        if subprocess.call(
++                    ["lxc-clone", "-o", source.name, "-n", self.name],
++                    universal_newlines=True) != 0:
++            return False
++
++        self.load_config()
++        return True
++
++    def console(self, tty="1"):
++        """
++            Access the console of a container.
++        """
++
++        if not self.running:
++            return False
++
++        if subprocess.call(
++                    ["lxc-console", "-n", self.name, "-t", "%s" % tty],
++                    universal_newlines=True) != 0:
++            return False
++        return True
++
++    def get_config_item(self, key):
++        """
++            Returns the value for a given config key.
++            A list is returned when multiple values are set.
++        """
++        value = _lxc.Container.get_config_item(self, key)
++
++        if value is False:
++            return False
++        elif value.endswith("\n"):
++            return value.rstrip("\n").split("\n")
++        else:
++            return value
++
++    def get_ips(self, timeout=60, interface=None, protocol=None):
++        """
++            Returns the list of IP addresses for the container.
++        """
++
++        if not self.defined or not self.running:
++            return False
++
++        try:
++            os.makedirs("/run/netns")
++        except:
++            pass
++
++        path = tempfile.mktemp(dir="/run/netns")
++
++        os.symlink("/proc/%s/ns/net" % self.init_pid, path)
++
++        ips = []
++
++        count = 0
++        while count < timeout:
++            if count != 0:
++                time.sleep(1)
++
++            base_cmd = ["ip", "netns", "exec", path.split("/")[-1], "ip"]
++
++            # Get IPv6
++            if protocol in ("ipv6", None):
++                ip6_cmd = base_cmd + ["-6", "addr", "show", "scope", "global"]
++                if interface:
++                    ip = subprocess.Popen(ip6_cmd + ["dev", interface],
++                            stdout=subprocess.PIPE, universal_newlines=True)
++                else:
++                    ip = subprocess.Popen(ip6_cmd, stdout=subprocess.PIPE,
++                            universal_newlines=True)
++
++                ip.wait()
++                for line in ip.stdout.read().split("\n"):
++                    fields = line.split()
++                    if len(fields) > 2 and fields[0] == "inet6":
++                        ips.append(fields[1].split('/')[0])
++
++            # Get IPv4
++            if protocol in ("ipv4", None):
++                ip4_cmd = base_cmd + ["-4", "addr", "show", "scope", "global"]
++                if interface:
++                    ip = subprocess.Popen(ip4_cmd + ["dev", interface],
++                            stdout=subprocess.PIPE, universal_newlines=True)
++                else:
++                    ip = subprocess.Popen(ip4_cmd, stdout=subprocess.PIPE,
++                            universal_newlines=True)
++
++                ip.wait()
++                for line in ip.stdout.read().split("\n"):
++                    fields = line.split()
++                    if len(fields) > 2 and fields[0] == "inet":
++                        ips.append(fields[1].split('/')[0])
++
++            if ips:
++                break
++
++            count += 1
++
++        os.remove(path)
++        return ips
++
++    def get_keys(self, key):
++        """
++            Returns a list of valid sub-keys.
++        """
++        value = _lxc.Container.get_keys(self, key)
++
++        if value is False:
++            return False
++        elif value.endswith("\n"):
++            return value.rstrip("\n").split("\n")
++        else:
++            return value
++
++    def set_config_item(self, key, value):
++        """
++            Set a config key to a provided value.
++            The value can be a list for the keys supporting multiple values.
++        """
++        old_value = self.get_config_item(key)
++
++        # Check if it's a list
++        def set_key(key, value):
++            self.clear_config_item(key)
++            if isinstance(value, list):
++                for entry in value:
++                    if not _lxc.Container.set_config_item(self, key, entry):
++                        return False
++            else:
++                _lxc.Container.set_config_item(self, key, value)
++
++        set_key(key, value)
++        new_value = self.get_config_item(key)
++
++        if isinstance(value, str) and isinstance(new_value, str) and \
++           value == new_value:
++            return True
++        elif isinstance(value, list) and isinstance(new_value, list) and \
++           set(value) == set(new_value):
++            return True
++        elif isinstance(value, str) and isinstance(new_value, list) and \
++           set([value]) == set(new_value):
++            return True
++        elif old_value:
++            set_key(key, old_value)
++            return False
++        else:
++            self.clear_config_item(key)
++            return False
++
++
++def list_containers(as_object=False):
++    """
++        List the containers on the system.
++    """
++    containers = []
++    for entry in glob.glob("/var/lib/lxc/*/config"):
++        if as_object:
++            containers.append(Container(entry.split("/")[-2]))
++        else:
++            containers.append(entry.split("/")[-2])
++    return containers
