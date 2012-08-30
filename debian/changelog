@@ -1,3 +1,37 @@
+lxc (0.8.0~rc1-4ubuntu33) quantal; urgency=low
+
+  [ Serge Hallyn ]
+  * 0206-lxc-wait-initialize-timeout: initialize timeout to -1 so lxc-wait
+    will, by default, wait for the container to enter the requested state.
+  * debian/patches/compilecleanups/* - fix compile time warnings.
+  * lxc.lxc-net.upstart: tell iptables not to masquerate packets between
+    containers.  (LP: #1045947)
+  * 0208-fix-getitem-utsname-segv: fix seg fault when doing get_item(utsname)
+    on newly created container.
+  * 0209-reload-conf-after-create: add ability to free a lxc_conf.  Use that
+    after calling Container->Create() to completely reload the newly created
+    config.
+  * 0211-add-hooks-to-manpage: document lxc.hook in the lxc.conf manpage.
+  * 0212-lxc-destroy-rm-symlink: If rootfs is a symbolic link to a directory,
+    remove it.  (LP: #1046117)
+  * 0213-add-premount-hook.patch: add a premount hook to support encrypted
+    filesystems.  (LP: #1043052)
+
+  [ Scott Moser ]
+  * 0207-ubuntu-cloud-fixes.patch: cleanups to lxc-ubuntu-cloud.in
+    fix for quantal images that do not have user 'ubuntu' present
+    (LP: #1045955)
+
+  [ Rex Tsai ]
+  * 0210-fix-debian-templates: Fix lxc-shutdown/lxc-restart in Debian
+    containers and fix lxc.utsname for lenny containers.
+    (LP: #1046684, LP: #1046696)
+
+  [ Stéphane Graber ]
+  * lxc.lxc-net.upstart: Make the iptables call more consistent (LP: #1045947)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 30 Aug 2012 11:32:06 -0500
+
 lxc (0.8.0~rc1-4ubuntu32) quantal; urgency=low
 
   * 0204-ubuntu-cloud-userdata-path: Fix broken behavior when a relative

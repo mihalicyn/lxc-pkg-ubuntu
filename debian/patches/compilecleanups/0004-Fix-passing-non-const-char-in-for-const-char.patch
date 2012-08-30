@@ -1,0 +1,77 @@
+From 98f9a6f40d02ac4c3cd51c3aadcefa2f943d92bb Mon Sep 17 00:00:00 2001
+From: Serge Hallyn <serge.hallyn@ubuntu.com>
+Date: Tue, 4 Sep 2012 14:18:03 -0500
+Subject: [PATCH 4/4] Fix passing non-const char* in for const char*
+
+Signed-off-by: Serge Hallyn <serge.hallyn@ubuntu.com>
+---
+ src/lxc/lxc.h              |    2 +-
+ src/lxc/lxc_wait.c         |    2 +-
+ src/lxc/lxccontainer.c     |    2 +-
+ src/lxc/lxccontainer.h     |    2 +-
+ src/tests/containertests.c |    2 +-
+ 5 files changed, 5 insertions(+), 5 deletions(-)
+
+Index: lxc/src/lxc/lxc.h
+===================================================================
+--- lxc.orig/src/lxc/lxc.h	2012-09-04 14:53:59.855772000 -0500
++++ lxc/src/lxc/lxc.h	2012-09-04 14:57:56.172475697 -0500
+@@ -201,7 +201,7 @@
+  * Get a list of valid wait states.
+  * If states is NULL, simply return the number of states
+  */
+-extern int lxc_get_wait_states(char **states);
++extern int lxc_get_wait_states(const char **states);
+ 
+ #ifdef __cplusplus
+ }
+Index: lxc/src/lxc/lxc_wait.c
+===================================================================
+--- lxc.orig/src/lxc/lxc_wait.c	2012-09-04 14:53:59.855772000 -0500
++++ lxc/src/lxc/lxc_wait.c	2012-09-04 14:57:56.176475696 -0500
+@@ -96,5 +96,5 @@
+ 			 my_args.progname, my_args.quiet))
+ 		return -1;
+ 
+-	return lxc_wait(my_args.name, my_args.states, my_args.timeout);
++	return lxc_wait(strdup(my_args.name), my_args.states, my_args.timeout);
+ }
+Index: lxc/src/lxc/lxccontainer.c
+===================================================================
+--- lxc.orig/src/lxc/lxccontainer.c	2012-09-04 14:57:55.320475729 -0500
++++ lxc/src/lxc/lxccontainer.c	2012-09-04 14:57:56.176475696 -0500
+@@ -906,7 +906,7 @@
+ 	return NULL;
+ }
+ 
+-int lxc_get_wait_states(char **states)
++int lxc_get_wait_states(const char **states)
+ {
+ 	int i;
+ 
+Index: lxc/src/lxc/lxccontainer.h
+===================================================================
+--- lxc.orig/src/lxc/lxccontainer.h	2012-09-04 14:53:59.855772000 -0500
++++ lxc/src/lxc/lxccontainer.h	2012-09-04 14:57:56.176475696 -0500
+@@ -63,7 +63,7 @@
+ struct lxc_container *lxc_container_new(char *name);
+ int lxc_container_get(struct lxc_container *c);
+ int lxc_container_put(struct lxc_container *c);
+-int lxc_get_wait_states(char **states);
++int lxc_get_wait_states(const char **states);
+ 
+ #if 0
+ char ** lxc_get_valid_keys();
+Index: lxc/src/tests/containertests.c
+===================================================================
+--- lxc.orig/src/tests/containertests.c	2012-09-04 14:53:59.855772000 -0500
++++ lxc/src/tests/containertests.c	2012-09-04 14:57:56.176475696 -0500
+@@ -210,7 +210,7 @@
+ 		fprintf(stderr, "%d: lxc_get_wait_states gave %d not %d\n", __LINE__, numstates, MAX_STATE);
+ 		goto out;
+ 	}
+-	char **sstr = malloc(numstates * sizeof(char *));
++	const char **sstr = malloc(numstates * sizeof(const char *));
+ 	numstates = lxc_get_wait_states(sstr);
+ 	int i;
+ 	for (i=0; i<numstates; i++) {

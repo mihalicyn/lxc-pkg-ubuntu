@@ -20,7 +20,7 @@ pre-start script
 
 	cleanup() {
 		# dnsmasq failed to start, clean up the bridge
-		iptables -t nat -D POSTROUTING -s ${LXC_NETWORK} -j MASQUERADE || true
+		iptables -t nat -D POSTROUTING -s ${LXC_NETWORK} ! -d ${LXC_NETWORK} -j MASQUERADE || true
 		ifconfig ${LXC_BRIDGE} down || true
 		brctl delbr ${LXC_BRIDGE} || true
 	}
@@ -38,7 +38,7 @@ pre-start script
 	mkdir -p ${varrun}
 	brctl addbr ${LXC_BRIDGE}
 	ifconfig ${LXC_BRIDGE} ${LXC_ADDR} netmask ${LXC_NETMASK} up
-	iptables -A POSTROUTING -s ${LXC_NETWORK} -t nat -j MASQUERADE
+	iptables -t nat -A POSTROUTING -s ${LXC_NETWORK} ! -d ${LXC_NETWORK} -j MASQUERADE
 	dnsmasq -u lxc-dnsmasq --strict-order --bind-interfaces --pid-file=${varrun}/dnsmasq.pid --conf-file= --listen-address ${LXC_ADDR} --dhcp-range ${LXC_DHCP_RANGE} --dhcp-lease-max=${LXC_DHCP_MAX} --dhcp-no-override --except-interface=lo --interface=${LXC_BRIDGE} || cleanup
 	touch ${varrun}/network_up
 end script
@@ -51,7 +51,7 @@ post-stop script
 
 	if [ -d /sys/class/net/${LXC_BRIDGE} ]; then
 		ifconfig ${LXC_BRIDGE} down
-		iptables -t nat -D POSTROUTING -s ${LXC_NETWORK} -j MASQUERADE || true
+		iptables -t nat -D POSTROUTING -s ${LXC_NETWORK} ! -d ${LXC_NETWORK} -j MASQUERADE || true
 		pid=`cat ${varrun}/dnsmasq.pid 2>/dev/null` && kill -9 $pid || true
 		rm -f ${varrun}/dnsmasq.pid
 		brctl delbr ${LXC_BRIDGE}

@@ -1,0 +1,27 @@
+Description: Fixes to lxc-debian and lxc-lenny
+
+ - fixed hostname setting in template script. (LP: #1046684)
+ - fixed lxc-shutdown for debian hosts. (LP: #1046696)
+
+--- lxc-0.8.0~rc1.orig/templates/lxc-lenny.in
++++ lxc-0.8.0~rc1/templates/lxc-lenny.in
+@@ -306,7 +306,7 @@ if [ $? -ne 0 ]; then
+     exit 1
+ fi
+ 
+-copy_configuration $path $rootfs
++copy_configuration $path $rootfs $name
+ if [ $? -ne 0 ]; then
+     echo "failed write configuration file"
+     exit 1
+--- lxc-0.8.0~rc1.orig/templates/lxc-debian.in
++++ lxc-0.8.0~rc1/templates/lxc-debian.in
+@@ -54,6 +54,8 @@ c1:12345:respawn:/sbin/getty 38400 tty1
+ c2:12345:respawn:/sbin/getty 38400 tty2 linux
+ c3:12345:respawn:/sbin/getty 38400 tty3 linux
+ c4:12345:respawn:/sbin/getty 38400 tty4 linux
++p6::ctrlaltdel:/sbin/init 6 
++p0::powerfail:/sbin/init 0
+ EOF
+ 
+     # disable selinux in debian

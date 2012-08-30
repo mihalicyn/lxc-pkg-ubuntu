@@ -1,0 +1,48 @@
+Index: lxc/src/lxc/confile.c
+===================================================================
+--- lxc.orig/src/lxc/confile.c	2012-09-04 15:16:36.960434802 -0500
++++ lxc/src/lxc/confile.c	2012-09-04 15:16:54.040434179 -0500
+@@ -1386,7 +1386,7 @@
+ static int lxc_get_item_nic(struct lxc_conf *c, char *retv, int inlen, char *key)
+ {
+ 	char *p1;
+-	int i, len, fulllen = 0;
++	int len, fulllen = 0;
+ 	struct lxc_netdev *netdev;
+ 
+ 	if (!retv)
+Index: lxc/src/lxc/lxc_wait.c
+===================================================================
+--- lxc.orig/src/lxc/lxc_wait.c	2012-09-04 15:08:21.252452889 -0500
++++ lxc/src/lxc/lxc_wait.c	2012-09-04 15:19:07.028429327 -0500
+@@ -78,17 +78,8 @@
+ 	.timeout = -1,
+ };
+ 
+-static void timeout_handler(int signal)
+-{
+-	exit(-1);
+-}
+-
+ int main(int argc, char *argv[])
+ {
+-	struct lxc_msg msg;
+-	int s[MAX_STATE] = { }, fd;
+-	int state, ret;
+-
+ 	if (lxc_arguments_parse(&my_args, argc, argv))
+ 		return -1;
+ 
+Index: lxc/src/tests/getkeys.c
+===================================================================
+--- lxc.orig/src/tests/getkeys.c	2012-09-04 14:53:59.855772000 -0500
++++ lxc/src/tests/getkeys.c	2012-09-04 15:19:37.192428226 -0500
+@@ -33,7 +33,7 @@
+ {
+ 	struct lxc_container *c;
+ 	int len, ret;
+-	char v1[2], v2[256], v3[2048];
++	char v3[2048];
+ 
+ 	if ((c = lxc_container_new(MYNAME)) == NULL) {
+ 		fprintf(stderr, "%d: error opening lxc_container %s\n", __LINE__, MYNAME);

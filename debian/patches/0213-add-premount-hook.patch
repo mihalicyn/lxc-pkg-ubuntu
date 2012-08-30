@@ -1,0 +1,80 @@
+Index: lxc/src/lxc/conf.c
+===================================================================
+--- lxc.orig/src/lxc/conf.c	2012-09-06 13:01:55.867556000 -0500
++++ lxc/src/lxc/conf.c	2012-09-06 13:04:52.090058338 -0500
+@@ -106,7 +106,7 @@
+ #endif
+ 
+ char *lxchook_names[NUM_LXC_HOOKS] = {
+-	"pre-start", "mount", "start", "post-stop" };
++	"pre-start", "pre-mount", "mount", "start", "post-stop" };
+ 
+ extern int pivot_root(const char * new_root, const char * put_old);
+ 
+@@ -2173,6 +2173,11 @@
+ 		return -1;
+ 	}
+ 
++	if (run_lxc_hooks(name, "pre-mount", lxc_conf)) {
++		ERROR("failed to run pre-mount hooks for container '%s'.", name);
++		return -1;
++	}
++
+ 	if (setup_rootfs(&lxc_conf->rootfs)) {
+ 		ERROR("failed to setup rootfs for '%s'", name);
+ 		return -1;
+@@ -2256,6 +2261,8 @@
+ 
+ 	if (strcmp(hook, "pre-start") == 0)
+ 		which = LXCHOOK_PRESTART;
++	else if (strcmp(hook, "pre-mount") == 0)
++		which = LXCHOOK_PREMOUNT;
+ 	else if (strcmp(hook, "mount") == 0)
+ 		which = LXCHOOK_MOUNT;
+ 	else if (strcmp(hook, "start") == 0)
+Index: lxc/src/lxc/conf.h
+===================================================================
+--- lxc.orig/src/lxc/conf.h	2012-09-06 13:01:55.867556000 -0500
++++ lxc/src/lxc/conf.h	2012-09-06 13:03:42.458060880 -0500
+@@ -201,7 +201,7 @@
+  * @aa_profile : apparmor profile to switch to
+  */
+ enum lxchooks {
+-	LXCHOOK_PRESTART, LXCHOOK_MOUNT, LXCHOOK_START,
++	LXCHOOK_PRESTART, LXCHOOK_PREMOUNT, LXCHOOK_MOUNT, LXCHOOK_START,
+ 	LXCHOOK_POSTSTOP, NUM_LXC_HOOKS};
+ extern char *lxchook_names[NUM_LXC_HOOKS];
+ 
+Index: lxc/src/lxc/confile.c
+===================================================================
+--- lxc.orig/src/lxc/confile.c	2012-09-06 13:01:55.867556000 -0500
++++ lxc/src/lxc/confile.c	2012-09-06 13:04:23.622059377 -0500
+@@ -94,6 +94,7 @@
+ 	{ "lxc.pivotdir",             config_pivotdir             },
+ 	{ "lxc.utsname",              config_utsname              },
+ 	{ "lxc.hook.pre-start",       config_hook                 },
++	{ "lxc.hook.pre-mount",       config_hook                 },
+ 	{ "lxc.hook.mount",           config_hook                 },
+ 	{ "lxc.hook.start",           config_hook                 },
+ 	{ "lxc.hook.post-stop",       config_hook                 },
+@@ -791,6 +792,8 @@
+ 	}
+ 	if (strcmp(key, "lxc.hook.pre-start") == 0)
+ 		return add_hook(lxc_conf, LXCHOOK_PRESTART, copy);
++	else if (strcmp(key, "lxc.hook.pre-mount") == 0)
++		return add_hook(lxc_conf, LXCHOOK_PREMOUNT, copy);
+ 	else if (strcmp(key, "lxc.hook.mount") == 0)
+ 		return add_hook(lxc_conf, LXCHOOK_MOUNT, copy);
+ 	else if (strcmp(key, "lxc.hook.start") == 0)
+Index: lxc/doc/lxc.conf.sgml.in
+===================================================================
+--- lxc.orig/doc/lxc.conf.sgml.in	2012-09-06 13:01:55.867556000 -0500
++++ lxc/doc/lxc.conf.sgml.in	2012-09-06 13:05:15.282057493 -0500
+@@ -691,7 +691,6 @@
+ 	  </term>
+ 	  <listitem>
+ 	    <para>
+-	    (Not yet implemented)
+ 	      A hook to be run in the container's fs namespace but before
+ 	      the rootfs has been set up.  This allows for manipulation
+ 	      of the rootfs, i.e. to mount an encrypted filesystem.  Mounts

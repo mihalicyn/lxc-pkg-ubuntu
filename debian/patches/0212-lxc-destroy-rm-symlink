@@ -1,0 +1,28 @@
+Description: lxc-destroy: Separately rm rootfs if it is a symlink
+ If rootfs is a symbolic link but not to a block device, then do a separate
+ rm of its contents.  We have to do this because, out of cowardice, we call
+ rm with --one-filesystem.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Forwarded: yes
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/1046117
+
+Index: lxc/src/lxc/lxc-destroy.in
+===================================================================
+--- lxc.orig/src/lxc/lxc-destroy.in	2012-09-05 10:06:17.065918000 -0500
++++ lxc/src/lxc/lxc-destroy.in	2012-09-05 10:14:35.335461393 -0500
+@@ -99,13 +99,13 @@
+ # deletion of others later.
+ rootdev=`grep lxc.rootfs $lxc_path/$lxc_name/config 2>/dev/null | sed -e 's/^[^/]*/\//'`
+ if [ -n "$rootdev" ]; then
+-	if [ -b "$rootdev" -o -h "$rootdev" ]; then
++	if [ -b "$rootdev" ]; then
+ 		lvdisplay $rootdev > /dev/null 2>&1
+ 		if [ $? -eq 0 ]; then
+ 			echo "removing backing store: $rootdev"
+ 			lvremove -f $rootdev
+ 		fi
+-	elif [ -d "$rootdev" ]; then
++	elif [ -h "$rootdev" -o -d "$rootdev" ]; then
+ 		# In case rootfs is not under $lxc_path/$lxc_name, remove it
+ 		rm -rf --one-file-system --preserve-root $rootdev
+ 	fi

@@ -1,0 +1,28 @@
+From 8c9bd229bdc0dc8b3643d5ab0ee2ae04cd8e64bd Mon Sep 17 00:00:00 2001
+From: Serge Hallyn <serge.hallyn@ubuntu.com>
+Date: Tue, 4 Sep 2012 14:06:29 -0500
+Subject: [PATCH 2/4] add prototype for clone(2) as per manpage
+
+Signed-off-by: Serge Hallyn <serge.hallyn@ubuntu.com>
+---
+ src/lxc/namespace.h |    4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/lxc/namespace.h b/src/lxc/namespace.h
+index 04e81bb..715dffa 100644
+--- a/src/lxc/namespace.h
++++ b/src/lxc/namespace.h
+@@ -47,6 +47,10 @@
+ #ifndef CLONE_NEWNET
+ #  define CLONE_NEWNET            0x40000000
+ #endif
++int clone(int (*fn)(void *), void *child_stack,
++	int flags, void *arg, ...
++	/* pid_t *ptid, struct user_desc *tls, pid_t *ctid */ );
++
+ 
+ extern pid_t lxc_clone(int (*fn)(void *), void *arg, int flags);
+ 
+-- 
+1.7.10.4
+

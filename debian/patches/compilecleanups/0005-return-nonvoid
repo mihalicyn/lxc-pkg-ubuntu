@@ -1,0 +1,13 @@
+Index: lxc/src/lxc/conf.c
+===================================================================
+--- lxc.orig/src/lxc/conf.c	2012-09-04 15:08:16.372453068 -0500
++++ lxc/src/lxc/conf.c	2012-09-04 15:10:53.688447328 -0500
+@@ -2274,7 +2274,7 @@
+ 	return 0;
+ }
+ 
+-static int lxc_remove_nic(struct lxc_list *it)
++static void lxc_remove_nic(struct lxc_list *it)
+ {
+ 	struct lxc_netdev *netdev = it->elem;
+ 	struct lxc_list *it2;
