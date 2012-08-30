@@ -1,0 +1,30 @@
+Description: lxc-ubuntu-cloud: get full pathname to userdata file
+ When passing '--userdata somefile' to the ubuntu-cloud template, a user
+ may pass a relative pathname.  The template uses the filename after
+ changing current directory, so store the full pathname for the userdata
+ file instead of a potential relative pathname.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/1043582
+Forwarded: yes
+
+Index: lxc/templates/lxc-ubuntu-cloud.in
+===================================================================
+--- lxc.orig/templates/lxc-ubuntu-cloud.in	2012-08-30 09:48:55.396845000 -0500
++++ lxc/templates/lxc-ubuntu-cloud.in	2012-08-30 09:58:33.047759242 -0500
+@@ -221,9 +221,13 @@
+     exit 1
+ fi
+ 
+-if [ -n "$userdata" -a ! -f "$userdata" ]; then
+-    echo "Userdata does not exist"
+-    exit 1
++if [ -n "$userdata" ]; then
++    if [ ! -f "$userdata" ]; then
++        echo "Userdata ($userdata) does not exist"
++        exit 1
++    else
++        userdata=`readlink -f $userdata`
++    fi
+ fi
+ 
+ if [ -z "$path" ]; then

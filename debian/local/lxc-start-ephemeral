@@ -180,7 +180,19 @@ setup_container()
     }
 
     # Update the ephemeral lxc's configuration to reflect the new container name.
-    sudo sed -i -e "s/$LXC_BASE/$LXC_NAME/" $LXC_DIR/fstab $LXC_DIR/config $LXC_DIR/rootfs/etc/hostname $LXC_DIR/rootfs/etc/hosts
+    # Check all the places known distros keep hostnames.
+    # FIXME: should we sanity check the hostname to make sure it contains no bad chars?
+    for file in $LXC_DIR/fstab $LXC_DIR/config \
+                $LXC_DIR/rootfs/etc/hostname \
+                $LXC_DIR/rootfs/etc/hosts \
+                $LXC_DIR/rootfs/etc/sysconfig/network \
+                $LXC_DIR/rootfs/etc/sysconfig/network-scripts/ifcfg-eth0
+    do
+        if test -f "$file"
+        then
+            sudo sed -i -e "s/$LXC_BASE/$LXC_NAME/" $file
+        fi
+    done
 
     # Update the fstab to have all bind mounts be ephemeral.
     sudo cp $LXC_DIR/fstab $LXC_DIR/fstab.old

@@ -77,3 +77,5 @@
 0201-fix-mkdir-race
 0202-make-api-start-reliable
 0203-python-lxc
+0204-ubuntu-cloud-userdata-path
+0205-lxc-ls-manpage-document-two-lines

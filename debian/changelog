@@ -1,3 +1,13 @@
+lxc (0.8.0~rc1-4ubuntu32) quantal; urgency=low
+
+  * 0204-ubuntu-cloud-userdata-path: Fix broken behavior when a relative
+    path is passed into '--userdata' argument.  (LP: #1043582)
+  * 0205-lxc-ls-manpage-document-two-lines: Document the default two-line
+    output format of lxc-ls.  (LP: #1043018)
+  * lxc-start-ephemeral: support fedora and centos  (LP: #1042431)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 30 Aug 2012 10:05:06 -0500
+
 lxc (0.8.0~rc1-4ubuntu31) quantal; urgency=low
 
   * Previous upload had documentation turned off, making it FTBFS on i386,
