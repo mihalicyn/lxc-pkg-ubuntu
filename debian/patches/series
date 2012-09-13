@@ -94,3 +94,9 @@ compilecleanups/0007-tests-check-return-values
 0211-add-hooks-to-manpage
 0212-lxc-destroy-rm-symlink
 0213-add-premount-hook.patch
+0214-give-pclose-errno
+0215-lxc-clone-name-arg
+0216-hook-kmsg-to-console
+0217-lxc-clone-fix-fstab
+0218-api-shutdown-fix-doublestop
+0219-python-module-improvements

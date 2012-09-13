@@ -301,27 +301,21 @@ start_container()
                 ssh -n -o StrictHostKeyChecking=no \
                     -o UserKnownHostsFile=/dev/null \
                     $LXC_KEY $LXC_USER@$IP_ADDRESS -- "$COMMAND"
-                if [ ! 255 -eq $? ]; then
+                SSH_RET=$?
+                if [ ! 255 -eq $SSH_RET ]; then
                     # If ssh returns 255 then its connection failed.
                     # Anything else is either success (status 0) or a
                     # failure from whatever we ran over the SSH connection.
                     # In those cases we want to stop looping, so we break
                     # here
-
-                    FAILED=0
-                    break;
+                    return $SSH_RET
                 fi
             done
-
-            if [ "$FAILED" = "0" ]; then
-                break
-            fi
             sleep 1
         done
 
-        if [ "$FAILED" = "1" ]; then
-            echo "could not get IP address - aborting." >&2
-        fi
+        echo "could not get IP address - aborting." >&2
+        return 255
     else
         sudo lxc-wait -n $LXC_NAME -s RUNNING
         echo "$LXC_NAME is running"
@@ -344,8 +338,9 @@ handle_container()
 {
     setup_container
     start_container
+    RET=$?
     stop_container
-    exit 0
+    exit $RET
 }
 
 if [ $DAEMON -eq 1 ]; then

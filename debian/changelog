@@ -1,3 +1,46 @@
+lxc (0.8.0~rc1-4ubuntu34) quantal; urgency=low
+
+  [ Serge Hallyn ]
+  * 0214-give-pclose-errno: help debug pclose failures when lxc runs scripts.
+  * 0215-lxc-clone-name-arg: fix incorrect checking for --name argument.
+    (LP: #1049914)
+  * 0216-hook-kmsg-to-console: link /dev/kmsg to /dev/console so init log
+    messages can be seen.  (LP: #1049926)
+  * 0217-lxc-clone-fix-fstab: fix check for lxc.mount in lxc-clone
+    (LP: #1049987)
+  * 0218-api-shutdown-fix-doublestop: don't call c->stop() when already
+    stopped (LP: #1050001)
+  * Update lxc-start-container apparmor abstraction to allow ecryptfs mounts
+    from the pre-mount script.  Remove the instruction to add that line from
+    the example hook.
+  * Update lxc-start-container apparmor abstraction to allow mounts to paths
+    under /var/lib/lxc/$container/, so that pre-mount hooks can stage mounts
+    there.  Also update the mountecryptfs example premount hook to use that.
+    (LP: #1050469)
+  * debian/rules: remove parsing of apparmor.in files.
+
+  [ Stéphane Graber ]
+  * Update lxc-start-container apparmor abstraction to allow aufs and overlayfs
+    mounts from the pre-mount scripts. This is required by some hooks and will
+    be needed by the new lxc-start-ephemeral.
+  * Remove multi-arch path in lxc-start-container apparmor abstraction and
+    instead just allow /usr/lib/*/lxc/ so nested containers running on a
+    different architecture don't get blocked by apparmor.
+  * Cherry-pick python-lxc fixes from upstream:
+    - Minor PEP-8 syntax fix
+    - Return an exception when getting Container instance as non-root
+    - Automatically convert any state string passed to wait() to its uppercase
+      equivalent.
+    - Replace test.py by a full example of the API.
+    - Remove zombie handler function from C module as it's no longer required
+      and causes weird bugs when used with the hooks.
+
+  [ William Grant ]
+  * lxc-start-ephemeral: exit with the command's status, not always 0.
+    (LP: #1050351)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 13 Sep 2012 12:02:45 -0500
+
 lxc (0.8.0~rc1-4ubuntu33) quantal; urgency=low
 
   [ Serge Hallyn ]

@@ -1,0 +1,19 @@
+Description: lxc-clone: fix the '--name' parameter
+ The long opt for --name was being incorrectly compared to --new.
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/1049914
+Forwarded: yes
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+
+Index: lxc/src/lxc/lxc-clone.in
+===================================================================
+--- lxc.orig/src/lxc/lxc-clone.in	2012-09-12 22:32:12.718377000 -0500
++++ lxc/src/lxc/lxc-clone.in	2012-09-12 22:33:19.206811907 -0500
+@@ -88,7 +88,7 @@
+             lxc_vg=$1
+             shift
+             ;;
+-        -n|--new)
++        -n|--name)
+             shift
+             lxc_new=$1
+             shift

@@ -1,0 +1,18 @@
+Description: api shutdown: don't c->stop() if already stopped.
+Author: Serge E. Hallyn <serge.hallyn@canonical.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/1050001
+Forwarded: yes
+
+Index: lxc/src/lxc/lxccontainer.c
+===================================================================
+--- lxc.orig/src/lxc/lxccontainer.c	2012-09-12 22:32:12.718377000 -0500
++++ lxc/src/lxc/lxccontainer.c	2012-09-13 08:57:25.378554968 -0500
+@@ -640,7 +640,7 @@
+ 		return true;
+ 	kill(pid, SIGPWR);
+ 	retv = c->wait(c, "STOPPED", timeout);
+-	if (timeout > 0) {
++	if (!retv && timeout > 0) {
+ 		c->stop(c);
+ 		retv = c->wait(c, "STOPPED", 0); // 0 means don't wait
+ 	}

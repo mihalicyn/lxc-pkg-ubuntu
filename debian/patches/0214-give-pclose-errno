@@ -1,0 +1,19 @@
+Description: provide errno when pclose fails, to help debugging
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Forwarded: yes
+
+Index: lxc/src/lxc/conf.c
+===================================================================
+--- lxc.orig/src/lxc/conf.c	2012-09-06 22:07:54.632709000 -0500
++++ lxc/src/lxc/conf.c	2012-09-06 22:09:42.986214961 -0500
+@@ -282,8 +282,8 @@
+ 
+ 	free(output);
+ 
+-	if (pclose(f)) {
+-		ERROR("Script exited on error");
++	if (pclose(f) == -1) {
++		SYSERROR("Script exited on error");
+ 		return -1;
+ 	}
+ 

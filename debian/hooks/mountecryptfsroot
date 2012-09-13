@@ -18,16 +18,13 @@
 
 # This hook can be used to mount an ecryptfs filesystem as a container's
 # rootfs.
-# To use this hook,
-#  1. add 'lxc.hook.pre-mount = /usr/share/lxc/hooks/mountecryptfsroot' to
+# To use this hook, assuming your container is called q1,
+#  1. add 'lxc.hook.pre-mount = /var/lib/lxc/q1/ecryptfs-root' to
 #     the container's configuration file
-#  2. change the rootfs to /var/lib/lxc/ecryptfs-root in the configuration
+#  2. change the rootfs to /var/lib/lxc/q1/ecryptfs-root in the configuration
 #     file by setting 'lxc.rootfs = /var/lib/lxc/ecryptfs-root'
-#  3. add the line 'mount fstype=ecryptfs -> /var/lib/lxc/ecryptfs-root/,' to
-#     /etc/apparmor.d/abstractions/lxc/start-container, then reload using
-#     apparmor_parser -r /etc/apparmor.d/usr.bin.lxc-start
-#  4. Create /var/lib/lxc/ecryptfs-root
-#     a. mkdir /var/lib/lxc/ecryptfs-root
+#  3. Create /var/lib/lxc/q1/ecryptfs-root
+#     a. mkdir /var/lib/lxc/q1/ecryptfs-root
 #  4. convert your container's root filesystem to be ecryptfs-backed.  Assuming
 #     your container is called 'q1', do
 #     a. c=q1
@@ -49,5 +46,5 @@
 set -e
 container=$1
 sig=`cat /var/lib/lxc/${container}/sig`
-mount -t ecryptfs -o ecryptfs_cipher=aes,ecryptfs_key_bytes=16,ecryptfs_passthrough=n,ecryptfs_enable_filename_crypto=n,ecryptfs_sig=${sig},sig=${sig},verbosity=0 /var/lib/lxc/${container}/rootfs.crypt /var/lib/lxc/ecryptfs-root
+mount -t ecryptfs -o ecryptfs_cipher=aes,ecryptfs_key_bytes=16,ecryptfs_passthrough=n,ecryptfs_enable_filename_crypto=n,ecryptfs_sig=${sig},sig=${sig},verbosity=0 /var/lib/lxc/${container}/rootfs.crypt /var/lib/lxc/${container}/ecryptfs-root
 exit 0
