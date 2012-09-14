@@ -1,3 +1,12 @@
+lxc (0.8.0~rc1-4ubuntu35) quantal; urgency=low
+
+  * 0220-getitem-per-hook-type: support clear_item for specific hooks.
+    (LP: #1050719)
+  * 0221-make-nonflush-upgrades-robust: be more robust about out of date
+    container caches.  (LP: #942862)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Fri, 14 Sep 2012 11:45:46 -0500
+
 lxc (0.8.0~rc1-4ubuntu34) quantal; urgency=low
 
   [ Serge Hallyn ]

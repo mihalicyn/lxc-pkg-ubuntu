@@ -100,3 +100,5 @@ compilecleanups/0007-tests-check-return-values
 0217-lxc-clone-fix-fstab
 0218-api-shutdown-fix-doublestop
 0219-python-module-improvements
+0220-getitem-per-hook-type
+0221-make-nonflush-upgrades-robust
