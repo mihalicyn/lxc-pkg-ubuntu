@@ -1,3 +1,12 @@
+lxc (0.8.0~rc1-4ubuntu36) quantal; urgency=low
+
+  * 0222-debian-dhcp3-package: fix install of debian testing containers.
+    (LP: #1052972)
+  * 0223-ubuntu-template-user-msg: don't say default user is ubuntu when
+    it isn't.  (LP: #1052315)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Wed, 19 Sep 2012 11:58:53 -0500
+
 lxc (0.8.0~rc1-4ubuntu35) quantal; urgency=low
 
   * 0220-getitem-per-hook-type: support clear_item for specific hooks.

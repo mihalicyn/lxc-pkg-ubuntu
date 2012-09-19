@@ -102,3 +102,5 @@ compilecleanups/0007-tests-check-return-values
 0219-python-module-improvements
 0220-getitem-per-hook-type
 0221-make-nonflush-upgrades-robust
+0222-debian-dhcp3-package
+0223-ubuntu-template-user-msg

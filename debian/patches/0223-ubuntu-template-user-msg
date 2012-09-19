@@ -1,0 +1,25 @@
+Description: lxc-ubuntu: fix printing of default user
+ If a user is bound into the container, don't claim the default user is
+ ubuntu.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Forwarded: yes
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/1052315
+
+Index: lxc/templates/lxc-ubuntu.in
+===================================================================
+--- lxc.orig/templates/lxc-ubuntu.in	2012-09-19 11:54:39.942250000 -0500
++++ lxc/templates/lxc-ubuntu.in	2012-09-19 11:56:48.377032378 -0500
+@@ -708,7 +708,11 @@
+ 
+ echo ""
+ echo "##"
+-echo "# The default user is 'ubuntu' with password 'ubuntu'!"
+-echo "# Use the 'sudo' command to run tasks as root in the container."
++if [ -n "$bindhome" ]; then
++	echo "# Log in as user $bindhome"
++else
++	echo "# The default user is 'ubuntu' with password 'ubuntu'!"
++	echo "# Use the 'sudo' command to run tasks as root in the container."
++fi
+ echo "##"
+ echo ""
