@@ -6,14 +6,14 @@ Forwarded: yes
 
 Index: lxc/templates/lxc-debian.in
 ===================================================================
---- lxc.orig/templates/lxc-debian.in	2012-09-19 11:22:19.268641000 -0500
-+++ lxc/templates/lxc-debian.in	2012-09-19 11:22:54.312986655 -0500
+--- lxc.orig/templates/lxc-debian.in	2012-09-21 13:34:12.247622000 -0500
++++ lxc/templates/lxc-debian.in	2012-09-21 13:34:45.480764561 -0500
 @@ -110,7 +110,7 @@
  locales,\
  libui-dialog-perl,\
  dialog,\
 -dhcp3-client,\
-+isc-dhcp-server,\
++isc-dhcp-client,\
  netbase,\
  net-tools,\
  iproute,\

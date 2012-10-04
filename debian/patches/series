@@ -104,3 +104,4 @@ compilecleanups/0007-tests-check-return-values
 0221-make-nonflush-upgrades-robust
 0222-debian-dhcp3-package
 0223-ubuntu-template-user-msg
+0224-ubuntu-templates-devtmpfs
