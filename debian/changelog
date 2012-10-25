@@ -1,3 +1,10 @@
+lxc (0.8.0~rc1-4ubuntu40) raring; urgency=low
+
+  * Add the multiarch include path for python3.3.
+  * Use dpkg-buildflags.
+
+ -- Matthias Klose <doko@ubuntu.com>  Thu, 25 Oct 2012 19:34:54 +0200
+
 lxc (0.8.0~rc1-4ubuntu37) quantal; urgency=low
 
   * update 0222-debian-dhcp3-package: use dhcp3-client, not server!
