@@ -1,3 +1,9 @@
+lxc (0.8.0~rc1-4ubuntu41) raring; urgency=low
+
+  * Rebuild to drop python3.2 extension.
+
+ -- Matthias Klose <doko@ubuntu.com>  Thu, 08 Nov 2012 11:15:42 +0000
+
 lxc (0.8.0~rc1-4ubuntu40) raring; urgency=low
 
   * Add the multiarch include path for python3.3.
