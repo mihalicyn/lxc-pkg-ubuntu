@@ -4,20 +4,37 @@ Priority: optional
 Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
 XSBC-Original-Maintainer: Daniel Baumann <daniel.baumann@progress-technologies.net>
 Uploaders: Jonas Genannt <jonas.genannt@capi2name.de>
-Build-Depends:
- debhelper (>= 9), autotools-dev, dh-apparmor, docbook-utils, libcap-dev,
- linux-libc-dev, libapparmor-dev, libseccomp-dev [i386 amd64], dh-autoreconf,
- python3-dev (>= 3.2.3)
+Build-Depends: autotools-dev,
+               debhelper (>= 9),
+               dh-apparmor,
+               dh-autoreconf,
+               docbook-utils,
+               libapparmor-dev,
+               libcap-dev,
+               libseccomp-dev [i386 amd64],
+               linux-libc-dev,
+               python3-dev (>= 3.2.3)
 Standards-Version: 3.9.3
 Homepage: http://lxc.sourceforge.net/
 X-Python3-Version: >= 3.2
 
 Package: lxc
 Architecture: linux-any
-Pre-Depends: ${multiarch:Pre-Depends}, dpkg (>= 1.15.7.2)
-Depends: ${misc:Depends}, ${shlibs:Depends}, liblxc0 (= ${binary:Version}), apparmor, bridge-utils, dnsmasq-base, iptables, rsync, adduser
-Recommends: debootstrap | cdebootstrap, cloud-utils, libcap2-bin, cgroup-lite | cgroup-bin, openssl
-Suggests: lxctl, btrfs-tools, lvm2, qemu-user-static
+Pre-Depends: dpkg (>= 1.15.7.2), ${multiarch:Pre-Depends}
+Depends: adduser,
+         apparmor,
+         bridge-utils,
+         dnsmasq-base,
+         iptables,
+         liblxc0 (= ${binary:Version}),
+         rsync,
+         ${misc:Depends},
+         ${shlibs:Depends}
+Recommends: cgroup-lite | cgroup-bin,
+            libcap2-bin,
+            lxc-templates (>= 0.8.0~rc1-4ubuntu42),
+            openssl
+Suggests: btrfs-tools, lvm2, lxctl
 Description: Linux Containers userspace tools
  Containers are insulated areas inside a system, which have their own namespace
  for filesystem, network, PID, IPC, CPU and memory allocation and which can be
@@ -32,8 +49,9 @@ Package: lxc-dbg
 Section: debug
 Priority: extra
 Architecture: linux-any
-Depends:
- ${misc:Depends}, lxc (= ${binary:Version}), lxc-dev (= ${binary:Version})
+Depends: lxc (= ${binary:Version}),
+         lxc-dev (= ${binary:Version}),
+         ${misc:Depends}
 Description: Linux Containers userspace tools (debug)
  Containers are insulated areas inside a system, which have their own namespace
  for filesystem, network, PID, IPC, CPU and memory allocation and which can be
@@ -45,7 +63,7 @@ Description: Linux Containers userspace tools (debug)
 Package: lxc-dev
 Section: libdevel
 Architecture: linux-any
-Depends: ${misc:Depends}, lxc (= ${binary:Version})
+Depends: lxc (= ${binary:Version}), ${misc:Depends}
 Description: Linux Containers userspace tools (development)
  Containers are insulated areas inside a system, which have their own namespace
  for filesystem, network, PID, IPC, CPU and memory allocation and which can be
@@ -54,10 +72,25 @@ Description: Linux Containers userspace tools (development)
  .
  This package contains the development files.
 
+Package: lxc-templates
+Architecture: all
+Depends: lxc (>= 0.8.0~rc1-4ubuntu42), ${misc:Depends}
+Recommends: cloud-utils, debootstrap | cdebootstrap, openssl, rsync
+Suggests: qemu-user-static
+Replaces: lxc (<< 0.8.0~rc1-4ubuntu42)
+Breaks: lxc (<< 0.8.0~rc1-4ubuntu42)
+Description: Linux Containers userspace tools (development)
+ Containers are insulated areas inside a system, which have their own namespace
+ for filesystem, network, PID, IPC, CPU and memory allocation and which can be
+ created using the Control Group and Namespace features included in the Linux
+ kernel.
+ .
+ This package contains the templates.
+
 Package: liblxc0
 Architecture: any
 Pre-Depends: ${multiarch:Pre-Depends}
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: Linux Containers userspace tools (library)
  Containers are insulated areas inside a system, which have their own namespace
  for filesystem, network, PID, IPC, CPU and memory allocation and which can be
@@ -70,7 +103,12 @@ Package: python3-lxc
 Architecture: any
 Section: python
 Provides: ${python3:Provides}
-Depends: liblxc0 (=${binary:Version}), python3, ${python3:Depends}, ${misc:Depends}, ${shlibs:Depends}
+Depends: liblxc0 (=${binary:Version}),
+         python3,
+         ${misc:Depends},
+         ${python3:Depends},
+         ${shlibs:Depends}
+Recommends: lxc-templates (>= 0.8.0~rc1-4ubuntu42)
 Description: Linux Containers userspace tools (Python 3.x bindings)
  Containers are insulated areas inside a system, which have their own namespace
  for filesystem, network, PID, IPC, CPU and memory allocation and which can be

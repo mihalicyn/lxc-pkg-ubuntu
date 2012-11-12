@@ -1,3 +1,16 @@
+lxc (0.8.0~rc1-4ubuntu42) raring; urgency=low
+
+  * Add --dhcp-authoritative and --dhcp-leasefile options to lxc-net's dnsmasq.
+    This should help LXC keep IPs consistent accross reboots.
+  * Wrap-and-sort debian/control and debian/lxc.install
+  * Split templates out of the lxc binary package into a new lxc-templates
+    package. Have python3-lxc and lxc recommend the new package and have it
+    depend on lxc as a few templates use the command line tools.
+  * Move template related Depends/Recommends/Suggests to the new lxc-templates
+    package.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 12 Nov 2012 17:28:12 -0500
+
 lxc (0.8.0~rc1-4ubuntu41) raring; urgency=low
 
   * Rebuild to drop python3.2 extension.
