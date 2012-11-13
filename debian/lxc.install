@@ -2,7 +2,6 @@ etc
 usr/bin
 usr/lib/*/lxc/lxc-*
 usr/share/doc
-usr/share/lxc
 usr/share/man
 var
 

@@ -32,7 +32,7 @@ Depends: adduser,
          ${shlibs:Depends}
 Recommends: cgroup-lite | cgroup-bin,
             libcap2-bin,
-            lxc-templates (>= 0.8.0~rc1-4ubuntu42),
+            lxc-templates (>= 0.8.0~rc1-4ubuntu43),
             openssl
 Suggests: btrfs-tools, lvm2, lxctl
 Description: Linux Containers userspace tools
@@ -74,11 +74,11 @@ Description: Linux Containers userspace tools (development)
 
 Package: lxc-templates
 Architecture: all
-Depends: lxc (>= 0.8.0~rc1-4ubuntu42), ${misc:Depends}
+Depends: lxc (>= 0.8.0~rc1-4ubuntu43), ${misc:Depends}
 Recommends: cloud-utils, debootstrap | cdebootstrap, openssl, rsync
 Suggests: qemu-user-static
-Replaces: lxc (<< 0.8.0~rc1-4ubuntu42)
-Breaks: lxc (<< 0.8.0~rc1-4ubuntu42)
+Replaces: lxc (<< 0.8.0~rc1-4ubuntu43)
+Breaks: lxc (<< 0.8.0~rc1-4ubuntu43)
 Description: Linux Containers userspace tools (development)
  Containers are insulated areas inside a system, which have their own namespace
  for filesystem, network, PID, IPC, CPU and memory allocation and which can be
@@ -108,7 +108,7 @@ Depends: liblxc0 (=${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends}
-Recommends: lxc-templates (>= 0.8.0~rc1-4ubuntu42)
+Recommends: lxc-templates (>= 0.8.0~rc1-4ubuntu43)
 Description: Linux Containers userspace tools (Python 3.x bindings)
  Containers are insulated areas inside a system, which have their own namespace
  for filesystem, network, PID, IPC, CPU and memory allocation and which can be
