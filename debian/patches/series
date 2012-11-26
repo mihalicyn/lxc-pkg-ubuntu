@@ -104,4 +104,6 @@ compilecleanups/0007-tests-check-return-values
 0221-make-nonflush-upgrades-robust
 0222-debian-dhcp3-package
 0223-ubuntu-template-user-msg
-0224-ubuntu-templates-devtmpfs
+0225-ubuntu-cloud-numeric-owner
+0226-add-lxc-autodev
+0227-ubuntu-cloud-parsing

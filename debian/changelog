@@ -1,3 +1,17 @@
+lxc (0.8.0~rc1-4ubuntu44) raring; urgency=low
+
+  [ Scott Moser ]
+  * 0225-ubuntu-cloud-numeric-owner: use --numeric-owner when extracting root
+    filesystems with tar (LP: #1066084)
+
+  [ Serge Hallyn ]
+  * Remove 0224-ubuntu-templates-devtmpfs  (LP: #1070914)
+  * 0226-add-lxc-autodev: implement automatic mount and populate of /dev.
+  * 0227-ubuntu-cloud-parsing: fix some option parsing bugs in ubuntu-cloud
+    template (LP: #1076031)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 26 Nov 2012 10:11:00 -0600
+
 lxc (0.8.0~rc1-4ubuntu43) raring; urgency=low
 
   * Fix debian/lxc.install.in to drop /var/lib/lxc/{cache|packages|templates}

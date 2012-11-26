@@ -1,0 +1,22 @@
+Description: ubuntu-cloud template: extract root tar with --numeric-owner
+ when extracting the tarball of the filesystem it must be done with
+ --numeric-owner.  Without this argument, ownership is potentially
+ broken because tar converts the username/groupname to uid/gid.
+ this does not necessarily match the entries in /etc/passwd or group
+ inside the extracted root.
+Author: Scott Moser <smoser@ubuntu.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/1066084
+Forwarded: no
+Index: lxc/templates/lxc-ubuntu-cloud.in
+===================================================================
+--- lxc.orig/templates/lxc-ubuntu-cloud.in	2012-10-24 11:12:20.663545281 -0500
++++ lxc/templates/lxc-ubuntu-cloud.in	2012-10-24 11:12:34.807545042 -0500
+@@ -340,7 +340,7 @@
+     echo "Extracting container rootfs"
+     mkdir -p $rootfs
+     cd $rootfs
+-    tar -zxf $cache/$filename
++    tar --numeric-owner -zxf $cache/$filename
+ 
+ 
+     if [ $cloud -eq 0 ]; then
