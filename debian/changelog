@@ -1,3 +1,12 @@
+lxc (0.8.0~rc1-4ubuntu46) raring; urgency=low
+
+  * 0229-lxc-clone-mount-fix: fix wrong handling of lxc.mount entries in
+    lxc-clone.  (LP: #1084089)
+  * debian/apparmor/abstractions-lxc-container-base: deny read/write under
+    /sys/firmware/efi/efivars.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Wed, 28 Nov 2012 11:04:17 -0600
+
 lxc (0.8.0~rc1-4ubuntu45) raring; urgency=low
 
   [ Stéphane Graber ]

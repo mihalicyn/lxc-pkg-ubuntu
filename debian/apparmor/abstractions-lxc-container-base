@@ -45,3 +45,4 @@
   deny /sys/fs/[^c]*/** wklx,
   deny /sys/fs/c[^g]*/** wklx,
   deny /sys/fs/cg[^r]*/** wklx,
+  deny /sys/firmware/efi/efivars/** rwklx,
