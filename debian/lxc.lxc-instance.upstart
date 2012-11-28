@@ -1,0 +1,23 @@
+description "lxc instance"
+author "Christian Kampka <chris@emerge-life.de>"
+
+stop on stopping lxc
+
+# wait for 120 seconds for container to shutdown before killing it
+kill timeout 120
+
+# send SIGPWR to container to trigger a shutdown (see lxc-shutdown(1))
+kill signal SIGPWR
+
+
+instance $NAME
+usage "NAME=name of LXC instance, CONFIG=full path to configuration file"
+
+pre-start script
+
+	lxc-info -n $NAME 2>/dev/null | grep state | grep -q "RUNNING" && {stop; exit 0; }
+	[ -f $CONFIG ] || {stop; exit 0; }
+
+end script
+
+exec lxc-start -n $NAME -f $CONFIG

@@ -92,6 +92,7 @@ override_dh_install:
 override_dh_installinit:
 	dh_installinit --no-restart-on-upgrade --name=lxc
 	dh_installinit --no-restart-on-upgrade --name=lxc-net
+	dh_installinit --no-restart-on-upgrade --name=lxc-instance
 
 override_dh_strip:
 	dh_strip --dbg-package=lxc-dbg

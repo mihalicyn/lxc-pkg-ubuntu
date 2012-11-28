@@ -107,3 +107,4 @@ compilecleanups/0007-tests-check-return-values
 0225-ubuntu-cloud-numeric-owner
 0226-add-lxc-autodev
 0227-ubuntu-cloud-parsing
+0228-ignore-kmsg-setup-failure

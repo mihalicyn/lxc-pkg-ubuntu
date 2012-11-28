@@ -18,9 +18,12 @@
   # allow bind mount of /lib/init/fstab for lxcguest
   mount options=(rw, bind) /lib/init/fstab.lxc/ -> /lib/init/fstab/,
 
-  # deny writes in /proc/sys/fs but allow fusectl to be mounted
+  # deny writes in /proc/sys/fs but allow binfmt_misc to be mounted
   mount fstype=binfmt_misc -> /proc/sys/fs/binfmt_misc/,
   deny @{PROC}/sys/fs/** wklx,
+
+  # allow efivars to be mounted, writing to it will be blocked though
+  mount fstype=efivarfs -> /sys/firmware/efi/efivars/,
 
   # block some other dangerous paths
   deny @{PROC}/sysrq-trigger rwklx,

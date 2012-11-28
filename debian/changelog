@@ -1,3 +1,23 @@
+lxc (0.8.0~rc1-4ubuntu45) raring; urgency=low
+
+  [ Stéphane Graber ]
+  * Allow the container to mount efivars on /sys/firmware/efi/efivars.
+    efivars is automatically mounted by mountall on UEFI systems, failure to
+    do so leads to a complete boot failured.
+  * Allow mounts and pivot_roots under /usr/lib/lxc/root/ for compatibility
+    with nested precise lxc hosts (quantal -> precise -> containers).
+
+  [ Serge Hallyn ]
+  * update 0227-ubuntu-cloud-parsing to catch a doc typo stgraber had found
+    in the upstream review.
+  * 0228-ignore-kmsg-setup-failure: ignore failure to set up kmsg, since that
+    is not critical.
+
+  [ Christian Kampka ]
+  * Have upstart run lxc instances (LP: #1049908)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Tue, 27 Nov 2012 22:52:10 -0600
+
 lxc (0.8.0~rc1-4ubuntu44) raring; urgency=low
 
   [ Scott Moser ]
