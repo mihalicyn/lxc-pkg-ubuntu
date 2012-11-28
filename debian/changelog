@@ -1,3 +1,12 @@
+lxc (0.8.0~rc1-4ubuntu47) raring; urgency=low
+
+  * 0230-autodev-makedev-console: Run MAKEDEV(console) before creating
+    consoles in the container.  This is to make up for the fact that
+    userspace (i.e. mountall) won't be doing so, since it otherwise
+    would overwrite the consoles set up by lxc.  (LP: #1075717)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Wed, 28 Nov 2012 16:08:37 -0600
+
 lxc (0.8.0~rc1-4ubuntu46) raring; urgency=low
 
   * 0229-lxc-clone-mount-fix: fix wrong handling of lxc.mount entries in

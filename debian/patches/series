@@ -109,3 +109,4 @@ compilecleanups/0007-tests-check-return-values
 0227-ubuntu-cloud-parsing
 0228-ignore-kmsg-setup-failure
 0229-lxc-clone-mount-fix
+0230-autodev-makedev-console
