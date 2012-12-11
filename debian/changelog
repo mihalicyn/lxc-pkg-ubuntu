@@ -1,3 +1,10 @@
+lxc (0.8.0~rc1-4ubuntu48) raring; urgency=low
+
+  * debian/patches/seccompapi/: update the seccomp usage to handle the
+    >= 1.0.0 libseccomp api.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Tue, 11 Dec 2012 12:46:08 -0600
+
 lxc (0.8.0~rc1-4ubuntu47) raring; urgency=low
 
   * 0230-autodev-makedev-console: Run MAKEDEV(console) before creating
