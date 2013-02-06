@@ -70,8 +70,8 @@ override_dh_install:
 	chmod ugo+x debian/lxc/usr/share/lxc/hooks/*
 
 	# copy dnsmasq configuration
-	mkdir -p debian/lxc/etc/dnsmasq.d
-	cp debian/lxc.dnsmasq debian/lxc/etc/dnsmasq.d/lxc
+	mkdir -p debian/lxc/etc/dnsmasq.d-available
+	cp debian/lxc.dnsmasq debian/lxc/etc/dnsmasq.d-available/lxc
 
 	dh_install --fail-missing
 

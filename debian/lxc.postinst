@@ -53,9 +53,6 @@ case "$1" in
     configure)
         add_users
         apparmor_load
-
-        # Try to restart a potential system wide dnsmasq
-        invoke-rc.d dnsmasq restart 2>/dev/null || true
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
@@ -72,4 +69,18 @@ esac
 
 #DEBHELPER#
 
+# We need this after the debhelper generated code so that dpkg-maintscript
+# can do its renamming first.
+if [ "$1" = "configure" ]; then
+    # Configure dnsmasq
+    if [ -f /etc/dnsmasq.d-available/lxc ]; then
+        echo "Setting up lxc dnsmasq configuration."
+        if [ ! -e /etc/dnsmasq.d/lxc ]; then
+            ln -s /etc/dnsmasq.d-available/lxc /etc/dnsmasq.d/lxc
+        fi
+
+        # Try to restart a potential system wide dnsmasq
+        invoke-rc.d dnsmasq restart 2>/dev/null || true
+    fi
+fi
 exit 0

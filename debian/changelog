@@ -1,3 +1,12 @@
+lxc (0.8.0~rc1-4ubuntu49) raring; urgency=low
+
+  * Don't directly write/remove /etc/dnsmasq.d/lxc as that's causing problems
+    when removing and reinstalling lxc.
+    Instead have dnsmasq ship /etc/dnsmasq.d-available/lxc and create/remove
+    a symlink in /etc/dnsmasq.d/. (LP: #1113821)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Wed, 06 Feb 2013 16:13:18 -0500
+
 lxc (0.8.0~rc1-4ubuntu48) raring; urgency=low
 
   * debian/patches/seccompapi/: update the seccomp usage to handle the
