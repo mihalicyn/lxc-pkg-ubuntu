@@ -75,6 +75,7 @@ if [ "$1" = "configure" ]; then
     # Configure dnsmasq
     if [ -f /etc/dnsmasq.d-available/lxc ]; then
         echo "Setting up lxc dnsmasq configuration."
+        mkdir -p /etc/dnsmasq.d
         if [ ! -e /etc/dnsmasq.d/lxc ]; then
             ln -s /etc/dnsmasq.d-available/lxc /etc/dnsmasq.d/lxc
         fi

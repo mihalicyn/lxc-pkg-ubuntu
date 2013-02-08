@@ -1,3 +1,9 @@
+lxc (0.8.0~rc1-4ubuntu50) raring; urgency=low
+
+  * Create /etc/dnsmasq.d when missing.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Fri, 08 Feb 2013 16:25:44 -0500
+
 lxc (0.8.0~rc1-4ubuntu49) raring; urgency=low
 
   * Don't directly write/remove /etc/dnsmasq.d/lxc as that's causing problems
