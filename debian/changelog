@@ -1,3 +1,163 @@
+lxc (0.9.0~alpha3-0ubuntu1) raring; urgency=low
+
+  * New upstream release (0.9.0~alpha3)
+  * NOTE: We took the opportunity of this new upstream release bringing
+    its lot of significant changes to reduce the amount of custom code that's
+    shipped in the packages and hasn't been submitted upstream.
+    If you strongly feel about any of those, please submit a cleaned up version
+    to upstream LXC for inclusion.
+
+    The following tools/templates have been dropped:
+      - lxc-debconf (upstream ships lxc-debian and lxc-lenny)
+      - lxc (use the lxc-* commands directly)
+      - lxc-backup (was just a wrapper on rsync using hardcoded paths)
+      - lxc-restore (was just a wrapper on rsync using hardcoded paths)
+
+    And the following are provided through compatibility symlinks and will be
+    dropped in final 0.9:
+      - lxc-list (equivalent of lxc-ls --fancy)
+      - lxc-halt (replaced by lxc-shutdown)
+
+    This release also deprecates the following tools as they were considered
+    mostly broken and the user namespace support makes them mostly useless:
+      - lxc-setcap
+      - lxc-setuid
+
+  * The following patches were included upstream:
+    - 0013-lxc-create-use-default-config.patch
+    - 0030-ubuntu-template-fail.patch
+    - 0031-ubuntu-template-resolvconf.patch
+    - 0044-lxc-destroy-rm-autos
+    - 0045-fix-other-templates
+    - 0046-lxc-clone-change-hwaddr
+    - 0047-bindhome-check-shell
+    - 0049-ubuntu-template-sudo-and-cleanup
+    - 0050-clone-lvm-sizes
+    - 0052-ubuntu-bind-user-conflict
+    - 0053-lxc-start-pin-rootfs
+    - 0054-ubuntu-debug
+    - 0055-ubuntu-handle-badgrp
+    - 0056-dont-watch-utmp
+    - 0057-update-manpages
+    - 0058-fixup-ubuntu-cloud
+    - 0059-reenable-daily-cloudimg
+    - 0060-lxc-shutdown
+    - 0061-lxc-start-apparmor
+    - 0062-templates-relative-paths
+    - 0063-check-apparmor-enabled
+    - 0064-apparmor-mount-proc
+    - 0065-fix-bindhome-relpath
+    - 0066-confile-typo
+    - 0067-templates-lxc-profile
+    - 0068-fix-lxc-config-layout
+    - 0069-ubuntu-cloud-fix
+    - 0070-templates-rmdir-dev-shm
+    - 0071-ubuntu-cloud-fix-image-extraction
+    - 0072-lxc-shutdown-help
+    - 0073-lxc-destroy-waits-before-destroy
+    - 0074-lxc-execute-find-init
+    - 0075-lxc-ls-bash
+    - 0076-fix-sprintfs
+    - 0077-execute-without-rootfs
+    - 0078-lxc-clone-quote-line
+    - 0079-quantal-support
+    - 0080-drop-maverick
+    - 0081-fix-multiarch-install
+    - 0082-umount-old-proc
+    - 0083-ubuntu-simplify-template
+    - 0084-lxc-ubuntu-drop-duplicate-code.patch
+    - 0085-pivot-dir
+    - 0086-lxc-unshare-zero-args
+    - 0087-lxc-ls-dash
+    - 0088-ubuntu-template-flock
+    - 0089-lxc-netstat-exec
+    - 0090-lxc-ubuntu-use-dpkg-add-architecture
+    - 0091-introduce-container-hooks.patch
+    - 0092-clone-no-dhclient.conf-update-when-not-hardcoded
+    - 0093-lxc-clone-copy-fstab
+    - 0094-fix-dev-shm-check
+    - 0095-lxc-clone-change-uuid-on-xfs.patch
+    - 0096-lxc-wait-add-timeout.patch
+    - 0097-seccomp
+    - 0098-config-file-includes
+    - 0099-cleanup-after-template-help
+    - 0100-template-cleanup-cache
+    - 0101-template-empty-apt-cache
+    - 0102-lxc-start-d-check-privs
+    - 0103-make-rootfs-location-optional
+    - 0104-add-option-to-lxc-attach-to-select-ns
+    - 0105-lxc-attach-add-R-option
+    - 01-lxc-directories.patch
+    - 0200-liblxc
+    - 0201-fix-mkdir-race
+    - 0202-make-api-start-reliable
+    - 0203-python-lxc
+    - 0204-ubuntu-cloud-userdata-path
+    - 0205-lxc-ls-manpage-document-two-lines
+    - 0206-lxc-wait-initialize-timeout
+    - 0207-ubuntu-cloud-fixes.patch
+    - 0208-fix-getitem-utsname-segv
+    - 0209-reload-conf-after-create
+    - 0210-fix-debian-templates
+    - 0211-add-hooks-to-manpage
+    - 0213-add-premount-hook.patch
+    - 0214-give-pclose-errno
+    - 0215-lxc-clone-name-arg
+    - 0216-hook-kmsg-to-console
+    - 0217-lxc-clone-fix-fstab
+    - 0218-api-shutdown-fix-doublestop
+    - 0219-python-module-improvements
+    - 0220-getitem-per-hook-type
+    - 0221-make-nonflush-upgrades-robust
+    - 0222-debian-dhcp3-package
+    - 0223-ubuntu-template-user-msg
+    - 0225-ubuntu-cloud-numeric-owner
+    - 0226-add-lxc-autodev
+    - 0227-ubuntu-cloud-parsing
+    - 0228-ignore-kmsg-setup-failure
+    - 0229-lxc-clone-mount-fix
+    - 0230-autodev-makedev-console
+    - 02-lxc-distclean.patch
+    - 03-lxc-configuration-path.patch
+    - 04-lxc-create-template-name.patch
+    - 05-doc-ip-address.patch
+    - 06-bash.patch
+    - 07-lxc-netstat.patch
+    - 08-lxc-debconf.patch
+    - 09-lxc-create-trap-name.patch
+    - 10-lxc-clone-trap-name.patch
+    - 11-lxc-console-escape.patch
+    - 12-lxc-create-rootfs.patch
+    - compilecleanups/0001-replace-HOOK-define-with-proper-code.patch
+    - compilecleanups/0002-add-prototype-for-clone-2-as-per-manpage.patch
+    - compilecleanups/0003-check-chdir-return-value.patch
+    - compilecleanups/0004-Fix-passing-non-const-char-in-for-const-char.patch
+    - compilecleanups/0005-return-nonvoid
+    - compilecleanups/0006-unused-var
+    - compilecleanups/0007-tests-check-return-values
+    - seccompapi/0001-seccomp-free-conf-seccomp-filename-char.patch
+    - seccompapi/0002-README-fix-typo-in-example-script.patch
+    - seccompapi/0003-support-new-libseccomp-api.patch
+
+  * New patches:
+    - transition/00-redirect-lxc-halt.patch: Show warning when lxc-halt is
+      called as lxc-shutdown now replaces it.
+    - transition/01-redirect-lxc-list.patch: Show warning when lxc-list is
+      called as lxc-ls now replaces it. Default to --fancy in this mode.
+    - 0000-add-autostart.patch: Add autostart support to lxc-destroy and
+      lxc-ls.
+
+  * Disable the test binaries, those are only useful in the dailies.
+  * Drop lxc.manpages, all the needed manpages are now upstream.
+  * Transition /etc/lxc/lxc.conf to /etc/lxc/default.conf.
+  * Drop debian/*.in as they didn't contain any variable anymore.
+  * Drop outdated sysvinit script. We use upstart and don't intend to maintain
+    the sysvinit script in Ubuntu.
+  * Drop lxc.config and po/*. We've never used debconf for lxc in Ubuntu.
+  * Fix some bugs in the ecryptfs hook.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 18 Feb 2013 18:25:18 -0500
+
 lxc (0.8.0~rc1-4ubuntu50) raring; urgency=low
 
   * Create /etc/dnsmasq.d when missing.

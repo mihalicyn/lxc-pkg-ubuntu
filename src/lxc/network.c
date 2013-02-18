@@ -47,6 +47,7 @@
 
 #include "nl.h"
 #include "network.h"
+#include "conf.h"
 
 #ifndef IFLA_LINKMODE
 #  define IFLA_LINKMODE 17
@@ -412,7 +413,7 @@ out:
 }
 
 /* XXX: merge with lxc_macvlan_create */
-int lxc_vlan_create(const char *master, const char *name, ushort vlanid)
+int lxc_vlan_create(const char *master, const char *name, unsigned short vlanid)
 {
 	struct nl_handler nlh;
 	struct nlmsg *nlmsg = NULL, *answer = NULL;
@@ -582,12 +583,15 @@ static int proc_sys_net_write(const char *path, const char *value)
 static int ip_forward_set(const char *ifname, int family, int flag)
 {
 	char path[MAXPATHLEN];
+	int rc;
 
 	if (family != AF_INET && family != AF_INET6)
 		return -EINVAL;
 
-	snprintf(path, MAXPATHLEN, "/proc/sys/net/%s/conf/%s/forwarding",
+	rc = snprintf(path, MAXPATHLEN, "/proc/sys/net/%s/conf/%s/forwarding",
 		 family == AF_INET?"ipv4":"ipv6" , ifname);
+	if (rc >= MAXPATHLEN)
+		return -E2BIG;
 
 	return proc_sys_net_write(path, flag?"1":"0");
 }
@@ -605,13 +609,16 @@ int lxc_ip_forward_off(const char *ifname, int family)
 static int neigh_proxy_set(const char *ifname, int family, int flag)
 {
 	char path[MAXPATHLEN];
+	int ret;
 
 	if (family != AF_INET && family != AF_INET6)
 		return -EINVAL;
 
-	sprintf(path, "/proc/sys/net/%s/conf/%s/%s",
+	ret = snprintf(path, MAXPATHLEN, "/proc/sys/net/%s/conf/%s/%s",
 		family == AF_INET?"ipv4":"ipv6" , ifname,
 		family == AF_INET?"proxy_arp":"proxy_ndp");
+	if (ret < 0 || ret >= MAXPATHLEN)
+		return -E2BIG;
 
 	return proc_sys_net_write(path, flag?"1":"0");
 }
@@ -997,4 +1004,19 @@ int lxc_bridge_attach(const char *bridge, const char *ifname)
 		err = -errno;
 
 	return err;
+}
+
+static char* lxc_network_types[LXC_NET_MAXCONFTYPE + 1] = {
+	[LXC_NET_VETH]    = "veth",
+	[LXC_NET_MACVLAN] = "macvlan",
+	[LXC_NET_VLAN]    = "vlan",
+	[LXC_NET_PHYS]    = "phys",
+	[LXC_NET_EMPTY]   = "empty",
+};
+
+const char *lxc_net_type_to_str(int type)
+{
+	if (type < 0 || type > LXC_NET_MAXCONFTYPE)
+		return NULL;
+	return lxc_network_types[type];
 }

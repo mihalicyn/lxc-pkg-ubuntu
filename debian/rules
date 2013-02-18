@@ -9,44 +9,13 @@ DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 %:
 	dh ${@} --with autotools_dev --with autoreconf
 
-override_dh_auto_clean:
-	dh_auto_clean
-
-	for _FILE in debian/*.install.in; \
-	do \
-		rm -f debian/$$(basename $${_FILE} .in); \
-		sed -e 's|@DEB_HOST_MULTIARCH@|$(DEB_HOST_MULTIARCH)|g' \
-		$${_FILE} > debian/$$(basename $${_FILE} .in); \
-	done
-
 override_dh_auto_configure:
-	dh_auto_configure -- --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) --libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) --with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc --enable-doc --disable-rpath --enable-seccomp=check --enable-python $(shell DEB_CFLAGS_MAINT_APPEND="$$(python3-config --includes)" dpkg-buildflags --export=configure)
-
-override_dh_auto_install:
-	dh_auto_install
-
-	# creating lxc directories
-	mkdir -p debian/tmp/etc/lxc/auto
-	mkdir -p debian/tmp/etc/lxc/debconf
-	mkdir -p debian/tmp/usr/share/lxc/cache
-	mkdir -p debian/tmp/usr/share/lxc/packages
-	mkdir -p debian/tmp/var/log/lxc
-
-	# removing useless files
-	rm -f debian/tmp/usr/share/lxc/templates/lxc-lenny
-
-override_dh_builddeb:
-	dh_builddeb -- -Zgzip -z9
-
-override_dh_compress:
-	dh_compress -X.cfg
-
-override_dh_gencontrol:
-ifeq ($(DEB_HOST_MULTIARCH),)
-	dh_gencontrol
-else
-	dh_gencontrol -- -Vmultiarch:Pre-Depends="multiarch-support"
-endif
+	dh_auto_configure -- --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
+		--libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
+		--with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc \
+		--enable-python $(shell DEB_CFLAGS_MAINT_APPEND="$$(python3-config --includes)" dpkg-buildflags --export=configure) \
+		--enable-doc --disable-rpath --enable-seccomp \
+		--enable-apparmor --with-distro=ubuntu
 
 override_dh_install:
 	# copy apparmor profiles
@@ -61,9 +30,11 @@ override_dh_install:
 	if [ -x /usr/bin/dh_apparmor ]; then \
 		dh_apparmor -p lxc --profile-name=usr.bin.lxc-start; \
 	fi
+
 	# copy apport hook
 	mkdir -p debian/lxc/usr/share/apport/package-hooks
 	cp debian/lxc.apport debian/lxc/usr/share/apport/package-hooks/source_lxc.py
+
 	# copy example hooks
 	mkdir -p debian/lxc/usr/share/lxc
 	cp -r debian/hooks debian/lxc/usr/share/lxc/
@@ -74,20 +45,6 @@ override_dh_install:
 	cp debian/lxc.dnsmasq debian/lxc/etc/dnsmasq.d-available/lxc
 
 	dh_install --fail-missing
-
-	# replace upstream lxc-wait which can only run one-at-a-time
-	cp -f debian/local/lxc-wait debian/lxc/usr/bin/
-
-	# move the tests to their separate namespace
-	mv debian/lxc/usr/bin/startone debian/lxc/usr/bin/lxc-test-startone
-	mv debian/lxc/usr/bin/containertests debian/lxc/usr/bin/lxc-test-containertests
-	mv debian/lxc/usr/bin/destroytest debian/lxc/usr/bin/lxc-test-destroytest
-	mv debian/lxc/usr/bin/saveconfig debian/lxc/usr/bin/lxc-test-saveconfig
-	mv debian/lxc/usr/bin/createtest debian/lxc/usr/bin/lxc-test-createtest
-	mv debian/lxc/usr/bin/shutdowntest debian/lxc/usr/bin/lxc-test-shutdowntest
-	mv debian/lxc/usr/bin/locktests debian/lxc/usr/bin/lxc-test-locktests
-	mv debian/lxc/usr/bin/get_item debian/lxc/usr/bin/lxc-test-get-item
-	mv debian/lxc/usr/bin/getkeys debian/lxc/usr/bin/lxc-test-getkeys
 
 override_dh_installinit:
 	dh_installinit --no-restart-on-upgrade --name=lxc

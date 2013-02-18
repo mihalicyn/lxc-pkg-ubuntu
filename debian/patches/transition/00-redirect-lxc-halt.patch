@@ -1,0 +1,22 @@
+Description: Redirection for lxc-halt
+ lxc-halt will be deprecated in final 0.9, this patch adds a warning when
+ lxc-shutdown is called as lxc-halt (through the temporary symlink).
+Author: Stéphane Graber <stgraber@ubuntu.com>
+Origin: vendor
+Forwarded: not-needed
+
+--- lxc-0.9.0~alpha3.orig/src/lxc/lxc-shutdown.in
++++ lxc-0.9.0~alpha3/src/lxc/lxc-shutdown.in
+@@ -18,6 +18,12 @@
+ 
+ set -e
+ 
++if echo "$0" | grep -q "lxc-halt$"; then
++    echo "WARNING: lxc-halt is deprecated, please use lxc-shutdown."
++    echo "         This symlink will be dropped in LXC 0.9 final."
++    echo ""
++fi
++
+ usage() {
+     echo "usage: lxc-shutdown -n name [-w] [-r]"
+     echo "  Cleanly shut down a container."

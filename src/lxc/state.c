@@ -21,6 +21,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -31,9 +32,11 @@
 #include <sys/stat.h>
 #include <sys/file.h>
 
+#include <lxc/lxc.h>
 #include <lxc/log.h>
 #include <lxc/start.h>
 #include <lxc/cgroup.h>
+#include <lxc/monitor.h>
 #include "commands.h"
 #include "config.h"
 
@@ -75,7 +78,9 @@ static int freezer_state(const char *name)
 	if (err)
 		return -1;
 
-	snprintf(freezer, MAXPATHLEN, "%s/freezer.state", nsgroup);
+	err = snprintf(freezer, MAXPATHLEN, "%s/freezer.state", nsgroup);
+	if (err < 0 || err >= MAXPATHLEN)
+		return -1;
 
 	file = fopen(freezer, "r");
 	if (!file)
@@ -92,7 +97,7 @@ static int freezer_state(const char *name)
 	return lxc_str2state(status);
 }
 
-static lxc_state_t __lxc_getstate(const char *name)
+static lxc_state_t __lxc_getstate(const char *name, const char *lxcpath)
 {
 	struct lxc_command command = {
 		.request = { .type = LXC_COMMAND_STATE },
@@ -100,7 +105,7 @@ static lxc_state_t __lxc_getstate(const char *name)
 
 	int ret, stopped = 0;
 
-	ret = lxc_command(name, &command, &stopped);
+	ret = lxc_command(name, &command, &stopped, lxcpath);
 	if (ret < 0 && stopped)
 		return STOPPED;
 
@@ -125,11 +130,11 @@ static lxc_state_t __lxc_getstate(const char *name)
 	return command.answer.ret;
 }
 
-lxc_state_t lxc_getstate(const char *name)
+lxc_state_t lxc_getstate(const char *name, const char *lxcpath)
 {
 	int state = freezer_state(name);
 	if (state != FROZEN && state != FREEZING)
-		state = __lxc_getstate(name);
+		state = __lxc_getstate(name, lxcpath);
 	return state;
 }
 
@@ -160,3 +165,117 @@ out:
 	return ret;
 }
 
+static int fillwaitedstates(const char *strstates, int *states)
+{
+	char *token, *saveptr = NULL;
+	char *strstates_dup = strdup(strstates);
+	int state;
+
+	if (!strstates_dup)
+		return -1;
+
+	token = strtok_r(strstates_dup, "|", &saveptr);
+	while (token) {
+
+		state = lxc_str2state(token);
+		if (state < 0) {
+			free(strstates_dup);
+			return -1;
+		}
+
+		states[state] = 1;
+
+		token = strtok_r(NULL, "|", &saveptr);
+	}
+	free(strstates_dup);
+	return 0;
+}
+
+extern int lxc_wait(const char *lxcname, const char *states, int timeout)
+{
+	struct lxc_msg msg;
+	int state, ret;
+	int s[MAX_STATE] = { }, fd;
+	/* TODO: add cmdline arg to specify lxcpath */
+	char *lxcpath = NULL;
+
+	if (fillwaitedstates(states, s))
+		return -1;
+
+	fd = lxc_monitor_open();
+	if (fd < 0)
+		return -1;
+
+	/*
+	 * if container present,
+	 * then check if already in requested state
+	 */
+	ret = -1;
+	state = lxc_getstate(lxcname, lxcpath);
+	if (state < 0) {
+		goto out_close;
+	} else if ((state >= 0) && (s[state])) {
+		ret = 0;
+		goto out_close;
+	}
+
+	for (;;) {
+		int elapsed_time, curtime = 0;
+		struct timeval tv;
+		int stop = 0;
+		int retval;
+
+		if (timeout != -1) {
+			retval = gettimeofday(&tv, NULL);
+			if (retval)
+				goto out_close;
+			curtime = tv.tv_sec;
+		}
+		if (lxc_monitor_read_timeout(fd, &msg, timeout) < 0)
+			goto out_close;
+
+		if (timeout != -1) {
+			retval = gettimeofday(&tv, NULL);
+			if (retval)
+				goto out_close;
+			elapsed_time = tv.tv_sec - curtime;
+			if (timeout - elapsed_time <= 0)
+				stop = 1;
+			timeout -= elapsed_time;
+		}
+
+		if (strcmp(lxcname, msg.name)) {
+			if (stop) {
+				ret = -2;
+				goto out_close;
+			}
+			continue;
+		}
+
+		switch (msg.type) {
+		case lxc_msg_state:
+			if (msg.value < 0 || msg.value >= MAX_STATE) {
+				ERROR("Receive an invalid state number '%d'",
+					msg.value);
+				goto out_close;
+			}
+
+			if (s[msg.value]) {
+				ret = 0;
+				goto out_close;
+			}
+			break;
+		default:
+			if (stop) {
+				ret = -2;
+				goto out_close;
+			}
+			/* just ignore garbage */
+			break;
+		}
+	}
+
+out_close:
+	lxc_monitor_close(fd);
+	return ret;
+}

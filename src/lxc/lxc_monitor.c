@@ -60,20 +60,27 @@ int main(int argc, char *argv[])
 	struct lxc_msg msg;
 	regex_t preg;
 	int fd;
+	int len, rc;
 
 	if (lxc_arguments_parse(&my_args, argc, argv))
 		return -1;
 
-	if (lxc_log_init(my_args.log_file, my_args.log_priority,
+	if (lxc_log_init(my_args.name, my_args.log_file, my_args.log_priority,
 			 my_args.progname, my_args.quiet))
 		return -1;
 
-	regexp = malloc(strlen(my_args.name) + 3);
+	len = strlen(my_args.name) + 3;
+	regexp = malloc(len + 3);
 	if (!regexp) {
 		ERROR("failed to allocate memory");
 		return -1;
 	}
-	sprintf(regexp, "^%s$", my_args.name);
+	rc = snprintf(regexp, len, "^%s$", my_args.name);
+	if (rc < 0 || rc >= len) {
+		ERROR("Name too long");
+		free(regexp);
+		return -1;
+	}
 
 	if (regcomp(&preg, regexp, REG_NOSUB|REG_EXTENDED)) {
 		ERROR("failed to compile the regex '%s'", my_args.name);
@@ -95,7 +102,7 @@ int main(int argc, char *argv[])
 
 		switch (msg.type) {
 		case lxc_msg_state:
-			printf("'%s' changed state to [%s]\n", 
+			printf("'%s' changed state to [%s]\n",
 			       msg.name, lxc_state2str(msg.value));
 			break;
 		default:

@@ -25,7 +25,6 @@
 #include <alloca.h>
 #include <errno.h>
 #include <signal.h>
-#include <syscall.h>
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -68,4 +67,49 @@ pid_t lxc_clone(int (*fn)(void *), void *arg, int flags)
 		ERROR("failed to clone(0x%x): %s", flags, strerror(errno));
 
 	return ret;
+}
+
+static char *namespaces_list[] = {
+	"MOUNT", "PID", "UTSNAME", "IPC",
+	"USER", "NETWORK"
+};
+static int cloneflags_list[] = {
+	CLONE_NEWNS, CLONE_NEWPID, CLONE_NEWUTS, CLONE_NEWIPC,
+	CLONE_NEWUSER, CLONE_NEWNET
+};
+
+int lxc_namespace_2_cloneflag(char *namespace)
+{
+	int i, len;
+	len = sizeof(namespaces_list)/sizeof(namespaces_list[0]);
+	for (i = 0; i < len; i++)
+		if (!strcmp(namespaces_list[i], namespace))
+			return cloneflags_list[i];
+
+	ERROR("invalid namespace name %s", namespace);
+	return -1;
+}
+
+int lxc_fill_namespace_flags(char *flaglist, int *flags)
+{
+	char *token, *saveptr = NULL;
+	int aflag;
+
+	if (!flaglist) {
+		ERROR("need at least one namespace to unshare");
+		return -1;
+	}
+
+	token = strtok_r(flaglist, "|", &saveptr);
+	while (token) {
+
+		aflag = lxc_namespace_2_cloneflag(token);
+		if (aflag < 0)
+			return -1;
+
+		*flags |= aflag;
+
+		token = strtok_r(NULL, "|", &saveptr);
+	}
+	return 0;
 }

@@ -38,12 +38,17 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/prctl.h>
 #include <sys/types.h>
-#include <sys/capability.h>
 #include <sys/wait.h>
 #include <sys/un.h>
 #include <sys/poll.h>
+#include <sys/syscall.h>
+
+#if HAVE_SYS_CAPABILITY_H
+#include <sys/capability.h>
+#endif
 
 #ifdef HAVE_SYS_SIGNALFD_H
 #  include <sys/signalfd.h>
@@ -120,12 +125,15 @@ int signalfd(int fd, const sigset_t *mask, int flags)
 #include "af_unix.h"
 #include "mainloop.h"
 #include "utils.h"
-#include "utmp.h"
+#include "lxcutmp.h"
 #include "monitor.h"
 #include "commands.h"
 #include "console.h"
 #include "sync.h"
 #include "namespace.h"
+#include "apparmor.h"
+#include "lxcseccomp.h"
+#include "caps.h"
 
 lxc_log_define(lxc_start, lxc);
 
@@ -277,6 +285,29 @@ int lxc_pid_callback(int fd, struct lxc_request *request,
 	return 0;
 }
 
+int lxc_clone_flags_callback(int fd, struct lxc_request *request,
+			     struct lxc_handler *handler)
+{
+	struct lxc_answer answer;
+	int ret;
+
+	answer.pid = 0;
+	answer.ret = handler->clone_flags;
+
+	ret = send(fd, &answer, sizeof(answer), 0);
+	if (ret < 0) {
+		WARN("failed to send answer to the peer");
+		return -1;
+	}
+
+	if (ret != sizeof(answer)) {
+		ERROR("partial answer sent");
+		return -1;
+	}
+
+	return 0;
+}
+
 int lxc_set_state(const char *name, struct lxc_handler *handler, lxc_state_t state)
 {
 	handler->state = state;
@@ -311,10 +342,14 @@ int lxc_poll(const char *name, struct lxc_handler *handler)
 	}
 
 	if (handler->conf->need_utmp_watch) {
+		#if HAVE_SYS_CAPABILITY_H
 		if (lxc_utmp_mainloop_add(&descr, handler)) {
 			ERROR("failed to add utmp handler to mainloop");
 			goto out_mainloop_open;
 		}
+		#else
+			DEBUG("not starting utmp handler as cap_sys_boot cannot be dropped without capabilities support\n");
+		#endif
 	}
 
 	return lxc_mainloop(&descr);
@@ -328,7 +363,7 @@ out_sigfd:
 
 extern int lxc_caps_check(void);
 
-struct lxc_handler *lxc_init(const char *name, struct lxc_conf *conf)
+struct lxc_handler *lxc_init(const char *name, struct lxc_conf *conf, const char *lxcpath)
 {
 	struct lxc_handler *handler;
 
@@ -345,16 +380,51 @@ struct lxc_handler *lxc_init(const char *name, struct lxc_conf *conf)
 
 	handler->conf = conf;
 
+	apparmor_handler_init(handler);
 	handler->name = strdup(name);
 	if (!handler->name) {
 		ERROR("failed to allocate memory");
 		goto out_free;
 	}
 
+	if (lxc_command_init(name, handler, lxcpath))
+		goto out_free_name;
+
+	if (lxc_read_seccomp_config(conf) != 0) {
+		ERROR("failed loading seccomp policy");
+		goto out_close_maincmd_fd;
+	}
+
 	/* Begin the set the state to STARTING*/
 	if (lxc_set_state(name, handler, STARTING)) {
 		ERROR("failed to set state '%s'", lxc_state2str(STARTING));
 		goto out_free_name;
+	}
+
+	/* Start of environment variable setup for hooks */
+	if (setenv("LXC_NAME", name, 1)) {
+		SYSERROR("failed to set environment variable for container name");
+	}
+	if (setenv("LXC_CONFIG_FILE", conf->rcfile, 1)) {
+		SYSERROR("failed to set environment variable for config path");
+	}
+	if (setenv("LXC_ROOTFS_MOUNT", conf->rootfs.mount, 1)) {
+		SYSERROR("failed to set environment variable for rootfs mount");
+	}
+	if (setenv("LXC_ROOTFS_PATH", conf->rootfs.path, 1)) {
+		SYSERROR("failed to set environment variable for rootfs mount");
+	}
+	if (conf->console.path && setenv("LXC_CONSOLE", conf->console.path, 1)) {
+		SYSERROR("failed to set environment variable for console path");
+	}
+	if (conf->console.log_path && setenv("LXC_CONSOLE_LOGPATH", conf->console.log_path, 1)) {
+		SYSERROR("failed to set environment variable for console log");
+	}
+	/* End of environment variable setup for hooks */
+
+	if (run_lxc_hooks(name, "pre-start", conf)) {
+		ERROR("failed to run pre-start hooks for container '%s'.", name);
+		goto out_aborting;
 	}
 
 	if (lxc_create_tty(name, conf)) {
@@ -385,6 +455,9 @@ out_delete_tty:
 	lxc_delete_tty(&conf->tty_info);
 out_aborting:
 	lxc_set_state(name, handler, ABORTING);
+out_close_maincmd_fd:
+	close(conf->maincmd_fd);
+	conf->maincmd_fd = -1;
 out_free_name:
 	free(handler->name);
 	handler->name = NULL;
@@ -401,12 +474,17 @@ void lxc_fini(const char *name, struct lxc_handler *handler)
 	lxc_set_state(name, handler, STOPPING);
 	lxc_set_state(name, handler, STOPPED);
 
+	if (run_lxc_hooks(name, "post-stop", handler->conf))
+		ERROR("failed to run post-stop hooks for container '%s'.", name);
+
 	/* reset mask set by setup_signal_fd */
 	if (sigprocmask(SIG_SETMASK, &handler->oldmask, NULL))
 		WARN("failed to restore sigprocmask");
 
 	lxc_delete_console(&handler->conf->console);
 	lxc_delete_tty(&handler->conf->tty_info);
+	close(handler->conf->maincmd_fd);
+	handler->conf->maincmd_fd = -1;
 	free(handler->name);
 	free(handler);
 }
@@ -497,23 +575,40 @@ static int do_start(void *data)
 
 	lxc_sync_fini_parent(handler);
 
+	/* don't leak the pinfd to the container */
+	close(handler->pinfd);
+
 	/* Tell the parent task it can begin to configure the
 	 * container and wait for it to finish
 	 */
 	if (lxc_sync_barrier_parent(handler, LXC_SYNC_CONFIGURE))
 		return -1;
 
-	if (must_drop_cap_sys_boot()) {
+	/*
+	 * if we are in a new user namespace, become root there to have
+	 * privilege over our namespace
+	 */
+	if (!lxc_list_empty(&handler->conf->id_map)) {
+		NOTICE("switching to gid/uid 0 in new user namespace");
+		if (setgid(0)) {
+			SYSERROR("setgid");
+			goto out_warn_father;
+		}
+		if (setuid(0)) {
+			SYSERROR("setuid");
+			goto out_warn_father;
+		}
+	}
+
+	#if HAVE_SYS_CAPABILITY_H
+	if (handler->conf->need_utmp_watch) {
 		if (prctl(PR_CAPBSET_DROP, CAP_SYS_BOOT, 0, 0, 0)) {
 			SYSERROR("failed to remove CAP_SYS_BOOT capability");
-			return -1;
+			goto out_warn_father;
 		}
-		handler->conf->need_utmp_watch = 1;
 		DEBUG("Dropped cap_sys_boot\n");
-	} else {
-		DEBUG("Not dropping cap_sys_boot or watching utmp\n");
-		handler->conf->need_utmp_watch = 0;
 	}
+	#endif
 
 	/* Setup the container, ip, names, utsname, ... */
 	if (lxc_setup(handler->name, handler->conf)) {
@@ -521,31 +616,96 @@ static int do_start(void *data)
 		goto out_warn_father;
 	}
 
+	/* ask father to setup cgroups and wait for him to finish */
+	if (lxc_sync_barrier_parent(handler, LXC_SYNC_CGROUP))
+		return -1;
+
+	if (apparmor_load(handler) < 0)
+		goto out_warn_father;
+
+	if (lxc_seccomp_load(handler->conf) != 0)
+		goto out_warn_father;
+
+	if (run_lxc_hooks(handler->name, "start", handler->conf)) {
+		ERROR("failed to run start hooks for container '%s'.", handler->name);
+		goto out_warn_father;
+	}
+
+	/* The clearenv() and putenv() calls have been moved here
+	 * to allow us to use enviroment variables passed to the various
+	 * hooks, such as the start hook above.  Not all of the
+	 * variables like CONFIG_PATH or ROOTFS are valid in this
+	 * context but others are. */
+	if (clearenv()) {
+		SYSERROR("failed to clear environment");
+		/* don't error out though */
+	}
+
+	if (putenv("container=lxc")) {
+		SYSERROR("failed to set environment variable");
+		goto out_warn_father;
+	}
+
 	close(handler->sigfd);
 
 	/* after this call, we are in error because this
 	 * ops should not return as it execs */
-	if (handler->ops->start(handler, handler->data))
-		return -1;
+	handler->ops->start(handler, handler->data);
 
 out_warn_father:
+	/* we want the parent to know something went wrong, so any
+	 * value other than what it expects is ok. */
 	lxc_sync_wake_parent(handler, LXC_SYNC_POST_CONFIGURE);
 	return -1;
 }
 
+int save_phys_nics(struct lxc_conf *conf)
+{
+	struct lxc_list *iterator;
+
+	lxc_list_for_each(iterator, &conf->network) {
+		struct lxc_netdev *netdev = iterator->elem;
+
+		if (netdev->type != LXC_NET_PHYS)
+			continue;
+		conf->saved_nics = realloc(conf->saved_nics,
+				(conf->num_savednics+1)*sizeof(struct saved_nic));
+		if (!conf->saved_nics) {
+			SYSERROR("failed to allocate memory");
+			return -1;
+		}
+		conf->saved_nics[conf->num_savednics].ifindex = netdev->ifindex;
+		conf->saved_nics[conf->num_savednics].orig_name = strdup(netdev->link);
+		if (!conf->saved_nics[conf->num_savednics].orig_name) {
+			SYSERROR("failed to allocate memory");
+			return -1;
+		}
+		INFO("stored saved_nic #%d idx %d name %s\n", conf->num_savednics,
+			conf->saved_nics[conf->num_savednics].ifindex,
+			conf->saved_nics[conf->num_savednics].orig_name);
+		conf->num_savednics++;
+	}
+
+	return 0;
+}
+
+
 int lxc_spawn(struct lxc_handler *handler)
 {
-	int clone_flags;
 	int failed_before_rename = 0;
 	const char *name = handler->name;
 
 	if (lxc_sync_init(handler))
 		return -1;
 
-	clone_flags = CLONE_NEWUTS|CLONE_NEWPID|CLONE_NEWIPC|CLONE_NEWNS;
+	handler->clone_flags = CLONE_NEWUTS|CLONE_NEWPID|CLONE_NEWIPC|CLONE_NEWNS;
+	if (!lxc_list_empty(&handler->conf->id_map)) {
+		INFO("Cloning a new user namespace");
+		handler->clone_flags |= CLONE_NEWUSER;
+	}
 	if (!lxc_list_empty(&handler->conf->network)) {
 
-		clone_flags |= CLONE_NEWNET;
+		handler->clone_flags |= CLONE_NEWNET;
 
 		/* Find gateway addresses from the link device, which is
 		 * no longer accessible inside the container. Do this
@@ -567,8 +727,24 @@ int lxc_spawn(struct lxc_handler *handler)
 		}
 	}
 
+	if (save_phys_nics(handler->conf)) {
+		ERROR("failed to save physical nic info");
+		goto out_abort;
+	}
+
+	/*
+	 * if the rootfs is not a blockdev, prevent the container from
+	 * marking it readonly.
+	 */
+
+	handler->pinfd = pin_rootfs(handler->conf->rootfs.path);
+	if (handler->pinfd == -1) {
+		ERROR("failed to pin the container's rootfs");
+		goto out_abort;
+	}
+
 	/* Create a process in a new set of namespaces */
-	handler->pid = lxc_clone(do_start, handler, clone_flags);
+	handler->pid = lxc_clone(do_start, handler, handler->clone_flags);
 	if (handler->pid < 0) {
 		SYSERROR("failed to fork into a new namespace");
 		goto out_delete_net;
@@ -586,18 +762,52 @@ int lxc_spawn(struct lxc_handler *handler)
 		goto out_delete_net;
 
 	/* Create the network configuration */
-	if (clone_flags & CLONE_NEWNET) {
+	if (handler->clone_flags & CLONE_NEWNET) {
 		if (lxc_assign_network(&handler->conf->network, handler->pid)) {
 			ERROR("failed to create the configured network");
 			goto out_delete_net;
 		}
 	}
 
-	/* Tell the child to continue its initialization and wait for
-	 * it to exec or return an error
+	/* map the container uids - the container became an invalid
+	 * userid the moment it was cloned with CLONE_NEWUSER - this
+	 * call doesn't change anything immediately, but allows the
+	 * container to setuid(0) (0 being mapped to something else on
+	 * the host) later to become a valid uid again */
+	if (lxc_map_ids(&handler->conf->id_map, handler->pid)) {
+		ERROR("failed to set up id mapping");
+		goto out_delete_net;
+	}
+
+	/* Tell the child to continue its initialization.  we'll get
+	 * LXC_SYNC_CGROUP when it is ready for us to setup cgroups
 	 */
 	if (lxc_sync_barrier_child(handler, LXC_SYNC_POST_CONFIGURE))
+		goto out_delete_net;
+
+	if (setup_cgroup(name, &handler->conf->cgroup)) {
+		ERROR("failed to setup the cgroups for '%s'", name);
+		goto out_delete_net;
+	}
+
+
+	/* Tell the child to complete its initialization and wait for
+	 * it to exec or return an error.  (the child will never
+	 * return LXC_SYNC_POST_CGROUP+1.  It will either close the
+	 * sync pipe, causing lxc_sync_barrier_child to return
+	 * success, or return a different value, causing us to error
+	 * out).
+	 */
+	if (lxc_sync_barrier_child(handler, LXC_SYNC_POST_CGROUP))
 		return -1;
+
+	if (detect_shared_rootfs())
+		umount2(handler->conf->rootfs.mount, MNT_DETACH);
+
+	/* If child is in a fresh user namespace, chown his ptys for
+	 * it */
+	if (uid_shift_ttys(handler->pid, handler->conf))
+		DEBUG("Failed to chown ptys.\n");
 
 	if (handler->ops->post_start(handler, handler->data))
 		goto out_abort;
@@ -609,11 +819,15 @@ int lxc_spawn(struct lxc_handler *handler)
 	}
 
 	lxc_sync_fini(handler);
+
+	if (handler->pinfd >= 0)
+		close(handler->pinfd);
+
 	return 0;
 
 out_delete_net:
-	if (clone_flags & CLONE_NEWNET)
-		lxc_delete_network(&handler->conf->network);
+	if (handler->clone_flags & CLONE_NEWNET)
+		lxc_delete_network(handler);
 out_abort:
 	lxc_abort(name, handler);
 	lxc_sync_fini(handler);
@@ -621,13 +835,13 @@ out_abort:
 }
 
 int __lxc_start(const char *name, struct lxc_conf *conf,
-		struct lxc_operations* ops, void *data)
+		struct lxc_operations* ops, void *data, const char *lxcpath)
 {
 	struct lxc_handler *handler;
 	int err = -1;
 	int status;
 
-	handler = lxc_init(name, conf);
+	handler = lxc_init(name, conf, lxcpath);
 	if (!handler) {
 		ERROR("failed to initialize the container");
 		return -1;
@@ -635,10 +849,21 @@ int __lxc_start(const char *name, struct lxc_conf *conf,
 	handler->ops = ops;
 	handler->data = data;
 
+	if (must_drop_cap_sys_boot()) {
+		#if HAVE_SYS_CAPABILITY_H
+		DEBUG("Dropping cap_sys_boot\n");
+		#else
+		DEBUG("Can't drop cap_sys_boot as capabilities aren't supported\n");
+		#endif
+	} else {
+		DEBUG("Not dropping cap_sys_boot or watching utmp\n");
+		handler->conf->need_utmp_watch = 0;
+	}
+
 	err = lxc_spawn(handler);
 	if (err) {
 		ERROR("failed to spawn '%s'", name);
-		goto out_fini;
+		goto out_fini_nonet;
 	}
 
 	err = lxc_poll(name, handler);
@@ -671,8 +896,13 @@ int __lxc_start(const char *name, struct lxc_conf *conf,
 		}
         }
 
+	lxc_rename_phys_nics_on_shutdown(handler->conf);
+
 	err =  lxc_error_set_and_log(handler->pid, status);
 out_fini:
+	lxc_delete_network(handler);
+
+out_fini_nonet:
 	lxc_cgroup_destroy(name);
 	lxc_fini(name, handler);
 	return err;
@@ -710,7 +940,8 @@ static struct lxc_operations start_ops = {
 	.post_start = post_start
 };
 
-int lxc_start(const char *name, char *const argv[], struct lxc_conf *conf)
+int lxc_start(const char *name, char *const argv[], struct lxc_conf *conf,
+	      const char *lxcpath)
 {
 	struct start_args start_arg = {
 		.argv = argv,
@@ -720,5 +951,5 @@ int lxc_start(const char *name, char *const argv[], struct lxc_conf *conf)
 		return -1;
 
 	conf->need_utmp_watch = 1;
-	return __lxc_start(name, conf, &start_ops, &start_arg);
+	return __lxc_start(name, conf, &start_ops, &start_arg, lxcpath);
 }

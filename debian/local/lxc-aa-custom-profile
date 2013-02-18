@@ -16,6 +16,8 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
+. /usr/share/lxc/lxc.functions
+
 set -e
 
 _OPTIONS="$(getopt -o n: -l name: -- "${@}")"
@@ -60,8 +62,8 @@ then
 	exit 1
 fi
 
-if [ ! -f /var/lib/lxc/${_CONTAINER}/config ]; then
-	echo "E: $(basename ${0}): /var/lib/lxc/${_CONTAINER}/config - no such file"
+if [ ! -f $lxc_path/${_CONTAINER}/config ]; then
+	echo "E: $(basename ${0}): $lxc_path/${_CONTAINER}/config - no such file"
 	exit 1
 fi
 
@@ -79,8 +81,8 @@ fi
 cp -f /etc/apparmor.d/lxc/lxc-default /etc/apparmor.d/lxc/${profile}
 sed -i "s/profile lxc-container-default/profile ${profile}/" /etc/apparmor.d/lxc/${profile}
 
-sed -i '/lxc.aa_profile/d' /var/lib/lxc/${_CONTAINER}/config
-echo "lxc.aa_profile = ${profile}" >> /var/lib/lxc/${_CONTAINER}/config
+sed -i '/lxc.aa_profile/d' $lxc_path/${_CONTAINER}/config
+echo "lxc.aa_profile = ${profile}" >> $lxc_path/${_CONTAINER}/config
 
 /lib/init/apparmor-profile-load lxc-containers
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 #
 # lxc: linux Container library
@@ -26,85 +26,115 @@
 #
 
 usage() {
-    echo "usage: $0 -n <name> [-f]"
-    echo "  -f: if a container is running, stop it first.  Default is to abort"
+    echo "usage: $(basename $0) -n NAME [-f]" >&2
 }
 
-if [ "$(id -u)" != "0" ]; then
-   echo "This command has to be run as root"
-   exit 1
-fi
+help() {
+    usage
+    echo >&2
+    echo "Remove an existing container on the system." >&2
+    echo >&2
+    echo "Options:" >&2
+    echo "  -n NAME   specify the name of the container" >&2
+    echo "  -f        stop the container if it is running (rather than abort)" >&2
+}
 
-shortoptions='n:f'
-longoptions='name:'
-localstatedir=@LOCALSTATEDIR@
-lxc_path=@LXCPATH@
+usage_err() {
+    [ -n "$1" ] && echo "$1" >&2
+    usage
+    exit 1
+}
+
+optarg_check() {
+    if [ -z "$2" ]; then
+        usage_err "option '$1' requires an argument"
+    fi
+}
+
+. @DATADIR@/lxc/lxc.functions
 force=0
 
-getopt=$(getopt -o $shortoptions --longoptions  $longoptions -- "$@")
-if [ $? != 0 ]; then
-    usage $0
-    exit 1;
-fi
-
-eval set -- "$getopt"
-
-while true; do
-        case "$1" in
-	    -n|--name)
-		shift
-		lxc_name=$1
-		shift
-		;;
-	    -f)
-		force=1
-		shift
-		;;
+while [ $# -gt 0 ]; do
+        opt="$1"
+        shift
+        case "$opt" in
+            -h|--help)
+                help
+                exit 1
+            ;;
+            -n|--name)
+                optarg_check "$opt" "$1"
+                lxc_name=$1
+                shift
+            ;;
+            -f)
+                force=1
+            ;;
             --)
-		shift
-		break;;
+                break
+            ;;
+            -?)
+                usage_err "unknown option '$opt'"
+            ;;
+            -*)
+                # split opts -abc into -a -b -c
+                set -- $(echo "${opt#-}" | sed 's/\(.\)/ -\1/g') "$@"
+                ;;
             *)
-		echo $1
-		usage $0
-		exit 1
-		;;
+            usage
+            exit 1
+            ;;
         esac
 done
 
 if [ -z "$lxc_name" ]; then
-    echo "no container name specified"
+    echo "$(basename $0): no container name specified" >&2
     usage $0
     exit 1
 fi
 
+if [ "$(id -u)" != "0" ]; then
+   echo "$(basename $0): must be run as root" >&2
+   exit 1
+fi
+
 if [ ! -d "$lxc_path/$lxc_name" ]; then
-    echo "'$lxc_name' does not exist"
+    echo "$(basename $0): '$lxc_name' does not exist" >&2
     exit 1
 fi
 
-# make sure the container isn't running
-lxc-info -n $lxc_name 2>/dev/null | grep -q RUNNING
-if [ $? -eq 0 ]; then
-	if [ $force -eq 1 ]; then
-		lxc-stop -n $lxc_name
-	else
-		echo "Container $lxc_name is running, aborting the deletion."
-		exit 1
-	fi
+# make sure the container is stopped
+if ! lxc-info -n $lxc_name --state-is "STOPPED"; then
+    if [ $force -eq 1 ]; then
+        lxc-stop -n $lxc_name
+        lxc-wait -n $lxc_name -s STOPPED
+    else
+        echo "$(basename $0): '$lxc_name' $(lxc-info -n $lxc_name -s); aborted" >&2
+        exit 1
+    fi
 fi
 
 # Deduce the type of rootfs
-# If LVM partition, destroy it.  If anything else, ignore it.  We'll support
-# deletion of others later.
+# If LVM partition, destroy it. For btrfs, we delete the subvolue. If anything
+# else, ignore it. We'll support deletion of others later.
 rootdev=`grep lxc.rootfs $lxc_path/$lxc_name/config 2>/dev/null | sed -e 's/^[^/]*/\//'`
-if [ ! -z "$rootdev" ]; then
-	if [ -b "$rootdev" -o -h "$rootdev" ]; then
-		lvdisplay $rootdev > /dev/null 2>&1
-		if [ $? -eq 0 ]; then
-			echo "removing backing store: $rootdev"
-			lvremove -f $rootdev
-		fi
-	fi
+if [ -n "$rootdev" ]; then
+    if [ -b "$rootdev" -o -h "$rootdev" ]; then
+        lvdisplay $rootdev > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "removing backing store: $rootdev"
+            lvremove -f $rootdev
+        fi
+    elif [ -h "$rootdev" -o -d "$rootdev" ]; then
+        if which btrfs >/dev/null 2>&1 &&
+           btrfs subvolume list "$rootdev" >/dev/null 2>&1; then
+            btrfs subvolume delete "$rootdev"
+        else
+            # In case rootfs is not under $lxc_path/$lxc_name, remove it
+            rm -rf --one-file-system --preserve-root $rootdev
+        fi
+    fi
 fi
+
 # recursively remove the container to remove old container configuration
 rm -rf --one-file-system --preserve-root $lxc_path/$lxc_name

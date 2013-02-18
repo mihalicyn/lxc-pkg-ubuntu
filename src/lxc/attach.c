@@ -30,6 +30,9 @@
 #include <fcntl.h>
 #include <sys/param.h>
 #include <sys/prctl.h>
+#include <sys/mount.h>
+#include <sys/syscall.h>
+#include <linux/unistd.h>
 
 #if !HAVE_DECL_PR_CAPBSET_DROP
 #define PR_CAPBSET_DROP 24
@@ -42,29 +45,49 @@
 #include "cgroup.h"
 #include "config.h"
 
-#include "setns.h"
-
 lxc_log_define(lxc_attach, lxc);
 
-int setns(int fd, int nstype)
+/* Define setns() if missing from the C library */
+#ifndef HAVE_SETNS
+static int setns(int fd, int nstype)
 {
-#ifndef __NR_setns
-	errno = ENOSYS;
-	return -1;
+#ifdef __NR_setns
+return syscall(__NR_setns, fd, nstype);
 #else
-	return syscall(__NR_setns, fd, nstype);
+errno = ENOSYS;
+return -1;
 #endif
 }
+#endif
+
+/* Define unshare() if missing from the C library */
+#ifndef HAVE_UNSHARE
+static int unshare(int flags)
+{
+#ifdef __NR_unshare
+return syscall(__NR_unshare, flags);
+#else
+errno = ENOSYS;
+return -1;
+#endif
+}
+#endif
+
+/* Define getline() if missing from the C library */
+#ifndef HAVE_GETLINE
+#ifdef HAVE_FGETLN
+#include <../include/getline.h>
+#endif
+#endif
 
 struct lxc_proc_context_info *lxc_proc_get_context_info(pid_t pid)
 {
 	struct lxc_proc_context_info *info = calloc(1, sizeof(*info));
 	FILE *proc_file;
 	char proc_fn[MAXPATHLEN];
-	char *line = NULL, *ptr, *ptr2;
+	char *line = NULL;
 	size_t line_bufsz = 0;
-	int ret, found, l;
-	int i;
+	int ret, found;
 
 	if (!info) {
 		SYSERROR("Could not allocate memory.");
@@ -115,124 +138,30 @@ struct lxc_proc_context_info *lxc_proc_get_context_info(pid_t pid)
 		goto out_error;
 	}
 
-	/* read cgroups */
-	snprintf(proc_fn, MAXPATHLEN, "/proc/%d/cgroup", pid);
-
-	proc_file = fopen(proc_fn, "r");
-	if (!proc_file) {
-		SYSERROR("Could not open %s", proc_fn);
-		goto out_error;
-	}
-
-	/* we don't really know how many cgroup subsystems there are
-	 * mounted, so we go through the whole file twice */
-	i = 0;
-	while (getline(&line, &line_bufsz, proc_file) != -1) {
-		/* we assume that all lines containing at least two colons
-		 * are valid */
-		ptr = strchr(line, ':');
-		if (ptr && strchr(ptr + 1, ':'))
-			i++;
-	}
-
-	rewind(proc_file);
-
-	info->cgroups = calloc(i, sizeof(*(info->cgroups)));
-	info->cgroups_count = i;
-
-	i = 0;
-	while (getline(&line, &line_bufsz, proc_file) != -1 && i < info->cgroups_count) {
-		/* format of the lines is:
-		 * id:subsystems:path, where subsystems are separated by
-		 * commas and each subsystem may also be of the form
-		 * name=xxx if it describes a private named hierarchy
-		 * we will ignore the id in the following */
-		ptr = strchr(line, ':');
-		ptr2 = ptr ? strchr(ptr + 1, ':') : NULL;
-
-		/* ignore invalid lines */
-		if (!ptr || !ptr2) continue;
-
-		l = strlen(ptr2) - 1;
-		if (ptr2[l] == '\n')
-			ptr2[l] = '\0';
-
-		info->cgroups[i].subsystems = strndup(ptr + 1, ptr2 - (ptr + 1));
-		info->cgroups[i].cgroup = strdup(ptr2 + 1);
-
-		i++;
-	}
-
-	free(line);
-	fclose(proc_file);
-
 	return info;
 
 out_error:
-	lxc_proc_free_context_info(info);
+	free(info);
 	free(line);
 	return NULL;
 }
 
-void lxc_proc_free_context_info(struct lxc_proc_context_info *info)
-{
-	if (!info)
-		return;
-
-	if (info->cgroups) {
-		int i;
-		for (i = 0; i < info->cgroups_count; i++) {
-			free(info->cgroups[i].subsystems);
-			free(info->cgroups[i].cgroup);
-		}
-	}
-	free(info->cgroups);
-	free(info);
-}
-
-int lxc_attach_proc_to_cgroups(pid_t pid, struct lxc_proc_context_info *ctx)
-{
-	int i, ret;
-
-	if (!ctx) {
-		ERROR("No valid context supplied when asked to attach "
-		      "process to cgroups.");
-		return -1;
-	}
-
-	for (i = 0; i < ctx->cgroups_count; i++) {
-		char *path;
-
-		/* the kernel should return paths that start with '/' */
-		if (ctx->cgroups[i].cgroup[0] != '/') {
-			ERROR("For cgroup subsystem(s) %s the path '%s' does "
-			      "not start with a '/'",
-			      ctx->cgroups[i].subsystems,
-			      ctx->cgroups[i].cgroup);
-			return -1;
-		}
-
-		/* lxc_cgroup_path_get can process multiple subsystems */
-		ret = lxc_cgroup_path_get(&path, ctx->cgroups[i].subsystems,
-		                          &ctx->cgroups[i].cgroup[1]);
-		if (ret)
-			return -1;
-
-		ret = lxc_cgroup_attach(path, pid);
-		if (ret)
-			return -1;
-	}
-
-	return 0;
-}
-
-int lxc_attach_to_ns(pid_t pid)
+int lxc_attach_to_ns(pid_t pid, int which)
 {
 	char path[MAXPATHLEN];
-	char *ns[] = { "pid", "mnt", "net", "ipc", "uts" };
-	const int size = sizeof(ns) / sizeof(char *);
+	/* according to <http://article.gmane.org/gmane.linux.kernel.containers.lxc.devel/1429>,
+	 * the file for user namepsaces in /proc/$pid/ns will be called
+	 * 'user' once the kernel supports it
+	 */
+	static char *ns[] = { "mnt", "pid", "uts", "ipc", "user", "net" };
+	static int flags[] = {
+		CLONE_NEWNS, CLONE_NEWPID, CLONE_NEWUTS, CLONE_NEWIPC,
+		CLONE_NEWUSER, CLONE_NEWNET
+	};
+	static const int size = sizeof(ns) / sizeof(char *);
 	int fd[size];
-	int i;
+	int i, j, saved_errno;
+
 
 	snprintf(path, MAXPATHLEN, "/proc/%d/ns", pid);
 	if (access(path, X_OK)) {
@@ -241,21 +170,87 @@ int lxc_attach_to_ns(pid_t pid)
 	}
 
 	for (i = 0; i < size; i++) {
+		/* ignore if we are not supposed to attach to that
+		 * namespace
+		 */
+		if (which != -1 && !(which & flags[i])) {
+			fd[i] = -1;
+			continue;
+		}
+
 		snprintf(path, MAXPATHLEN, "/proc/%d/ns/%s", pid, ns[i]);
 		fd[i] = open(path, O_RDONLY);
 		if (fd[i] < 0) {
+			saved_errno = errno;
+
+			/* close all already opened file descriptors before
+			 * we return an error, so we don't leak them
+			 */
+			for (j = 0; j < i; j++)
+				close(fd[j]);
+
+			errno = saved_errno;
 			SYSERROR("failed to open '%s'", path);
 			return -1;
 		}
 	}
 
 	for (i = 0; i < size; i++) {
-		if (setns(fd[i], 0)) {
+		if (fd[i] >= 0 && setns(fd[i], 0) != 0) {
+			saved_errno = errno;
+
+			for (j = i; j < size; j++)
+				close(fd[j]);
+
+			errno = saved_errno;
 			SYSERROR("failed to set namespace '%s'", ns[i]);
 			return -1;
 		}
 
 		close(fd[i]);
+	}
+
+	return 0;
+}
+
+int lxc_attach_remount_sys_proc()
+{
+	int ret;
+
+	ret = unshare(CLONE_NEWNS);
+	if (ret < 0) {
+		SYSERROR("failed to unshare mount namespace");
+		return -1;
+	}
+
+	/* assume /proc is always mounted, so remount it */
+	ret = umount2("/proc", MNT_DETACH);
+	if (ret < 0) {
+		SYSERROR("failed to unmount /proc");
+		return -1;
+	}
+
+	ret = mount("none", "/proc", "proc", 0, NULL);
+	if (ret < 0) {
+		SYSERROR("failed to remount /proc");
+		return -1;
+	}
+
+	/* try to umount /sys - if it's not a mount point,
+	 * we'll get EINVAL, then we ignore it because it
+	 * may not have been mounted in the first place
+	 */
+	ret = umount2("/sys", MNT_DETACH);
+	if (ret < 0 && errno != EINVAL) {
+		SYSERROR("failed to unmount /sys");
+		return -1;
+	} else if (ret == 0) {
+		/* remount it */
+		ret = mount("none", "/sys", "sysfs", 0, NULL);
+		if (ret < 0) {
+			SYSERROR("failed to remount /sys");
+			return -1;
+		}
 	}
 
 	return 0;

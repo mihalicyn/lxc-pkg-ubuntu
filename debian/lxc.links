@@ -1,0 +1,4 @@
+/usr/bin/lxc-ls /usr/bin/lxc-list
+/usr/bin/lxc-shutdown /usr/bin/lxc-halt
+/usr/share/man/man1/lxc-list.1.gz /usr/share/man/man1/lxc-ls.1.gz
+/usr/share/man/man1/lxc-halt.1.gz /usr/share/man/man1/lxc-shutdown.1.gz

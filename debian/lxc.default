@@ -14,7 +14,7 @@ LXC_AUTO="true"
 USE_LXC_BRIDGE="true"
 
 # If you change the LXC_BRIDGE to something other than lxcbr0, then
-# you will also need to update your /etc/lxc/lxc.conf as well as the
+# you will also need to update your /etc/lxc/default.conf as well as the
 # configuration (/var/lib/lxc/<container>/config) for any containers
 # already created using the default config to reflect the new bridge
 # name.

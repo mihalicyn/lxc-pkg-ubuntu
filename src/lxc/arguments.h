@@ -45,6 +45,8 @@ struct lxc_arguments {
 	int daemonize;
 	const char *rcfile;
 	const char *console;
+	const char *console_log;
+	const char *pidfile;
 
 	/* for lxc-checkpoint/restart */
 	const char *statefile;
@@ -57,6 +59,7 @@ struct lxc_arguments {
 
 	/* for lxc-wait */
 	char *states;
+	long timeout;
 
 	/* close fds from parent? */
 	int close_all_fds;

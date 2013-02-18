@@ -1,4 +1,4 @@
-<!-- 
+<!--
 
 lxc: linux Container library
 
@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 -->
 
-<!DOCTYPE refentry PUBLIC "-//Davenport//DTD DocBook V3.0//EN" [
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" [
 
 <!ENTITY seealso SYSTEM "@builddir@/see_also.sgml">
 ]>
@@ -235,7 +235,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	      specify an action to do for the
 	      network.
 	    </para>
-	    
+	
 	    <para><option>up:</option> activates the interface.
 	    </para>
 	  </listitem>
@@ -374,6 +374,26 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	    </para>
 	  </listitem>
 	</varlistentry>
+
+	<varlistentry>
+	  <term>
+	    <option>lxc.network.script.down</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      add a configuration option to specify a script to be
+	      executed before destroying the network used from the
+	      host side. The following arguments are passed to the
+	      script: container name and config section name (net)
+	      Additional arguments depend on the config section
+	      employing a script hook; the following are used by the
+	      network system: execution context (down), network type
+	      (empty/veth/macvlan/phys), Depending on the network
+	      type, other arguments may be passed:
+	      veth/macvlan/phys. And finally (host-sided) device name.
+	    </para>
+	  </listitem>
+	</varlistentry>
       </variablelist>
     </refsect2>
 
@@ -446,6 +466,64 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	    <para>
 	      Specify the number of tty to make available to the
 	      container.
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>Console devices location</title>
+      <para>
+        LXC consoles are provided through Unix98 PTYs created on the
+	host and bind-mounted over the expected devices in the container.
+	By default, they are bind-mounted over <filename>/dev/console</filename>
+	and <filename>/dev/ttyN</filename>.  This can prevent package upgrades
+	in the guest.  Therefore you can specify a directory location (under
+	<filename>/dev</filename> under which LXC will create the files and
+	bind-mount over them.  These will then be symbolically linked to
+	<filename>/dev/console</filename> and <filename>/dev/ttyN</filename>.
+	A package upgrade can then succeed as it is able to remove and replace
+	the symbolic links.
+      </para>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>lxc.devttydir</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      Specify a directory under <filename>/dev</filename>
+	      under which to create the container console devices.
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>/dev directory</title>
+      <para>
+	By default, lxc does nothing with the container's
+	<filename>/dev</filename>.  This allows the container's
+	<filename>/dev</filename> to be set up as needed in the container
+	rootfs.  If lxc.autodev is set to 1, then after mounting the container's
+	rootfs LXC will mount a fresh tmpfs under <filename>/dev</filename>
+	(limited to 100k) and fill in a minimal set of initial devices.
+        This is generally required when starting a container containing
+        a "systemd" based "init" but may be optional at other times.  Addional
+        devices in the containers /dev directory may be created through the
+        use of the <option>lxc.hook.autodev</option> hook.
+      </para>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>lxc.autodev</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      Set this to 1 to have LXC mount and populate a minimal
+	      <filename>/dev</filename> when starting the container.
 	    </para>
 	  </listitem>
 	</varlistentry>
@@ -611,6 +689,242 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
       </variablelist>
     </refsect2>
 
+    <refsect2>
+      <title>UID mappings</title>
+      <para>
+        A container can be started in a private user namespace with
+	user and group id mappings.  For instance, you can map userid
+	0 in the container to userid 200000 on the host.  The root
+	user in the container will be privileged in the container,
+	but unprivileged on the host.  Normally a system container
+	will want a range of ids, so you would map, for instance,
+	user and group ids 0 through 20,000 in the container to the
+	ids 200,000 through 220,000.
+      </para>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>lxc.id_map</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      Four values must be provided.  First a character, either
+	      'U', or 'G', to specify whether user or group ids are
+	      being mapped.  Next is the first userid as seen on the
+	      host.  Next is the userid to be mapped in the container.
+	      Finally, a range indicating the number of consecutive
+	      ids to map.  For instance
+	     </para>
+<programlisting>
+	lxc.id_map = U 200000 0 20000
+	lxc.id_map = G 200000 0 20000
+</programlisting>
+	    <para>
+	      will map both user and group ids in the
+	      range 0-19999 in the container to the ids
+	      200000-219999 on the host.
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>Startup hooks</title>
+      <para>
+        Startup hooks are programs or scripts which can be executed
+	at various times in a container's lifetime.
+      </para>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>lxc.hook.pre-start</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      A hook to be run in the host's namespace before the
+	      container ttys, consoles, or mounts are up.
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>lxc.hook.pre-mount</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      A hook to be run in the container's fs namespace but before
+	      the rootfs has been set up.  This allows for manipulation
+	      of the rootfs, i.e. to mount an encrypted filesystem.  Mounts
+	      done in this hook will not be reflected on the host (apart from
+	      mounts propagation), so they will be automatically cleaned up
+	      when the container shuts down.
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>lxc.hook.mount</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      A hook to be run in the container's namespace after
+	      mounting has been done, but before the pivot_root.
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>lxc.hook.autodev</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      A hook to be run in the container's namespace after
+	      mounting has been done and after any mount hooks have
+	      run, but before the pivot_root, if
+	      <option>lxc.autodev</option> == 1.
+	      The purpose of this hook is to assist in populating the
+	      /dev directory of the container when using the autodev
+	      option for systemd based containers.  The container's /dev
+	      directory is relative to the
+	      ${<option>LXC_ROOTFS_MOUNT</option>} environment
+	      variable available when the hook is run.
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>lxc.hook.start</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      A hook to be run in the container's namespace immediately
+	      before executing the container's init.  This requires the
+	      program to be available in the container.
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>lxc.hook.post-stop</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      A hook to be run in the host's namespace after the
+	      container has been shut down.
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
+      <title>Startup hooks Environment Variables</title>
+      <para>
+        A number of environment variables are made available to the startup
+        hooks to provide configuration information and assist in the
+        functioning of the hooks.  Not all variables are valid in all
+        contexts.  In particular, all paths are relative to the host system
+        and, as such, not valid during the <option>lxc.hook.start</option> hook.
+      </para>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>LXC_NAME</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      The LXC name of the container.  Useful for logging messages
+	      in commmon log environments.  [<option>-n</option>]
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>LXC_CONFIG_FILE</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      Host relative path to the container configuration file.  This
+	      gives the container to reference the original, top level,
+	      configuration file for the container in order to locate any
+	      addotional configuration information not otherwise made
+	      available.  [<option>-f</option>]
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>LXC_CONSOLE</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      The path to the console output of the container if not NULL.
+	      [<option>-c</option>] [<option>lxc.console</option>]
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>LXC_CONSOLE_LOGPATH</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      The path to the console log output of the container if not NULL.
+	      [<option>-L</option>]
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>LXC_ROOTFS_MOUNT</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      The mount location to which the container is initially bound.
+	      This will be the host relative path to the container rootfs
+	      for the container instance being started and is where changes
+	      should be made for that instance.
+	      [<option>lxc.rootfs.mount</option>]
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+      <variablelist>
+	<varlistentry>
+	  <term>
+	    <option>LXC_ROOTFS_PATH</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      The host relative path to the container root which has been
+	      mounted to the rootfs.mount location.
+	      [<option>lxc.rootfs</option>]
+	    </para>
+	  </listitem>
+	</varlistentry>
+      </variablelist>
+
+    </refsect2>
+
   </refsect1>
 
   <refsect1>
@@ -633,7 +947,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	lxc.network.link = br0
 	lxc.network.name = eth0
 	lxc.network.hwaddr = 4a:49:43:49:79:bf
-	lxc.network.ipv4 = 1.2.3.5/24 1.2.3.255
+	lxc.network.ipv4 = 10.2.3.5/24 10.2.3.255
 	lxc.network.ipv6 = 2003:db8:1:0:214:1234:fe0b:3597
       </programlisting>
     </refsect2>
@@ -664,21 +978,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 	lxc.network.flags = up
 	lxc.network.link = br0
 	lxc.network.hwaddr = 4a:49:43:49:79:bf
-	lxc.network.ipv4 = 1.2.3.5/24 1.2.3.255
+	lxc.network.ipv4 = 10.2.3.5/24 10.2.3.255
 	lxc.network.ipv6 = 2003:db8:1:0:214:1234:fe0b:3597
 	lxc.network.ipv6 = 2003:db8:1:0:214:5432:feab:3588
 	lxc.network.type = macvlan
 	lxc.network.flags = up
 	lxc.network.link = eth0
 	lxc.network.hwaddr = 4a:49:43:49:79:bd
-	lxc.network.ipv4 = 1.2.3.4/24
+	lxc.network.ipv4 = 10.2.3.4/24
 	lxc.network.ipv4 = 192.168.10.125/24
 	lxc.network.ipv6 = 2003:db8:1:0:214:1234:fe0b:3596
 	lxc.network.type = phys
 	lxc.network.flags = up
 	lxc.network.link = dummy0
 	lxc.network.hwaddr = 4a:49:43:49:79:ff
-	lxc.network.ipv4 = 1.2.3.6/24
+	lxc.network.ipv4 = 10.2.3.6/24
 	lxc.network.ipv6 = 2003:db8:1:0:214:1234:fe0b:3297
 	lxc.cgroup.cpuset.cpus = 0,1
 	lxc.cgroup.cpu.shares = 1234
@@ -697,7 +1011,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
   <refsect1>
     <title>See Also</title>
-    <simpara>    
+    <simpara>
       <citerefentry>
 	<refentrytitle><command>chroot</command></refentrytitle>
 	<manvolnum>1</manvolnum>
@@ -715,14 +1029,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
     </simpara>
   </refsect1>
-  
+
   &seealso;
 
   <refsect1>
     <title>Author</title>
     <para>Daniel Lezcano <email>daniel.lezcano@free.fr</email></para>
   </refsect1>
-  
+
 </refentry>
 
 <!-- Keep this comment at the end of the file

@@ -1,0 +1,44 @@
+Description: Add autostart support to LXC
+ Autostart isn't currently upstream yet, so we need a patch to lxc-destroy
+ and lxc-ls to properly managed the flag.
+Author: Stéphane Graber <stgraber@ubuntu.com>
+Origin: vendor
+Forwarded: no
+
+Index: raring-lxc/src/lxc/lxc-destroy.in
+===================================================================
+--- raring-lxc.orig/src/lxc/lxc-destroy.in	2013-02-18 19:55:31.199477420 +0000
++++ raring-lxc/src/lxc/lxc-destroy.in	2013-02-18 19:55:31.195477420 +0000
+@@ -138,3 +138,6 @@
+ 
+ # recursively remove the container to remove old container configuration
+ rm -rf --one-file-system --preserve-root $lxc_path/$lxc_name
++
++# remove auto-start file if present
++rm -f /etc/lxc/auto/$lxc_name.conf /etc/lxc/auto/$lxc_name
+Index: raring-lxc/src/lxc/lxc-ls
+===================================================================
+--- raring-lxc.orig/src/lxc/lxc-ls	2013-02-18 19:55:31.155477421 +0000
++++ raring-lxc/src/lxc/lxc-ls	2013-02-18 19:57:05.899475993 +0000
+@@ -108,7 +108,8 @@
+ parser.add_argument("--fancy", action="store_true",
+                     help=_("use fancy output"))
+ 
+-parser.add_argument("--fancy-format", type=str, default="name,state,ipv4,ipv6",
++parser.add_argument("--fancy-format", type=str, default="name,state,ipv4,ipv6"
++                                                        ",autostart",
+                     help=_("comma separated list of fields to show"))
+ 
+ parser.add_argument("filter", metavar='FILTER', type=str, nargs="?",
+@@ -176,6 +177,11 @@
+         entry['pid'] = "-"
+         if container.init_pid != -1:
+             entry['pid'] = str(container.init_pid)
++    if (os.path.exists("/etc/lxc/auto/%s.conf" % container_name) or
++            os.path.exists("/etc/lxc/%s" % container_name)):
++        entry['autostart'] = "YES"
++    else:
++        entry['autostart'] = "NO"
+ 
+     # Get the IPs
+     for protocol in ('ipv4', 'ipv6'):

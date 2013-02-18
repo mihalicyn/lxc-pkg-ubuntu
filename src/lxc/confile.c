@@ -20,77 +20,98 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <pty.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/utsname.h>
-#include <sys/personality.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <net/if.h>
 
 #include "parse.h"
+#include "config.h"
 #include "confile.h"
 #include "utils.h"
 
 #include <lxc/log.h>
 #include <lxc/conf.h>
+#include "network.h"
+
+#if HAVE_SYS_PERSONALITY_H
+#include <sys/personality.h>
+#endif
 
 lxc_log_define(lxc_confile, lxc);
 
-static int config_personality(const char *, char *, struct lxc_conf *);
-static int config_pts(const char *, char *, struct lxc_conf *);
-static int config_tty(const char *, char *, struct lxc_conf *);
-static int config_ttydir(const char *, char *, struct lxc_conf *);
-static int config_cgroup(const char *, char *, struct lxc_conf *);
-static int config_mount(const char *, char *, struct lxc_conf *);
-static int config_rootfs(const char *, char *, struct lxc_conf *);
-static int config_rootfs_mount(const char *, char *, struct lxc_conf *);
-static int config_pivotdir(const char *, char *, struct lxc_conf *);
-static int config_utsname(const char *, char *, struct lxc_conf *);
-static int config_network_type(const char *, char *, struct lxc_conf *);
-static int config_network_flags(const char *, char *, struct lxc_conf *);
-static int config_network_link(const char *, char *, struct lxc_conf *);
-static int config_network_name(const char *, char *, struct lxc_conf *);
-static int config_network_veth_pair(const char *, char *, struct lxc_conf *);
-static int config_network_macvlan_mode(const char *, char *, struct lxc_conf *);
-static int config_network_hwaddr(const char *, char *, struct lxc_conf *);
-static int config_network_vlan_id(const char *, char *, struct lxc_conf *);
-static int config_network_mtu(const char *, char *, struct lxc_conf *);
-static int config_network_ipv4(const char *, char *, struct lxc_conf *);
-static int config_network_ipv4_gateway(const char *, char *, struct lxc_conf *);
-static int config_network_script(const char *, char *, struct lxc_conf *);
-static int config_network_ipv6(const char *, char *, struct lxc_conf *);
-static int config_network_ipv6_gateway(const char *, char *, struct lxc_conf *);
-static int config_cap_drop(const char *, char *, struct lxc_conf *);
-static int config_console(const char *, char *, struct lxc_conf *);
+static int config_personality(const char *, const char *, struct lxc_conf *);
+static int config_pts(const char *, const char *, struct lxc_conf *);
+static int config_tty(const char *, const char *, struct lxc_conf *);
+static int config_ttydir(const char *, const char *, struct lxc_conf *);
+#if HAVE_APPARMOR
+static int config_aa_profile(const char *, const char *, struct lxc_conf *);
+#endif
+static int config_cgroup(const char *, const char *, struct lxc_conf *);
+static int config_idmap(const char *, const char *, struct lxc_conf *);
+static int config_loglevel(const char *, const char *, struct lxc_conf *);
+static int config_logfile(const char *, const char *, struct lxc_conf *);
+static int config_mount(const char *, const char *, struct lxc_conf *);
+static int config_rootfs(const char *, const char *, struct lxc_conf *);
+static int config_rootfs_mount(const char *, const char *, struct lxc_conf *);
+static int config_pivotdir(const char *, const char *, struct lxc_conf *);
+static int config_utsname(const char *, const char *, struct lxc_conf *);
+static int config_hook(const char *, const char *, struct lxc_conf *lxc_conf);
+static int config_network_type(const char *, const char *, struct lxc_conf *);
+static int config_network_flags(const char *, const char *, struct lxc_conf *);
+static int config_network_link(const char *, const char *, struct lxc_conf *);
+static int config_network_name(const char *, const char *, struct lxc_conf *);
+static int config_network_veth_pair(const char *, const char *, struct lxc_conf *);
+static int config_network_macvlan_mode(const char *, const char *, struct lxc_conf *);
+static int config_network_hwaddr(const char *, const char *, struct lxc_conf *);
+static int config_network_vlan_id(const char *, const char *, struct lxc_conf *);
+static int config_network_mtu(const char *, const char *, struct lxc_conf *);
+static int config_network_ipv4(const char *, const char *, struct lxc_conf *);
+static int config_network_ipv4_gateway(const char *, const char *, struct lxc_conf *);
+static int config_network_script(const char *, const char *, struct lxc_conf *);
+static int config_network_ipv6(const char *, const char *, struct lxc_conf *);
+static int config_network_ipv6_gateway(const char *, const char *, struct lxc_conf *);
+static int config_cap_drop(const char *, const char *, struct lxc_conf *);
+static int config_console(const char *, const char *, struct lxc_conf *);
+static int config_seccomp(const char *, const char *, struct lxc_conf *);
+static int config_includefile(const char *, const char *, struct lxc_conf *);
+static int config_network_nic(const char *, const char *, struct lxc_conf *);
+static int config_autodev(const char *, const char *, struct lxc_conf *);
 
-typedef int (*config_cb)(const char *, char *, struct lxc_conf *);
-
-struct config {
-	char *name;
-	config_cb cb;
-};
-
-static struct config config[] = {
+static struct lxc_config_t config[] = {
 
 	{ "lxc.arch",                 config_personality          },
 	{ "lxc.pts",                  config_pts                  },
 	{ "lxc.tty",                  config_tty                  },
 	{ "lxc.devttydir",            config_ttydir               },
+#if HAVE_APPARMOR
+	{ "lxc.aa_profile",            config_aa_profile          },
+#endif
 	{ "lxc.cgroup",               config_cgroup               },
+	{ "lxc.id_map",               config_idmap                },
+	{ "lxc.loglevel",             config_loglevel             },
+	{ "lxc.logfile",              config_logfile              },
 	{ "lxc.mount",                config_mount                },
 	{ "lxc.rootfs.mount",         config_rootfs_mount         },
 	{ "lxc.rootfs",               config_rootfs               },
 	{ "lxc.pivotdir",             config_pivotdir             },
 	{ "lxc.utsname",              config_utsname              },
+	{ "lxc.hook.pre-start",       config_hook                 },
+	{ "lxc.hook.pre-mount",       config_hook                 },
+	{ "lxc.hook.mount",           config_hook                 },
+	{ "lxc.hook.autodev",         config_hook                 },
+	{ "lxc.hook.start",           config_hook                 },
+	{ "lxc.hook.post-stop",       config_hook                 },
 	{ "lxc.network.type",         config_network_type         },
 	{ "lxc.network.flags",        config_network_flags        },
 	{ "lxc.network.link",         config_network_link         },
@@ -98,6 +119,7 @@ static struct config config[] = {
 	{ "lxc.network.macvlan.mode", config_network_macvlan_mode },
 	{ "lxc.network.veth.pair",    config_network_veth_pair    },
 	{ "lxc.network.script.up",    config_network_script       },
+	{ "lxc.network.script.down",  config_network_script       },
 	{ "lxc.network.hwaddr",       config_network_hwaddr       },
 	{ "lxc.network.mtu",          config_network_mtu          },
 	{ "lxc.network.vlan.id",      config_network_vlan_id      },
@@ -105,13 +127,18 @@ static struct config config[] = {
 	{ "lxc.network.ipv4",         config_network_ipv4         },
 	{ "lxc.network.ipv6.gateway", config_network_ipv6_gateway },
 	{ "lxc.network.ipv6",         config_network_ipv6         },
+	/* config_network_nic must come after all other 'lxc.network.*' entries */
+	{ "lxc.network.",             config_network_nic          },
 	{ "lxc.cap.drop",             config_cap_drop             },
 	{ "lxc.console",              config_console              },
+	{ "lxc.seccomp",              config_seccomp              },
+	{ "lxc.include",              config_includefile          },
+	{ "lxc.autodev",              config_autodev              },
 };
 
-static const size_t config_size = sizeof(config)/sizeof(struct config);
+static const size_t config_size = sizeof(config)/sizeof(struct lxc_config_t);
 
-static struct config *getconfig(const char *key)
+extern struct lxc_config_t *lxc_getconfig(const char *key)
 {
 	int i;
 
@@ -122,7 +149,77 @@ static struct config *getconfig(const char *key)
 	return NULL;
 }
 
-static int config_network_type(const char *key, char *value,
+#define strprint(str, inlen, ...) \
+	do { \
+		len = snprintf(str, inlen, ##__VA_ARGS__); \
+		if (len < 0) { SYSERROR("snprintf"); return -1; }; \
+		fulllen += len; \
+		if (inlen > 0) { \
+			if (str) str += len; \
+			inlen -= len; \
+			if (inlen < 0) inlen = 0; \
+		} \
+	} while (0);
+
+int lxc_listconfigs(char *retv, int inlen)
+{
+	int i, fulllen = 0, len;
+
+	if (!retv)
+		inlen = 0;
+	else
+		memset(retv, 0, inlen);
+	for (i = 0; i < config_size; i++) {
+		char *s = config[i].name;
+		if (s[strlen(s)-1] == '.')
+			continue;
+		strprint(retv, inlen, "%s\n", s);
+	}
+	return fulllen;
+}
+
+/*
+ * config entry is something like "lxc.network.0.ipv4"
+ * the key 'lxc.network.' was found.  So we make sure next
+ * comes an integer, find the right callback (by rewriting
+ * the key), and call it.
+ */
+static int config_network_nic(const char *key, const char *value,
+			       struct lxc_conf *lxc_conf)
+{
+	char *copy = strdup(key), *p;
+	int ret = -1;
+	struct lxc_config_t *config;
+
+	if (!copy) {
+		SYSERROR("failed to allocate memory");
+		return -1;
+	}
+	/*
+	 * ok we know that to get here we've got "lxc.network."
+	 * and it isn't any of the other network entries.  So
+	 * after the second . should come an integer (# of defined
+	 * nic) followed by a valid entry.
+	 */
+	if (*(key+12) < '0' || *(key+12) > '9')
+		goto out;
+	p = index(key+12, '.');
+	if (!p)
+		goto out;
+	strcpy(copy+12, p+1);
+	config = lxc_getconfig(copy);
+	if (!config) {
+		ERROR("unknown key %s", key);
+		goto out;
+	}
+	ret = config->cb(key, value, lxc_conf);
+
+out:
+	free(copy);
+	return ret;
+}
+
+static int config_network_type(const char *key, const char *value,
 			       struct lxc_conf *lxc_conf)
 {
 	struct lxc_list *network = &lxc_conf->network;
@@ -179,10 +276,90 @@ static int config_ip_prefix(struct in_addr *addr)
 	return 0;
 }
 
+/*
+ * if you have p="lxc.network.0.link", pass it p+12
+ * to get back '0' (the index of the nic)
+ */
+static int get_network_netdev_idx(const char *key)
+{
+	int ret, idx;
+
+	if (*key < '0' || *key > '9')
+		return -1;
+	ret = sscanf(key, "%d", &idx);
+	if (ret != 1)
+		return -1;
+	return idx;
+}
+
+/*
+ * if you have p="lxc.network.0", pass this p+12 and it will return
+ * the netdev of the first configured nic
+ */
+static struct lxc_netdev *get_netdev_from_key(const char *key,
+					      struct lxc_list *network)
+{
+	int i = 0, idx = get_network_netdev_idx(key);
+	struct lxc_netdev *netdev = NULL;
+	struct lxc_list *it;
+	if (idx == -1)
+		return NULL;
+	lxc_list_for_each(it, network) {
+		if (idx == i++) {
+			netdev = it->elem;
+			break;
+		}
+	}
+	return netdev;
+}
+
+extern int lxc_list_nicconfigs(struct lxc_conf *c, const char *key,
+			       char *retv, int inlen)
+{
+	struct lxc_netdev *netdev;
+	int fulllen = 0, len;
+
+	netdev = get_netdev_from_key(key+12, &c->network);
+	if (!netdev)
+		return -1;
+
+	if (!retv)
+		inlen = 0;
+	else
+		memset(retv, 0, inlen);
+
+	strprint(retv, inlen, "script.up\n");
+	if (netdev->type != LXC_NET_EMPTY) {
+		strprint(retv, inlen, "flags\n");
+		strprint(retv, inlen, "link\n");
+		strprint(retv, inlen, "name\n");
+		strprint(retv, inlen, "hwaddr\n");
+		strprint(retv, inlen, "mtu\n");
+		strprint(retv, inlen, "ipv6\n");
+		strprint(retv, inlen, "ipv6_gateway\n");
+		strprint(retv, inlen, "ipv4\n");
+		strprint(retv, inlen, "ipv4_gateway\n");
+	}
+	switch(netdev->type) {
+	case LXC_NET_VETH:
+		strprint(retv, inlen, "veth.pair\n");
+		break;
+	case LXC_NET_MACVLAN:
+		strprint(retv, inlen, "macvlan.mode\n");
+		break;
+	case LXC_NET_VLAN:
+		strprint(retv, inlen, "vlan.id\n");
+		break;
+	case LXC_NET_PHYS:
+		break;
+	}
+	return fulllen;
+}
+
 static struct lxc_netdev *network_netdev(const char *key, const char *value,
 					 struct lxc_list *network)
 {
-	struct lxc_netdev *netdev;
+	struct lxc_netdev *netdev = NULL;
 
 	if (lxc_list_empty(network)) {
 		ERROR("network is not created for '%s' = '%s' option",
@@ -190,7 +367,11 @@ static struct lxc_netdev *network_netdev(const char *key, const char *value,
 		return NULL;
 	}
 
-	netdev = lxc_list_last_elem(network);
+	if (get_network_netdev_idx(key+12) == -1)
+		netdev = lxc_list_last_elem(network);
+	else
+		netdev = get_netdev_from_key(key+12, network);
+
 	if (!netdev) {
 		ERROR("no network device defined for '%s' = '%s' option",
 		      key, value);
@@ -200,10 +381,11 @@ static struct lxc_netdev *network_netdev(const char *key, const char *value,
 	return netdev;
 }
 
-static int network_ifname(char **valuep, char *value)
+static int network_ifname(char **valuep, const char *value)
 {
 	if (strlen(value) >= IFNAMSIZ) {
-		ERROR("invalid interface name: %s", value);
+		ERROR("interface name '%s' too long (>%d)\n",
+		value, IFNAMSIZ - 1);
 		return -1;
 	}
 
@@ -228,7 +410,7 @@ static int network_ifname(char **valuep, char *value)
 #  define MACVLAN_MODE_BRIDGE 4
 #endif
 
-static int macvlan_mode(int *valuep, char *value)
+static int macvlan_mode(int *valuep, const char *value)
 {
 	struct mc_mode {
 		char *name;
@@ -252,7 +434,7 @@ static int macvlan_mode(int *valuep, char *value)
 	return -1;
 }
 
-static int config_network_flags(const char *key, char *value,
+static int config_network_flags(const char *key, const char *value,
 				struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
@@ -266,7 +448,7 @@ static int config_network_flags(const char *key, char *value,
 	return 0;
 }
 
-static int config_network_link(const char *key, char *value,
+static int config_network_link(const char *key, const char *value,
 			       struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
@@ -278,7 +460,7 @@ static int config_network_link(const char *key, char *value,
 	return network_ifname(&netdev->link, value);
 }
 
-static int config_network_name(const char *key, char *value,
+static int config_network_name(const char *key, const char *value,
 			       struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
@@ -290,7 +472,7 @@ static int config_network_name(const char *key, char *value,
 	return network_ifname(&netdev->name, value);
 }
 
-static int config_network_veth_pair(const char *key, char *value,
+static int config_network_veth_pair(const char *key, const char *value,
 				    struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
@@ -302,7 +484,7 @@ static int config_network_veth_pair(const char *key, char *value,
 	return network_ifname(&netdev->priv.veth_attr.pair, value);
 }
 
-static int config_network_macvlan_mode(const char *key, char *value,
+static int config_network_macvlan_mode(const char *key, const char *value,
 				       struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
@@ -314,25 +496,29 @@ static int config_network_macvlan_mode(const char *key, char *value,
 	return macvlan_mode(&netdev->priv.macvlan_attr.mode, value);
 }
 
-static int config_network_hwaddr(const char *key, char *value,
+static int config_network_hwaddr(const char *key, const char *value,
 				 struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
+	char *hwaddr;
 
 	netdev = network_netdev(key, value, &lxc_conf->network);
 	if (!netdev)
 		return -1;
 
-	netdev->hwaddr = strdup(value);
-	if (!netdev->hwaddr) {
+	hwaddr = strdup(value);
+	if (!hwaddr) {
 		SYSERROR("failed to dup string '%s'", value);
 		return -1;
 	}
 
+	if (netdev->hwaddr)
+		free(netdev->hwaddr);
+	netdev->hwaddr = hwaddr;
 	return 0;
 }
 
-static int config_network_vlan_id(const char *key, char *value,
+static int config_network_vlan_id(const char *key, const char *value,
 			       struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
@@ -347,25 +533,29 @@ static int config_network_vlan_id(const char *key, char *value,
 	return 0;
 }
 
-static int config_network_mtu(const char *key, char *value,
+static int config_network_mtu(const char *key, const char *value,
 			      struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
+	char *mtu;
 
 	netdev = network_netdev(key, value, &lxc_conf->network);
 	if (!netdev)
 		return -1;
 
-	netdev->mtu = strdup(value);
-	if (!netdev->mtu) {
+	mtu = strdup(value);
+	if (!mtu) {
 		SYSERROR("failed to dup string '%s'", value);
 		return -1;
 	}
 
+	if (netdev->mtu)
+		free(netdev->mtu);
+	netdev->mtu = mtu;
 	return 0;
 }
 
-static int config_network_ipv4(const char *key, char *value,
+static int config_network_ipv4(const char *key, const char *value,
 			       struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
@@ -393,7 +583,11 @@ static int config_network_ipv4(const char *key, char *value,
 	lxc_list_init(list);
 	list->elem = inetdev;
 
-	addr = value;
+	addr = strdup(value);
+	if (!addr) {
+		ERROR("no address specified");
+		return -1;
+	}
 
 	cursor = strstr(addr, " ");
 	if (cursor) {
@@ -407,18 +601,15 @@ static int config_network_ipv4(const char *key, char *value,
 		prefix = slash + 1;
 	}
 
-	if (!addr) {
-		ERROR("no address specified");
-		return -1;
-	}
-
 	if (!inet_pton(AF_INET, addr, &inetdev->addr)) {
 		SYSERROR("invalid ipv4 address: %s", value);
+		free(addr);
 		return -1;
 	}
 
 	if (bcast && !inet_pton(AF_INET, bcast, &inetdev->bcast)) {
 		SYSERROR("invalid ipv4 broadcast address: %s", value);
+		free(addr);
 		return -1;
 	}
 
@@ -435,12 +626,13 @@ static int config_network_ipv4(const char *key, char *value,
 			htonl(INADDR_BROADCAST >>  inetdev->prefix);
 	}
 
-	lxc_list_add(&netdev->ipv4, list);
+	lxc_list_add_tail(&netdev->ipv4, list);
 
+	free(addr);
 	return 0;
 }
 
-static int config_network_ipv4_gateway(const char *key, char *value,
+static int config_network_ipv4_gateway(const char *key, const char *value,
 			               struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
@@ -477,13 +669,13 @@ static int config_network_ipv4_gateway(const char *key, char *value,
 	return 0;
 }
 
-static int config_network_ipv6(const char *key, char *value,
+static int config_network_ipv6(const char *key, const char *value,
 			       struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
 	struct lxc_inet6dev *inet6dev;
 	struct lxc_list *list;
-	char *slash;
+	char *slash,*valdup;
 	char *netmask;
 
 	netdev = network_netdev(key, value, &lxc_conf->network);
@@ -506,8 +698,14 @@ static int config_network_ipv6(const char *key, char *value,
 	lxc_list_init(list);
 	list->elem = inet6dev;
 
+	valdup = strdup(value);
+	if (!valdup) {
+		ERROR("no address specified");
+		return -1;
+	}
+
 	inet6dev->prefix = 64;
-	slash = strstr(value, "/");
+	slash = strstr(valdup, "/");
 	if (slash) {
 		*slash = '\0';
 		netmask = slash + 1;
@@ -516,15 +714,17 @@ static int config_network_ipv6(const char *key, char *value,
 
 	if (!inet_pton(AF_INET6, value, &inet6dev->addr)) {
 		SYSERROR("invalid ipv6 address: %s", value);
+		free(valdup);
 		return -1;
 	}
 
-	lxc_list_add(&netdev->ipv6, list);
+	lxc_list_add_tail(&netdev->ipv6, list);
 
+	free(valdup);
 	return 0;
 }
 
-static int config_network_ipv6_gateway(const char *key, char *value,
+static int config_network_ipv6_gateway(const char *key, const char *value,
 			               struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
@@ -561,7 +761,7 @@ static int config_network_ipv6_gateway(const char *key, char *value,
 	return 0;
 }
 
-static int config_network_script(const char *key, char *value,
+static int config_network_script(const char *key, const char *value,
 				 struct lxc_conf *lxc_conf)
 {
 	struct lxc_netdev *netdev;
@@ -575,8 +775,12 @@ static int config_network_script(const char *key, char *value,
 		SYSERROR("failed to dup string '%s'", value);
 		return -1;
 	}
-	if (strcmp(key, "lxc.network.script.up") == 0) {
+	if (strstr(key, "script.up") != NULL) {
 		netdev->upscript = copy;
+		return 0;
+	}
+	if (strcmp(key, "lxc.network.script.down") == 0) {
+		netdev->downscript = copy;
 		return 0;
 	}
 	SYSERROR("Unknown key: %s", key);
@@ -584,7 +788,68 @@ static int config_network_script(const char *key, char *value,
 	return -1;
 }
 
-static int config_personality(const char *key, char *value,
+static int add_hook(struct lxc_conf *lxc_conf, int which, char *hook)
+{
+	struct lxc_list *hooklist;
+
+	hooklist = malloc(sizeof(*hooklist));
+	if (!hooklist) {
+		free(hook);
+		return -1;
+	}
+	hooklist->elem = hook;
+	lxc_list_add_tail(&lxc_conf->hooks[which], hooklist);
+	return 0;
+}
+
+static int config_seccomp(const char *key, const char *value,
+				 struct lxc_conf *lxc_conf)
+{
+	char *path;
+
+	if (lxc_conf->seccomp) {
+		ERROR("seccomp already defined");
+		return -1;
+	}
+	path = strdup(value);
+	if (!path) {
+		SYSERROR("failed to strdup '%s': %m", value);
+		return -1;
+	}
+
+	if (lxc_conf->seccomp)
+		free(lxc_conf->seccomp);
+	lxc_conf->seccomp = path;
+
+	return 0;
+}
+
+static int config_hook(const char *key, const char *value,
+				 struct lxc_conf *lxc_conf)
+{
+	char *copy = strdup(value);
+	if (!copy) {
+		SYSERROR("failed to dup string '%s'", value);
+		return -1;
+	}
+	if (strcmp(key, "lxc.hook.pre-start") == 0)
+		return add_hook(lxc_conf, LXCHOOK_PRESTART, copy);
+	else if (strcmp(key, "lxc.hook.pre-mount") == 0)
+		return add_hook(lxc_conf, LXCHOOK_PREMOUNT, copy);
+	else if (strcmp(key, "lxc.hook.autodev") == 0)
+		return add_hook(lxc_conf, LXCHOOK_AUTODEV, copy);
+	else if (strcmp(key, "lxc.hook.mount") == 0)
+		return add_hook(lxc_conf, LXCHOOK_MOUNT, copy);
+	else if (strcmp(key, "lxc.hook.start") == 0)
+		return add_hook(lxc_conf, LXCHOOK_START, copy);
+	else if (strcmp(key, "lxc.hook.post-stop") == 0)
+		return add_hook(lxc_conf, LXCHOOK_POSTSTOP, copy);
+	SYSERROR("Unknown key: %s", key);
+	free(copy);
+	return -1;
+}
+
+static int config_personality(const char *key, const const char *value,
 			      struct lxc_conf *lxc_conf)
 {
 	signed long personality = lxc_config_parse_arch(value);
@@ -597,7 +862,8 @@ static int config_personality(const char *key, char *value,
 	return 0;
 }
 
-static int config_pts(const char *key, char *value, struct lxc_conf *lxc_conf)
+static int config_pts(const char *key, const char *value,
+		      struct lxc_conf *lxc_conf)
 {
 	int maxpts = atoi(value);
 
@@ -606,7 +872,8 @@ static int config_pts(const char *key, char *value, struct lxc_conf *lxc_conf)
 	return 0;
 }
 
-static int config_tty(const char *key, char *value, struct lxc_conf *lxc_conf)
+static int config_tty(const char *key, const char *value,
+		      struct lxc_conf *lxc_conf)
 {
 	int nbtty = atoi(value);
 
@@ -615,7 +882,7 @@ static int config_tty(const char *key, char *value, struct lxc_conf *lxc_conf)
 	return 0;
 }
 
-static int config_ttydir(const char *key, char *value,
+static int config_ttydir(const char *key, const char *value,
 			  struct lxc_conf *lxc_conf)
 {
 	char *path;
@@ -628,12 +895,72 @@ static int config_ttydir(const char *key, char *value,
 		return -1;
 	}
 
+	if (lxc_conf->ttydir)
+		free(lxc_conf->ttydir);
 	lxc_conf->ttydir = path;
 
 	return 0;
 }
 
-static int config_cgroup(const char *key, char *value, struct lxc_conf *lxc_conf)
+#if HAVE_APPARMOR
+static int config_aa_profile(const char *key, const char *value,
+			     struct lxc_conf *lxc_conf)
+{
+	char *path;
+
+	if (!value || strlen(value) == 0)
+		return 0;
+	path = strdup(value);
+	if (!path) {
+		SYSERROR("failed to strdup '%s': %m", value);
+		return -1;
+	}
+
+	if (lxc_conf->aa_profile)
+		free(lxc_conf->aa_profile);
+	lxc_conf->aa_profile = path;
+
+	return 0;
+}
+#endif
+
+static int config_logfile(const char *key, const char *value,
+			     struct lxc_conf *lxc_conf)
+{
+	return lxc_log_set_file(value);
+}
+
+static int config_loglevel(const char *key, const char *value,
+			     struct lxc_conf *lxc_conf)
+{
+	int newlevel;
+
+	if (!value || strlen(value) == 0)
+		return 0;
+
+	if (lxc_log_get_level() != LXC_LOG_PRIORITY_NOTSET) {
+		DEBUG("Log level already set - ignoring new value");
+		return 0;
+	}
+	if (value[0] >= '0' && value[0] <= '9')
+		newlevel = atoi(value);
+	else
+		newlevel = lxc_log_priority_to_int(value);
+	return lxc_log_set_level(newlevel);
+}
+
+static int config_autodev(const char *key, const char *value,
+			  struct lxc_conf *lxc_conf)
+{
+	int v = atoi(value);
+
+	lxc_conf->autodev = v;
+
+	return 0;
+}
+
+static int config_cgroup(const char *key, const char *value,
+			 struct lxc_conf *lxc_conf)
 {
 	char *token = "lxc.cgroup.";
 	char *subkey;
@@ -691,23 +1018,93 @@ out:
 	return -1;
 }
 
-static int config_fstab(const char *key, char *value, struct lxc_conf *lxc_conf)
+static int config_idmap(const char *key, const char *value, struct lxc_conf *lxc_conf)
 {
+	char *token = "lxc.id_map";
+	char *subkey;
+	struct lxc_list *idmaplist = NULL;
+	struct id_map *idmap = NULL;
+	int hostid, nsid, range;
+	char type;
+	int ret;
+
+	subkey = strstr(key, token);
+
+	if (!subkey)
+		return -1;
+
+	if (!strlen(subkey))
+		return -1;
+
+	idmaplist = malloc(sizeof(*idmaplist));
+	if (!idmaplist)
+		goto out;
+
+	idmap = malloc(sizeof(*idmap));
+	if (!idmap)
+		goto out;
+	memset(idmap, 0, sizeof(*idmap));
+
+	idmaplist->elem = idmap;
+
+	lxc_list_add_tail(&lxc_conf->id_map, idmaplist);
+
+	ret = sscanf(value, "%c %d %d %d", &type, &hostid, &nsid, &range);
+	if (ret != 4)
+		goto out;
+	INFO("read uid map: type %c hostid %d nsid %d range %d", type, hostid, nsid, range);
+	if (type == 'U')
+		idmap->idtype = ID_TYPE_UID;
+	else if (type == 'G')
+		idmap->idtype = ID_TYPE_GID;
+	else
+		goto out;
+	idmap->hostid = hostid;
+	idmap->nsid = nsid;
+	idmap->range = range;
+
+	return 0;
+
+out:
+	if (idmaplist)
+		free(idmaplist);
+
+	if (idmap) {
+		free(idmap);
+	}
+
+	return -1;
+}
+
+static int config_path_item(const char *key, const char *value,
+			    struct lxc_conf *lxc_conf, char **conf_item)
+{
+	char *valdup;
 	if (strlen(value) >= MAXPATHLEN) {
 		ERROR("%s path is too long", value);
 		return -1;
 	}
 
-	lxc_conf->fstab = strdup(value);
-	if (!lxc_conf->fstab) {
+	valdup = strdup(value);
+	if (!valdup) {
 		SYSERROR("failed to duplicate string %s", value);
 		return -1;
 	}
+	if (*conf_item)
+		free(*conf_item);
+	*conf_item = valdup;
 
 	return 0;
 }
 
-static int config_mount(const char *key, char *value, struct lxc_conf *lxc_conf)
+static int config_fstab(const char *key, const char *value,
+			struct lxc_conf *lxc_conf)
+{
+	return config_path_item(key, value, lxc_conf, &lxc_conf->fstab);
+}
+
+static int config_mount(const char *key, const char *value,
+			struct lxc_conf *lxc_conf)
 {
 	char *fstab_token = "lxc.mount";
 	char *token = "lxc.mount.entry";
@@ -743,10 +1140,10 @@ static int config_mount(const char *key, char *value, struct lxc_conf *lxc_conf)
 	return 0;
 }
 
-static int config_cap_drop(const char *key, char *value,
+static int config_cap_drop(const char *key, const char *value,
 			   struct lxc_conf *lxc_conf)
 {
-	char *dropcaps, *sptr, *token;
+	char *dropcaps, *dropptr, *sptr, *token;
 	struct lxc_list *droplist;
 	int ret = -1;
 
@@ -761,13 +1158,12 @@ static int config_cap_drop(const char *key, char *value,
 
 	/* in case several capability drop is specified in a single line
 	 * split these caps in a single element for the list */
-	for (;;) {
-                token = strtok_r(dropcaps, " \t", &sptr);
+	for (dropptr = dropcaps;;dropptr = NULL) {
+                token = strtok_r(dropptr, " \t", &sptr);
                 if (!token) {
 			ret = 0;
                         break;
 		}
-		dropcaps = NULL;
 
 		droplist = malloc(sizeof(*droplist));
 		if (!droplist) {
@@ -790,7 +1186,7 @@ static int config_cap_drop(const char *key, char *value,
 	return ret;
 }
 
-static int config_console(const char *key, char *value,
+static int config_console(const char *key, const char *value,
 			  struct lxc_conf *lxc_conf)
 {
 	char *path;
@@ -801,60 +1197,39 @@ static int config_console(const char *key, char *value,
 		return -1;
 	}
 
+	if (lxc_conf->console.path)
+		free(lxc_conf->console.path);
 	lxc_conf->console.path = path;
 
 	return 0;
 }
 
-static int config_rootfs(const char *key, char *value, struct lxc_conf *lxc_conf)
+static int config_includefile(const char *key, const char *value,
+			  struct lxc_conf *lxc_conf)
 {
-	if (strlen(value) >= MAXPATHLEN) {
-		ERROR("%s path is too long", value);
-		return -1;
-	}
-
-	lxc_conf->rootfs.path = strdup(value);
-	if (!lxc_conf->rootfs.path) {
-		SYSERROR("failed to duplicate string %s", value);
-		return -1;
-	}
-
-	return 0;
+	return lxc_config_read(value, lxc_conf);
 }
 
-static int config_rootfs_mount(const char *key, char *value, struct lxc_conf *lxc_conf)
+static int config_rootfs(const char *key, const char *value,
+			 struct lxc_conf *lxc_conf)
 {
-	if (strlen(value) >= MAXPATHLEN) {
-		ERROR("%s path is too long", value);
-		return -1;
-	}
-
-	lxc_conf->rootfs.mount = strdup(value);
-	if (!lxc_conf->rootfs.mount) {
-		SYSERROR("failed to duplicate string '%s'", value);
-		return -1;
-	}
-
-	return 0;
+	return config_path_item(key, value, lxc_conf, &lxc_conf->rootfs.path);
 }
 
-static int config_pivotdir(const char *key, char *value, struct lxc_conf *lxc_conf)
+static int config_rootfs_mount(const char *key, const char *value,
+			       struct lxc_conf *lxc_conf)
 {
-	if (strlen(value) >= MAXPATHLEN) {
-		ERROR("%s path is too long", value);
-		return -1;
-	}
-
-	lxc_conf->rootfs.pivot = strdup(value);
-	if (!lxc_conf->rootfs.pivot) {
-		SYSERROR("failed to duplicate string %s", value);
-		return -1;
-	}
-
-	return 0;
+	return config_path_item(key, value, lxc_conf, &lxc_conf->rootfs.mount);
 }
 
-static int config_utsname(const char *key, char *value, struct lxc_conf *lxc_conf)
+static int config_pivotdir(const char *key, const char *value,
+			   struct lxc_conf *lxc_conf)
+{
+	return config_path_item(key, value, lxc_conf, &lxc_conf->rootfs.pivot);
+}
+
+static int config_utsname(const char *key, const char *value,
+			  struct lxc_conf *lxc_conf)
 {
 	struct utsname *utsname;
 
@@ -871,6 +1246,8 @@ static int config_utsname(const char *key, char *value, struct lxc_conf *lxc_con
 	}
 
 	strcpy(utsname->nodename, value);
+	if (lxc_conf->utsname)
+		free(lxc_conf->utsname);
 	lxc_conf->utsname = utsname;
 
 	return 0;
@@ -878,7 +1255,7 @@ static int config_utsname(const char *key, char *value, struct lxc_conf *lxc_con
 
 static int parse_line(char *buffer, void *data)
 {
-	struct config *config;
+	struct lxc_config_t *config;
 	char *line, *linep;
 	char *dot;
 	char *key;
@@ -923,9 +1300,9 @@ static int parse_line(char *buffer, void *data)
 	value += lxc_char_left_gc(value, strlen(value));
 	value[lxc_char_right_gc(value, strlen(value))] = '\0';
 
-	config = getconfig(key);
+	config = lxc_getconfig(key);
 	if (!config) {
-		ERROR("unknow key %s", key);
+		ERROR("unknown key %s", key);
 		goto out;
 	}
 
@@ -943,6 +1320,10 @@ int lxc_config_readline(char *buffer, struct lxc_conf *conf)
 
 int lxc_config_read(const char *file, struct lxc_conf *conf)
 {
+	/* Catch only the top level config file name in the structure */
+	if( ! conf->rcfile ) {
+		conf->rcfile = strdup( file );
+	}
 	return lxc_file_for_each_line(file, parse_line, conf);
 }
 
@@ -961,7 +1342,7 @@ int lxc_config_define_add(struct lxc_list *defines, char* arg)
 
 int lxc_config_define_load(struct lxc_list *defines, struct lxc_conf *conf)
 {
-	struct lxc_list *it;
+	struct lxc_list *it,*next;
 	int ret = 0;
 
 	lxc_list_for_each(it, defines) {
@@ -970,7 +1351,7 @@ int lxc_config_define_load(struct lxc_list *defines, struct lxc_conf *conf)
 			break;
 	}
 
-	lxc_list_for_each(it, defines) {
+	lxc_list_for_each_safe(it, defines, next) {
 		lxc_list_del(it);
 		free(it);
 	}
@@ -980,6 +1361,7 @@ int lxc_config_define_load(struct lxc_list *defines, struct lxc_conf *conf)
 
 signed long lxc_config_parse_arch(const char *arch)
 {
+	#if HAVE_SYS_PERSONALITY_H
 	struct per_name {
 		char *name;
 		unsigned long per;
@@ -997,6 +1379,451 @@ signed long lxc_config_parse_arch(const char *arch)
 		if (!strcmp(pername[i].name, arch))
 		    return pername[i].per;
 	}
+	#endif
 
 	return -1;
+}
+
+static int lxc_get_conf_int(struct lxc_conf *c, char *retv, int inlen, int v)
+{
+	if (!retv)
+		inlen = 0;
+	else
+		memset(retv, 0, inlen);
+	return snprintf(retv, inlen, "%d", v);
+}
+
+static int lxc_get_arch_entry(struct lxc_conf *c, char *retv, int inlen)
+{
+	int fulllen = 0;
+
+	if (!retv)
+		inlen = 0;
+	else
+		memset(retv, 0, inlen);
+
+	#if HAVE_SYS_PERSONALITY_H
+	int len = 0;
+
+	switch(c->personality) {
+	case PER_LINUX32: strprint(retv, inlen, "x86"); break;
+	case PER_LINUX: strprint(retv, inlen, "x86_64"); break;
+	default: break;
+	}
+	#endif
+
+	return fulllen;
+}
+
+/*
+ * If you ask for a specific cgroup value, i.e. lxc.cgroup.devices.list,
+ * then just the value(s) will be printed.  Since there still could be
+ * more than one, it is newline-separated.
+ * (Maybe that's ambigous, since some values, i.e. devices.list, will
+ * already have newlines?)
+ * If you ask for 'lxc.cgroup", then all cgroup entries will be printed,
+ * in 'lxc.cgroup.subsystem.key = value' format.
+ */
+static int lxc_get_cgroup_entry(struct lxc_conf *c, char *retv, int inlen,
+				const char *key)
+{
+	int fulllen = 0, len;
+	int all = 0;
+	struct lxc_list *it;
+
+	if (!retv)
+		inlen = 0;
+	else
+		memset(retv, 0, inlen);
+
+	if (strcmp(key, "all") == 0)
+		all = 1;
+
+	lxc_list_for_each(it, &c->cgroup) {
+		struct lxc_cgroup *cg = it->elem;
+		if (all) {
+			strprint(retv, inlen, "lxc.cgroup.%s = %s\n", cg->subsystem, cg->value);
+		} else if (strcmp(cg->subsystem, key) == 0) {
+			strprint(retv, inlen, "%s\n", cg->value);
+		}
+	}
+	return fulllen;
+}
+
+static int lxc_get_item_hooks(struct lxc_conf *c, char *retv, int inlen,
+			      const char *key)
+{
+	char *subkey;
+	int len, fulllen = 0, found = -1;
+	struct lxc_list *it;
+	int i;
+
+	/* "lxc.hook.mount" */
+	subkey = index(key, '.');
+	if (subkey) subkey = index(subkey+1, '.');
+	if (!subkey)
+		return -1;
+	subkey++;
+	if (!*subkey)
+		return -1;
+	for (i=0; i<NUM_LXC_HOOKS; i++) {
+		if (strcmp(lxchook_names[i], subkey) == 0) {
+			found=i;
+			break;
+		}
+	}
+	if (found == -1)
+		return -1;
+
+	if (!retv)
+		inlen = 0;
+	else
+		memset(retv, 0, inlen);
+
+	lxc_list_for_each(it, &c->hooks[found]) {
+		strprint(retv, inlen, "%s\n", (char *)it->elem);
+	}
+	return fulllen;
+}
+
+static int lxc_get_item_cap_drop(struct lxc_conf *c, char *retv, int inlen)
+{
+	int len, fulllen = 0;
+	struct lxc_list *it;
+
+	if (!retv)
+		inlen = 0;
+	else
+		memset(retv, 0, inlen);
+
+	lxc_list_for_each(it, &c->caps) {
+		strprint(retv, inlen, "%s\n", (char *)it->elem);
+	}
+	return fulllen;
+}
+
+static int lxc_get_mount_entries(struct lxc_conf *c, char *retv, int inlen)
+{
+	int len, fulllen = 0;
+	struct lxc_list *it;
+
+	if (!retv)
+		inlen = 0;
+	else
+		memset(retv, 0, inlen);
+
+	lxc_list_for_each(it, &c->mount_list) {
+		strprint(retv, inlen, "%s\n", (char *)it->elem);
+	}
+	return fulllen;
+}
+
+/*
+ * lxc.network.0.XXX, where XXX can be: name, type, link, flags, type,
+ * macvlan.mode, veth.pair, vlan, ipv4, ipv6, upscript, hwaddr, mtu,
+ * ipv4_gateway, ipv6_gateway.  ipvX_gateway can return 'auto' instead
+ * of an address.  ipv4 and ipv6 return lists (newline-separated).
+ * things like veth.pair return '' if invalid (i.e. if called for vlan
+ * type).
+ */
+static int lxc_get_item_nic(struct lxc_conf *c, char *retv, int inlen,
+			    const char *key)
+{
+	char *p1;
+	int len, fulllen = 0;
+	struct lxc_netdev *netdev;
+
+	if (!retv)
+		inlen = 0;
+	else
+		memset(retv, 0, inlen);
+
+	p1 = index(key, '.');
+	if (!p1 || *(p1+1) == '\0') return -1;
+	p1++;
+
+	netdev = get_netdev_from_key(key, &c->network);
+	if (!netdev)
+		return -1;
+	if (strcmp(p1, "name") == 0) {
+		if (netdev->name)
+			strprint(retv, inlen, "%s", netdev->name);
+	} else if (strcmp(p1, "type") == 0) {
+		strprint(retv, inlen, "%s", lxc_net_type_to_str(netdev->type));
+	} else if (strcmp(p1, "link") == 0) {
+		if (netdev->link)
+			strprint(retv, inlen, "%s", netdev->link);
+	} else if (strcmp(p1, "flags") == 0) {
+		if (netdev->flags & IFF_UP)
+			strprint(retv, inlen, "up");
+	} else if (strcmp(p1, "upscript") == 0) {
+		if (netdev->upscript)
+			strprint(retv, inlen, "%s", netdev->upscript);
+	} else if (strcmp(p1, "hwaddr") == 0) {
+		if (netdev->hwaddr)
+			strprint(retv, inlen, "%s", netdev->hwaddr);
+	} else if (strcmp(p1, "mtu") == 0) {
+		if (netdev->mtu)
+			strprint(retv, inlen, "%s", netdev->mtu);
+	} else if (strcmp(p1, "macvlan.mode") == 0) {
+		if (netdev->type == LXC_NET_MACVLAN) {
+			const char *mode;
+			switch (netdev->priv.macvlan_attr.mode) {
+			case MACVLAN_MODE_PRIVATE: mode = "private"; break;
+			case MACVLAN_MODE_VEPA: mode = "vepa"; break;
+			case MACVLAN_MODE_BRIDGE: mode = "bridge"; break;
+			default: mode = "(invalid)"; break;
+			}
+			strprint(retv, inlen, "%s", mode);
+		}
+	} else if (strcmp(p1, "veth.pair") == 0) {
+		if (netdev->type == LXC_NET_VETH && netdev->priv.veth_attr.pair)
+			strprint(retv, inlen, "%s", netdev->priv.veth_attr.pair);
+	} else if (strcmp(p1, "vlan") == 0) {
+		if (netdev->type == LXC_NET_VLAN) {
+			strprint(retv, inlen, "%d", netdev->priv.vlan_attr.vid);
+		}
+	} else if (strcmp(p1, "ipv4_gateway") == 0) {
+		if (netdev->ipv4_gateway_auto) {
+			strprint(retv, inlen, "auto");
+		} else if (netdev->ipv4_gateway) {
+			char buf[INET_ADDRSTRLEN];
+			inet_ntop(AF_INET, netdev->ipv4_gateway, buf, sizeof(buf));
+			strprint(retv, inlen, "%s", buf);
+		}
+	} else if (strcmp(p1, "ipv4") == 0) {
+		struct lxc_list *it2;
+		lxc_list_for_each(it2, &netdev->ipv4) {
+			struct lxc_inetdev *i = it2->elem;
+			char buf[INET_ADDRSTRLEN];
+			inet_ntop(AF_INET, &i->addr, buf, sizeof(buf));
+			strprint(retv, inlen, "%s\n", buf);
+		}
+	} else if (strcmp(p1, "ipv6_gateway") == 0) {
+		if (netdev->ipv6_gateway_auto) {
+			strprint(retv, inlen, "auto");
+		} else if (netdev->ipv6_gateway) {
+			char buf[INET_ADDRSTRLEN];
+			inet_ntop(AF_INET, netdev->ipv6_gateway, buf, sizeof(buf));
+			strprint(retv, inlen, "%s", buf);
+		}
+	} else if (strcmp(p1, "ipv6") == 0) {
+		struct lxc_list *it2;
+		lxc_list_for_each(it2, &netdev->ipv6) {
+			struct lxc_inetdev *i = it2->elem;
+			char buf[INET_ADDRSTRLEN];
+			inet_ntop(AF_INET6, &i->addr, buf, sizeof(buf));
+			strprint(retv, inlen, "%s\n", buf);
+		}
+	}
+	return fulllen;
+}
+
+static int lxc_get_item_network(struct lxc_conf *c, char *retv, int inlen)
+{
+	int len, fulllen = 0;
+	struct lxc_list *it;
+
+	if (!retv)
+		inlen = 0;
+	else
+		memset(retv, 0, inlen);
+
+	lxc_list_for_each(it, &c->network) {
+		struct lxc_netdev *n = it->elem;
+		const char *t = lxc_net_type_to_str(n->type);
+		strprint(retv, inlen, "%s\n", t ? t : "(invalid)");
+	}
+	return fulllen;
+}
+
+int lxc_get_config_item(struct lxc_conf *c, const char *key, char *retv,
+			int inlen)
+{
+	const char *v = NULL;
+
+	if (strcmp(key, "lxc.mount.entry") == 0)
+		return lxc_get_mount_entries(c, retv, inlen);
+	else if (strcmp(key, "lxc.mount") == 0)
+		v = c->fstab;
+	else if (strcmp(key, "lxc.tty") == 0)
+		return lxc_get_conf_int(c, retv, inlen, c->tty);
+	else if (strcmp(key, "lxc.pts") == 0)
+		return lxc_get_conf_int(c, retv, inlen, c->pts);
+	else if (strcmp(key, "lxc.devttydir") == 0)
+		v = c->ttydir;
+	else if (strcmp(key, "lxc.arch") == 0)
+		return lxc_get_arch_entry(c, retv, inlen);
+#if HAVE_APPARMOR
+	else if (strcmp(key, "lxc.aa_profile") == 0)
+		v = c->aa_profile;
+#endif
+	else if (strcmp(key, "lxc.logfile") == 0)
+		v = lxc_log_get_file();
+	else if (strcmp(key, "lxc.loglevel") == 0)
+		v = lxc_log_priority_to_string(lxc_log_get_level());
+	else if (strcmp(key, "lxc.cgroup") == 0) // all cgroup info
+		return lxc_get_cgroup_entry(c, retv, inlen, "all");
+	else if (strncmp(key, "lxc.cgroup.", 11) == 0) // specific cgroup info
+		return lxc_get_cgroup_entry(c, retv, inlen, key + 11);
+	else if (strcmp(key, "lxc.utsname") == 0)
+		v = c->utsname ? c->utsname->nodename : NULL;
+	else if (strcmp(key, "lxc.console") == 0)
+		v = c->console.path;
+	else if (strcmp(key, "lxc.rootfs.mount") == 0)
+		v = c->rootfs.mount;
+	else if (strcmp(key, "lxc.rootfs") == 0)
+		v = c->rootfs.path;
+	else if (strcmp(key, "lxc.pivotdir") == 0)
+		v = c->rootfs.pivot;
+	else if (strcmp(key, "lxc.cap.drop") == 0)
+		return lxc_get_item_cap_drop(c, retv, inlen);
+	else if (strncmp(key, "lxc.hook", 8) == 0)
+		return lxc_get_item_hooks(c, retv, inlen, key);
+	else if (strcmp(key, "lxc.network") == 0)
+		return lxc_get_item_network(c, retv, inlen);
+	else if (strncmp(key, "lxc.network.", 12) == 0)
+		return lxc_get_item_nic(c, retv, inlen, key + 12);
+	else return -1;
+
+	if (!v)
+		return 0;
+	if (retv && inlen >= strlen(v) + 1)
+		strncpy(retv, v, strlen(v)+1);
+	return strlen(v);
+}
+
+int lxc_clear_config_item(struct lxc_conf *c, const char *key)
+{
+	if (strcmp(key, "lxc.network") == 0)
+		return lxc_clear_config_network(c);
+	else if (strncmp(key, "lxc.network.", 12) == 0)
+		return lxc_clear_nic(c, key + 12);
+	else if (strcmp(key, "lxc.cap.drop") == 0)
+		return lxc_clear_config_caps(c);
+	else if (strncmp(key, "lxc.cgroup", 10) == 0)
+		return lxc_clear_cgroups(c, key);
+	else if (strcmp(key, "lxc.mount.entries") == 0)
+		return lxc_clear_mount_entries(c);
+	else if (strncmp(key, "lxc.hook", 8) == 0)
+		return lxc_clear_hooks(c, key);
+
+	return -1;
+}
+
+/*
+ * writing out a confile.
+ */
+void write_config(FILE *fout, struct lxc_conf *c)
+{
+	struct lxc_list *it;
+	int i;
+
+	if (c->fstab)
+		fprintf(fout, "lxc.mount = %s\n", c->fstab);
+	lxc_list_for_each(it, &c->mount_list) {
+		fprintf(fout, "lxc.mount.entry = %s\n", (char *)it->elem);
+	}
+	if (c->tty)
+		fprintf(fout, "lxc.tty = %d\n", c->tty);
+	if (c->pts)
+		fprintf(fout, "lxc.pts = %d\n", c->pts);
+	if (c->ttydir)
+		fprintf(fout, "lxc.devttydir = %s\n", c->ttydir);
+	#if HAVE_SYS_PERSONALITY_H
+	switch(c->personality) {
+	case PER_LINUX32: fprintf(fout, "lxc.arch = x86\n"); break;
+	case PER_LINUX: fprintf(fout, "lxc.arch = x86_64\n"); break;
+	default: break;
+	}
+	#endif
+#if HAVE_APPARMOR
+	if (c->aa_profile)
+		fprintf(fout, "lxc.aa_profile = %s\n", c->aa_profile);
+#endif
+	if (lxc_log_get_level() != LXC_LOG_PRIORITY_NOTSET)
+		fprintf(fout, "lxc.loglevel = %s\n", lxc_log_priority_to_string(lxc_log_get_level()));
+	if (lxc_log_get_file())
+		fprintf(fout, "lxc.logfile = %s\n", lxc_log_get_file());
+	lxc_list_for_each(it, &c->cgroup) {
+		struct lxc_cgroup *cg = it->elem;
+		fprintf(fout, "lxc.cgroup.%s = %s\n", cg->subsystem, cg->value);
+	}
+	if (c->utsname)
+		fprintf(fout, "lxc.utsname = %s\n", c->utsname->nodename);
+	lxc_list_for_each(it, &c->network) {
+		struct lxc_netdev *n = it->elem;
+		const char *t = lxc_net_type_to_str(n->type);
+		struct lxc_list *it2;
+		fprintf(fout, "lxc.network.type = %s\n", t ? t : "(invalid)");
+		if (n->flags & IFF_UP)
+			fprintf(fout, "lxc.network.flags = up\n");
+		if (n->link)
+			fprintf(fout, "lxc.network.link = %s\n", n->link);
+		if (n->name)
+			fprintf(fout, "lxc.network.name = %s\n", n->name);
+		if (n->type == LXC_NET_MACVLAN) {
+			const char *mode;
+			switch (n->priv.macvlan_attr.mode) {
+			case MACVLAN_MODE_PRIVATE: mode = "private"; break;
+			case MACVLAN_MODE_VEPA: mode = "vepa"; break;
+			case MACVLAN_MODE_BRIDGE: mode = "bridge"; break;
+			default: mode = "(invalid)"; break;
+			}
+			fprintf(fout, "lxc.network.macvlan.mode = %s\n", mode);
+		} else if (n->type == LXC_NET_VETH) {
+			if (n->priv.veth_attr.pair)
+				fprintf(fout, "lxc.network.veth.pair = %s\n",
+					n->priv.veth_attr.pair);
+		} else if (n->type == LXC_NET_VLAN) {
+			fprintf(fout, "lxc.network.vlan.id = %d\n", n->priv.vlan_attr.vid);
+		}
+		if (n->upscript)
+			fprintf(fout, "lxc.network.script.up = %s\n", n->upscript);
+		if (n->hwaddr)
+			fprintf(fout, "lxc.network.hwaddr = %s\n", n->hwaddr);
+		if (n->mtu)
+			fprintf(fout, "lxc.network.mtu = %s\n", n->mtu);
+		if (n->ipv4_gateway_auto)
+			fprintf(fout, "lxc.network.ipv4.gateway = auto\n");
+		else if (n->ipv4_gateway) {
+			char buf[INET_ADDRSTRLEN];
+			inet_ntop(AF_INET, n->ipv4_gateway, buf, sizeof(buf));
+			fprintf(fout, "lxc.network.ipv4.gateway = %s\n", buf);
+		}
+		lxc_list_for_each(it2, &n->ipv4) {
+			struct lxc_inetdev *i = it2->elem;
+			char buf[INET_ADDRSTRLEN];
+			inet_ntop(AF_INET, &i->addr, buf, sizeof(buf));
+			fprintf(fout, "lxc.network.ipv4 = %s\n", buf);
+		}
+		if (n->ipv6_gateway_auto)
+			fprintf(fout, "lxc.network.ipv6.gateway = auto\n");
+		else if (n->ipv6_gateway) {
+			char buf[INET6_ADDRSTRLEN];
+			inet_ntop(AF_INET6, n->ipv6_gateway, buf, sizeof(buf));
+			fprintf(fout, "lxc.network.ipv6.gateway = %s\n", buf);
+		}
+		lxc_list_for_each(it2, &n->ipv6) {
+			struct lxc_inet6dev *i = it2->elem;
+			char buf[INET6_ADDRSTRLEN];
+			inet_ntop(AF_INET, &i->addr, buf, sizeof(buf));
+			fprintf(fout, "lxc.network.ipv6 = %s\n", buf);
+		}
+	}
+	lxc_list_for_each(it, &c->caps)
+		fprintf(fout, "lxc.cap.drop = %s\n", (char *)it->elem);
+	for (i=0; i<NUM_LXC_HOOKS; i++) {
+		lxc_list_for_each(it, &c->hooks[i])
+			fprintf(fout, "lxc.hook.%s = %s\n",
+				lxchook_names[i], (char *)it->elem);
+	}
+	if (c->console.path)
+		fprintf(fout, "lxc.console = %s\n", c->console.path);
+	if (c->rootfs.path)
+		fprintf(fout, "lxc.rootfs = %s\n", c->rootfs.path);
+	if (c->rootfs.mount && strcmp(c->rootfs.mount, LXCROOTFSMOUNT) != 0)
+		fprintf(fout, "lxc.rootfs.mount = %s\n", c->rootfs.mount);
+	if (c->rootfs.pivot)
+		fprintf(fout, "lxc.pivotdir = %s\n", c->rootfs.pivot);
 }

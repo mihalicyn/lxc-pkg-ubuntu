@@ -27,7 +27,7 @@ set -e
 
 c=$1
 d=/sys/fs/cgroup
-d2=/usr/lib/x86_64-linux-gnu/lxc/${d}
+d2=$LXC_ROOTFS_MOUNT/${d}
 if [ ! -d "$d" ]; then
     exit 0
 fi

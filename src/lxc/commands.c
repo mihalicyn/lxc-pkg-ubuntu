@@ -30,10 +30,13 @@
 #include <sys/un.h>
 #include <sys/poll.h>
 #include <sys/param.h>
+#include <malloc.h>
+#include <stdlib.h>
 
 #include <lxc/log.h>
 #include <lxc/conf.h>
 #include <lxc/start.h>	/* for struct lxc_handler */
+#include <lxc/utils.h>
 
 #include "commands.h"
 #include "mainloop.h"
@@ -56,7 +59,29 @@
 
 lxc_log_define(lxc_commands, lxc);
 
-#define abstractname LXCPATH "/%s/command"
+static int fill_sock_name(char *path, int len, const char *name,
+			  const char *inpath)
+{
+	char *lxcpath = NULL;
+	int ret;
+
+	if (!inpath) {
+		lxcpath = default_lxc_path();
+		if (!lxcpath) {
+			ERROR("Out of memory getting lxcpath");
+			return -1;
+		}
+	}
+	ret = snprintf(path, len, "%s/%s/command", lxcpath ? lxcpath : inpath, name);
+	if (lxcpath)
+		free(lxcpath);
+
+	if (ret < 0 || ret >= len) {
+		ERROR("Name too long");
+		return -1;
+	}
+	return 0;
+}
 
 static int receive_answer(int sock, struct lxc_answer *answer)
 {
@@ -70,13 +95,16 @@ static int receive_answer(int sock, struct lxc_answer *answer)
 }
 
 static int __lxc_command(const char *name, struct lxc_command *command,
-			 int *stopped, int stay_connected)
+			 int *stopped, int stay_connected, const char *lxcpath)
 {
 	int sock, ret = -1;
 	char path[sizeof(((struct sockaddr_un *)0)->sun_path)] = { 0 };
 	char *offset = &path[1];
+	int len;
 
-	sprintf(offset, abstractname, name);
+	len = sizeof(path)-1;
+	if (fill_sock_name(offset, len, name, lxcpath))
+		return -1;
 
 	sock = lxc_af_unix_connect(path);
 	if (sock < 0 && errno == ECONNREFUSED) {
@@ -110,19 +138,21 @@ out:
 }
 
 extern int lxc_command(const char *name,
-		       struct lxc_command *command, int *stopped)
+		       struct lxc_command *command, int *stopped,
+		       const char *lxcpath)
 {
-	return __lxc_command(name, command, stopped, 0);
+	return __lxc_command(name, command, stopped, 0, lxcpath);
 }
 
 extern int lxc_command_connected(const char *name,
-				 struct lxc_command *command, int *stopped)
+				 struct lxc_command *command, int *stopped,
+				 const char *lxcpath)
 {
-	return __lxc_command(name, command, stopped, 1);
+	return __lxc_command(name, command, stopped, 1, lxcpath);
 }
 
 
-pid_t get_init_pid(const char *name)
+pid_t get_init_pid(const char *name, const char *lxcpath)
 {
 	struct lxc_command command = {
 		.request = { .type = LXC_COMMAND_PID },
@@ -130,7 +160,7 @@ pid_t get_init_pid(const char *name)
 
 	int ret, stopped = 0;
 
-	ret = lxc_command(name, &command, &stopped);
+	ret = lxc_command(name, &command, &stopped, lxcpath);
 	if (ret < 0 && stopped)
 		return -1;
 
@@ -148,11 +178,32 @@ pid_t get_init_pid(const char *name)
 	return command.answer.pid;
 }
 
+int lxc_get_clone_flags(const char *name, const char *lxcpath)
+{
+	struct lxc_command command = {
+		.request = { .type = LXC_COMMAND_CLONE_FLAGS },
+	};
+
+	int ret, stopped = 0;
+
+	ret = lxc_command(name, &command, &stopped, lxcpath);
+	if (ret < 0 && stopped)
+		return -1;
+
+	if (ret < 0) {
+		ERROR("failed to send command");
+		return -1;
+	}
+
+	return command.answer.ret;
+}
+
 extern void lxc_console_remove_fd(int, struct lxc_tty_info *);
 extern int  lxc_console_callback(int, struct lxc_request *, struct lxc_handler *);
 extern int  lxc_stop_callback(int, struct lxc_request *, struct lxc_handler *);
 extern int  lxc_state_callback(int, struct lxc_request *, struct lxc_handler *);
 extern int  lxc_pid_callback(int, struct lxc_request *, struct lxc_handler *);
+extern int  lxc_clone_flags_callback(int, struct lxc_request *, struct lxc_handler *);
 
 static int trigger_command(int fd, struct lxc_request *request,
 			   struct lxc_handler *handler)
@@ -160,10 +211,11 @@ static int trigger_command(int fd, struct lxc_request *request,
 	typedef int (*callback)(int, struct lxc_request *, struct lxc_handler *);
 
 	callback cb[LXC_COMMAND_MAX] = {
-		[LXC_COMMAND_TTY]   = lxc_console_callback,
-		[LXC_COMMAND_STOP]  = lxc_stop_callback,
-		[LXC_COMMAND_STATE] = lxc_state_callback,
-		[LXC_COMMAND_PID]   = lxc_pid_callback,
+		[LXC_COMMAND_TTY]         = lxc_console_callback,
+		[LXC_COMMAND_STOP]        = lxc_stop_callback,
+		[LXC_COMMAND_STATE]       = lxc_state_callback,
+		[LXC_COMMAND_PID]         = lxc_pid_callback,
+		[LXC_COMMAND_CLONE_FLAGS] = lxc_clone_flags_callback,
 	};
 
 	if (request->type < 0 || request->type >= LXC_COMMAND_MAX)
@@ -259,15 +311,17 @@ out_close:
 	goto out;
 }
 
-extern int lxc_command_mainloop_add(const char *name,
-				    struct lxc_epoll_descr *descr,
-				    struct lxc_handler *handler)
+extern int lxc_command_init(const char *name, struct lxc_handler *handler,
+			    const char *lxcpath)
 {
-	int ret, fd;
+	int fd;
 	char path[sizeof(((struct sockaddr_un *)0)->sun_path)] = { 0 };
 	char *offset = &path[1];
+	int len;
 
-	sprintf(offset, abstractname, name);
+	len = sizeof(path)-1;
+	if (fill_sock_name(offset, len, name, lxcpath))
+		return -1;
 
 	fd = lxc_af_unix_open(path, SOCK_STREAM, 0);
 	if (fd < 0) {
@@ -285,6 +339,16 @@ extern int lxc_command_mainloop_add(const char *name,
 		close(fd);
 		return -1;
 	}
+
+	handler->conf->maincmd_fd = fd;
+	return 0;
+}
+
+extern int lxc_command_mainloop_add(const char *name,
+				    struct lxc_epoll_descr *descr,
+				    struct lxc_handler *handler)
+{
+	int ret, fd = handler->conf->maincmd_fd;
 
 	ret = lxc_mainloop_add_handler(descr, fd, incoming_command_handler,
 				       handler);

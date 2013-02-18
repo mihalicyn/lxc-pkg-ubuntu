@@ -61,7 +61,7 @@ extern int lxc_netdev_set_mtu(const char *name, int mtu);
  */
 extern int lxc_veth_create(const char *name1, const char *name2);
 extern int lxc_macvlan_create(const char *master, const char *name, int mode);
-extern int lxc_vlan_create(const char *master, const char *name, ushort vid);
+extern int lxc_vlan_create(const char *master, const char *name, unsigned short vid);
 
 /*
  * Activate forwarding
@@ -100,7 +100,7 @@ extern int lxc_ipv6_gateway_add(int ifindex, struct in6_addr *gw);
  */
 extern int lxc_bridge_attach(const char *bridge, const char *ifname);
 
-/* 
+/*
  * Create default gateway
  */
 extern int lxc_route_create_default(const char *addr, const char *ifname,
@@ -122,4 +122,5 @@ extern int lxc_neigh_proxy_on(const char *name, int family);
  */
 extern int lxc_neigh_proxy_off(const char *name, int family);
 
+extern const char *lxc_net_type_to_str(int type);
 #endif

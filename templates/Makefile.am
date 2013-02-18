@@ -7,7 +7,9 @@ templates_SCRIPTS = \
 	lxc-ubuntu-cloud \
 	lxc-opensuse \
 	lxc-fedora \
+	lxc-oracle \
 	lxc-altlinux \
 	lxc-busybox \
 	lxc-sshd \
-	lxc-archlinux
+	lxc-archlinux \
+	lxc-alpine

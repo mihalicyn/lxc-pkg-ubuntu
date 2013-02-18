@@ -34,12 +34,14 @@
 
 static bool state;
 static bool pid;
+static char *test_state = NULL;
 
 static int my_parser(struct lxc_arguments* args, int c, char* arg)
 {
 	switch (c) {
 	case 's': state = true; break;
 	case 'p': pid = true; break;
+	case 't': test_state = arg; break;
 	}
 	return 0;
 }
@@ -47,6 +49,7 @@ static int my_parser(struct lxc_arguments* args, int c, char* arg)
 static const struct option my_longopts[] = {
 	{"state", no_argument, 0, 's'},
 	{"pid", no_argument, 0, 'p'},
+	{"state-is", required_argument, 0, 't'},
 	LXC_COMMON_OPTIONS,
 };
 
@@ -58,9 +61,11 @@ static struct lxc_arguments my_args = {
 lxc-info display some information about a container with the identifier NAME\n\
 \n\
 Options :\n\
-  -n, --name=NAME   NAME for name of the container\n\
-  -s, --state       shows the state of the container\n\
-  -p, --pid         shows the process id of the init container\n",
+  -n, --name=NAME       NAME for name of the container\n\
+  -s, --state           shows the state of the container\n\
+  -p, --pid             shows the process id of the init container\n\
+  -t, --state-is=STATE  test if current state is STATE\n\
+                        returns success if it matches, false otherwise\n",
 	.options  = my_longopts,
 	.parser   = my_parser,
 	.checker  = NULL,
@@ -69,28 +74,32 @@ Options :\n\
 int main(int argc, char *argv[])
 {
 	int ret;
+	/* TODO: add lxcpath cmdline arg */
+	const char *lxcpath = NULL;
 
 	ret = lxc_arguments_parse(&my_args, argc, argv);
 	if (ret)
 		return 1;
 
-	if (lxc_log_init(my_args.log_file, my_args.log_priority,
+	if (lxc_log_init(my_args.name, my_args.log_file, my_args.log_priority,
 			 my_args.progname, my_args.quiet))
 		return 1;
 
 	if (!state && !pid)
 		state = pid = true;
 
-	if (state) {
-		ret = lxc_getstate(my_args.name);
+	if (state || test_state) {
+		ret = lxc_getstate(my_args.name, lxcpath);
 		if (ret < 0)
 			return 1;
+		if (test_state)
+			return strcmp(lxc_state2str(ret), test_state) != 0;
 
 		printf("state:%10s\n", lxc_state2str(ret));
 	}
 
 	if (pid)
-		printf("pid:%10d\n", get_init_pid(my_args.name));
+		printf("pid:%10d\n", get_init_pid(my_args.name, lxcpath));
 
 	return 0;
 }

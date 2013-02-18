@@ -21,12 +21,23 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
+#include <stdio.h>
+
 #ifndef _confile_h
 #define _confile_h
 
 struct lxc_conf;
 struct lxc_list;
 
+typedef int (*config_cb)(const char *, const char *, struct lxc_conf *);
+struct lxc_config_t {
+	char *name;
+	config_cb cb;
+};
+
+extern struct lxc_config_t *lxc_getconfig(const char *key);
+extern int lxc_list_nicconfigs(struct lxc_conf *c, const char *key, char *retv, int inlen);
+extern int lxc_listconfigs(char *retv, int inlen);
 extern int lxc_config_read(const char *file, struct lxc_conf *conf);
 extern int lxc_config_readline(char *buffer, struct lxc_conf *conf);
 
@@ -37,4 +48,7 @@ extern int lxc_config_define_load(struct lxc_list *defines,
 /* needed for lxc-attach */
 extern signed long lxc_config_parse_arch(const char *arch);
 
+extern int lxc_get_config_item(struct lxc_conf *c, const char *key, char *retv, int inlen);
+extern int lxc_clear_config_item(struct lxc_conf *c, const char *key);
+extern void write_config(FILE *fout, struct lxc_conf *c);
 #endif
