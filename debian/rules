@@ -14,8 +14,7 @@ override_dh_auto_configure:
 		--libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
 		--with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc \
 		--enable-python $(shell DEB_CFLAGS_MAINT_APPEND="$$(python3-config --includes)" dpkg-buildflags --export=configure) \
-		--enable-doc --disable-rpath --enable-seccomp \
-		--enable-apparmor --with-distro=ubuntu
+		--enable-doc --disable-rpath --enable-apparmor --with-distro=ubuntu
 
 override_dh_install:
 	# copy apparmor profiles

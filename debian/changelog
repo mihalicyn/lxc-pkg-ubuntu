@@ -1,3 +1,10 @@
+lxc (0.9.0~alpha3-0ubuntu2) raring; urgency=low
+
+  * Remove hardcoded --enable-seccomp from debian/rules as seccomp isn't
+    present on armhf and powerpc, leading to FTBFS on those two architectures.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 18 Feb 2013 19:01:38 -0500
+
 lxc (0.9.0~alpha3-0ubuntu1) raring; urgency=low
 
   * New upstream release (0.9.0~alpha3)
