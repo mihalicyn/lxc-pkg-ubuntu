@@ -5,8 +5,10 @@ Author: Stéphane Graber <stgraber@ubuntu.com>
 Origin: vendor
 Forwarded: not-needed
 
---- lxc-0.9.0~alpha3.orig/src/lxc/lxc-shutdown.in
-+++ lxc-0.9.0~alpha3/src/lxc/lxc-shutdown.in
+Index: lxc/src/lxc/lxc-shutdown.in
+===================================================================
+--- lxc.orig/src/lxc/lxc-shutdown.in	2013-03-11 10:14:10.685355032 -0500
++++ lxc/src/lxc/lxc-shutdown.in	2013-03-11 10:14:10.681355032 -0500
 @@ -18,6 +18,12 @@
  
  set -e

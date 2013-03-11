@@ -1,3 +1,11 @@
+lxc (0.9.0~alpha3-0ubuntu3) raring; urgency=low
+
+  * 0001-fix-race-with-fast-init: Before starting lxc_mainloop, check whether
+    lxc-init has already exited.  If it has, return immediately to reap it.
+    (LP: #1134923) (LP: #1144873)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 11 Mar 2013 10:14:39 -0500
+
 lxc (0.9.0~alpha3-0ubuntu2) raring; urgency=low
 
   * Remove hardcoded --enable-seccomp from debian/rules as seccomp isn't

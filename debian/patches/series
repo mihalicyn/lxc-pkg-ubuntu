@@ -1,3 +1,4 @@
 transition/00-redirect-lxc-halt.patch
 transition/01-redirect-lxc-list.patch
 0000-add-autostart.patch
+0001-fix-race-with-fast-init
