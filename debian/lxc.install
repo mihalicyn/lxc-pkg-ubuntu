@@ -4,6 +4,7 @@ usr/lib/*/lxc/lxc-*
 usr/share/doc
 usr/share/man
 usr/share/lxc/lxc.functions
+usr/share/lxc/hooks
 var/cache/lxc
 var/lib/lxc
 

@@ -1,3 +1,54 @@
+lxc (0.9.0~rc1-0ubuntu1) raring; urgency=low
+
+  * New upstream release (0.9.0~rc1)
+    - New features
+      * alpine: template now supports bridges auto-detect and setting hwaddr
+      * archlinux: update template to use lxc.stopsignal and lxc.kmsg
+      * core: Add example hooks from Ubuntu package
+      * core: Add --lxcpath (-P) option to all the tools
+      * core: attach: now also changes the apparmor profile
+      * core: attach: try to detect the user shell when attaching
+      * core: config: add lxc.kmsg (defaults to old enabled behaviour)
+      * core: config: add lxc.stopsignal (defaults to old SIGKILL behaviour)
+      * core: lxc-ls: Implement support for nested containers
+      * core: New exported API function, get_version
+      * lenny: Remove deprecated template
+      * lxc-ps: New '--host' option
+      * opensuse: update template to support 12.2 and 12.3
+    - Bugfixes
+      * core: Add missing config.h includes.
+      * core: af_unix: make sure to keep useful errno
+      * core: attach: fixed lxc-attach to deal with user namespaces
+      * core: attach: free result before potentially strduping a second time.
+      * core: c api -> createl: correctly handle 0 template args
+      * core: commands.c: sanity check to not write too-long cgroup path name
+      * core: ensure clock_gettime symbol is found
+      * core: Fix typos identified by lintian
+      * core: fix writing multiple uidmap ranges
+      * core: give a hint if old cgroup can't be moved
+      * core: improved README
+      * core: lxc_id_mapping: don't try to write mappings if there are none
+      * core: make [ug]id map ordering consistent with /proc/<nr>/[ug]id_map
+      * core: only INFO rcfile if asprintf successfully allocates it
+      * core: Remove redundant clearenv call
+      * core: Replace deprecated AM_CONFIG_HEADER
+      * core: rootfs pin: fix two bugs
+      * core: try to set clone_children when setting up cgroups
+      * core: Use AC_SEARCH_LIBS instead of hardcoded lists
+      * core: userns: handle delayed write errors at fclose
+      * legacy: only output appropriate directories/containers in lxc-ls
+      * lxc-ubuntu{-cloud}: Config layout tweaking
+      * opensuse: fix template to better work with lxc-clone, support shutdown,
+      * oracle: template fixes for older releases
+      * python: Drop use of hardcoded @LXCPATH@
+      * rpm: include hook files and tests in make dist
+        various code improvements
+  * Remove example hooks from packaging as they have now been upstreamed.
+  * Update apparmor profile to allow for lxc-create to work for nested
+    precise containers.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Tue, 19 Mar 2013 11:32:44 -0400
+
 lxc (0.9.0~alpha3-0ubuntu3) raring; urgency=low
 
   * 0001-fix-race-with-fast-init: Before starting lxc_mainloop, check whether

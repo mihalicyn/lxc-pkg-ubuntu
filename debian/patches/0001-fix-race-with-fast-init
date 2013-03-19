@@ -35,11 +35,11 @@ Signed-off-by: Serge Hallyn <serge.hallyn@ubuntu.com>
  src/lxc/start.c | 34 +++++++++++++++++++++++++++++++++-
  1 file changed, 33 insertions(+), 1 deletion(-)
 
-Index: lxc/src/lxc/start.c
+Index: raring-lxc/src/lxc/start.c
 ===================================================================
---- lxc.orig/src/lxc/start.c	2013-03-11 10:16:40.065352503 -0500
-+++ lxc/src/lxc/start.c	2013-03-11 10:16:40.061352503 -0500
-@@ -220,6 +220,28 @@ static int setup_signal_fd(sigset_t *old
+--- raring-lxc.orig/src/lxc/start.c	2013-03-19 10:35:56.157404566 -0400
++++ raring-lxc/src/lxc/start.c	2013-03-19 10:35:56.153404566 -0400
+@@ -220,6 +220,28 @@
  	return fd;
  }
  
@@ -68,7 +68,7 @@ Index: lxc/src/lxc/start.c
  static int signal_handler(int fd, void *data,
  			   struct lxc_epoll_descr *descr)
  {
-@@ -320,6 +342,7 @@ int lxc_poll(const char *name, struct lx
+@@ -358,6 +380,7 @@
  	int sigfd = handler->sigfd;
  	int pid = handler->pid;
  	struct lxc_epoll_descr descr;
@@ -76,7 +76,7 @@ Index: lxc/src/lxc/start.c
  
  	if (lxc_mainloop_open(&descr)) {
  		ERROR("failed to create mainloop");
-@@ -352,13 +375,22 @@ int lxc_poll(const char *name, struct lx
+@@ -390,13 +413,22 @@
  		#endif
  	}
  
