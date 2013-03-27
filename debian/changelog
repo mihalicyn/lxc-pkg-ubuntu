@@ -1,3 +1,10 @@
+lxc (0.9.0~rc1-0ubuntu3) raring; urgency=low
+
+  * Add code to postinst to fix any double-migration of /etc/dnsmasq.
+    (LP: #1157332)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Wed, 27 Mar 2013 16:51:11 -0400
+
 lxc (0.9.0~rc1-0ubuntu2) raring; urgency=low
 
   * Fix python3-lxc on armhf (LP: #1159817).
