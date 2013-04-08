@@ -1,3 +1,38 @@
+lxc (0.9.0-0ubuntu1) raring; urgency=low
+
+  * New upstream release (0.9.0) (LP: #1166286)
+    - New features
+        (fixing a regression for 0.8/0.9alpha who relied on --keep-env)
+      + lxc-attach: Add --clear-env and --keep-env to lxc-attach
+      + lxc-clone: Support 'permanent ephemeral' containers
+      + lxc-start-ephemeral: Implement -n to match manpage
+    - Bugfix
+      + automake: Fix 'make clean'
+      + automake: Fix missing files with "make dist"
+      + core: API shouldn't be calling create for already defined containers or
+        destroy for non defined ones
+      + core: Build fixes for ia64
+      + core: Make lxc.functions return the default lxcpath if
+        /etc/lxc/lxc.conf doesn't provide one
+      + core: Properly cleanup network devices if pinning root filesystem
+        din't work
+      + core: rcfile shouldn't be recorded in lxc_conf if the attempt to load a
+        config file fails
+      + core: Set all mounts to MS_SLAVE when starting a container without
+        a rootfs
+      + core: Use $localstatedir/log/lxc for default log path
+      + git: Updated gitignore (for lxc-ls)
+      + lxc-attach: Set container=lxc in the environment
+      + lxc-create: require absolute path for non-standard templates
+      + lxc-shutdown  Make all processes exit before timeout if shutdown works
+      + lxc-shutdown: Properly handle timeout case
+      + manpage: Fixed typo in the main LXC manpage
+      + python: Fix runtime failure on armhf
+      + ubuntu template: Tweak architecture support (to match what's supported)
+  * Removed 0002-fix-armhf-python-failure, merged upstream.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 08 Apr 2013 12:19:32 -0400
+
 lxc (0.9.0~rc1-0ubuntu3) raring; urgency=low
 
   * Add code to postinst to fix any double-migration of /etc/dnsmasq.
