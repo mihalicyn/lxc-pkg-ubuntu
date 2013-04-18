@@ -1,3 +1,11 @@
+lxc (0.9.0-0ubuntu3) raring; urgency=low
+
+  * 0003-python-module-fixes: Cherry pick python module bugfixes from upstream.
+  * Update deprecation warning for lxc-halt and lxc-list, moving the
+    deprecation from 0.9 to 1.0.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Thu, 18 Apr 2013 22:29:39 +0200
+
 lxc (0.9.0-0ubuntu2) raring; urgency=low
 
   * 0002-lxc-functions-safe-in-dash: stop lxc-clone from silently failing.

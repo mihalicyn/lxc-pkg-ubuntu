@@ -1,5 +1,5 @@
 Description: Redirection for lxc-list
- lxc-list will be deprecated in final 0.9, this patch adds a warning when
+ lxc-list will be deprecated in 1.0, this patch adds a warning when
  lxc-ls is called as lxc-list (through the temporary symlink) and changes
  the default rendering to list similar options.
 Author: Stéphane Graber <stgraber@ubuntu.com>
@@ -18,7 +18,7 @@ Index: raring-lxc/src/lxc/lxc-ls
 +if sys.argv[0].endswith("lxc-list"):
 +    args.fancy = True
 +    print("WARNING: lxc-list is deprecated, please use lxc-ls --fancy.")
-+    print("         This symlink will be dropped in LXC 0.9 final.")
++    print("         This symlink will be dropped in LXC 1.0.")
 +    print("")
 +
  # --active is the same as --running --frozen

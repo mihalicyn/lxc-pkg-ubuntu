@@ -1,5 +1,5 @@
 Description: Redirection for lxc-halt
- lxc-halt will be deprecated in final 0.9, this patch adds a warning when
+ lxc-halt will be deprecated in 1.0, this patch adds a warning when
  lxc-shutdown is called as lxc-halt (through the temporary symlink).
 Author: Stéphane Graber <stgraber@ubuntu.com>
 Origin: vendor
@@ -15,7 +15,7 @@ Index: lxc/src/lxc/lxc-shutdown.in
  
 +if echo "$0" | grep -q "lxc-halt$"; then
 +    echo "WARNING: lxc-halt is deprecated, please use lxc-shutdown."
-+    echo "         This symlink will be dropped in LXC 0.9 final."
++    echo "         This symlink will be dropped in LXC 1.0."
 +    echo ""
 +fi
 +
