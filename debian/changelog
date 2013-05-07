@@ -1,3 +1,14 @@
+lxc (0.9.0-0ubuntu4) saucy; urgency=low
+
+  * Fix lxc-list crashing when passed --nesting with nested containers.
+    (LP: #1177408)
+  * Fix lxc-ls to show nested containers when using alternate lxcpath.
+    (LP: #1177412)
+  * Fix python3 API bug leading to parameter corruption in create and start.
+    (LP: #1177400)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Tue, 07 May 2013 10:48:40 -0400
+
 lxc (0.9.0-0ubuntu3) raring; urgency=low
 
   * 0003-python-module-fixes: Cherry pick python module bugfixes from upstream.

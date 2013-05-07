@@ -13,10 +13,10 @@ Author: Stéphane Graber <stgraber@ubuntu.com>
 Origin: upstream
 Forwarded: not-needed
 
-Index: raring-lxc/src/lxc/lxc-start-ephemeral.in
+Index: saucy-lxc/src/lxc/lxc-start-ephemeral.in
 ===================================================================
---- raring-lxc.orig/src/lxc/lxc-start-ephemeral.in	2013-04-18 22:26:44.219658989 +0200
-+++ raring-lxc/src/lxc/lxc-start-ephemeral.in	2013-04-18 22:26:44.211658989 +0200
+--- saucy-lxc.orig/src/lxc/lxc-start-ephemeral.in	2013-04-18 16:28:01.000000000 -0400
++++ saucy-lxc/src/lxc/lxc-start-ephemeral.in	2013-04-21 14:23:21.000000000 -0400
 @@ -134,7 +134,9 @@
  dest.load_config(orig.config_file_name)
  dest.set_config_item("lxc.utsname", dest.name)
@@ -37,10 +37,10 @@ Index: raring-lxc/src/lxc/lxc-start-ephemeral.in
  
  for ip in ips:
      ssh_cmd = cmd + [ip] + args.command
-Index: raring-lxc/src/python-lxc/lxc.c
+Index: saucy-lxc/src/python-lxc/lxc.c
 ===================================================================
---- raring-lxc.orig/src/python-lxc/lxc.c	2013-04-18 22:26:44.219658989 +0200
-+++ raring-lxc/src/python-lxc/lxc.c	2013-04-18 22:26:44.211658989 +0200
+--- saucy-lxc.orig/src/python-lxc/lxc.c	2013-04-18 16:28:01.000000000 -0400
++++ saucy-lxc/src/python-lxc/lxc.c	2013-04-24 12:47:35.000000000 -0400
 @@ -1,7 +1,7 @@
  /*
   * python-lxc: Python bindings for LXC
@@ -50,13 +50,14 @@ Index: raring-lxc/src/python-lxc/lxc.c
   *
   * Authors:
   * Stéphane Graber <stgraber@ubuntu.com>
-@@ -34,24 +34,40 @@
+@@ -34,34 +34,77 @@
  
  char**
  convert_tuple_to_char_pointer_array(PyObject *argv) {
 -    int argc = PyTuple_Size(argv);
+-    int i;
 +    int argc = PyTuple_GET_SIZE(argv);
-     int i;
++    int i, j;
  
      char **result = (char**) malloc(sizeof(char*)*argc + 1);
  
@@ -73,28 +74,60 @@ Index: raring-lxc/src/python-lxc/lxc.c
          char *str = NULL;
 -        PyObject *pystr;
 +        PyObject *pystr = NULL;
++
          if (!PyUnicode_Check(pyobj)) {
              PyErr_SetString(PyExc_ValueError, "Expected a string");
-+            free(result);
-             return NULL;
+-            return NULL;
++            goto error;
          }
  
          pystr = PyUnicode_AsUTF8String(pyobj);
-+        if (pystr == NULL) {
-+            PyErr_SetString(PyExc_ValueError, "Unable to convert to UTF-8");
-+            free(result);
-+            return NULL;
++        if (!pystr) {
++            /* Maybe it wasn't UTF-8 encoded.  An exception is already set. */
++            goto error;
 +        }
 +
          str = PyBytes_AsString(pystr);
-+        assert(str != NULL);
+-        memcpy((char *) &result[i], (char *) &str, sizeof(str));
++        if (!str) {
++            /* Maybe pystr wasn't a valid object. An exception is already set.
++             */
++            Py_DECREF(pystr);
++            goto error;
++        }
 +
-         memcpy((char *) &result[i], (char *) &str, sizeof(str));
++        /* We must make a copy of str, because it points into internal memory
++         * which we do not own.  Assume it's NULL terminated, otherwise we'd
++         * have to use PyUnicode_AsUTF8AndSize() and be explicit about copying
++         * the memory.
++         */
++        result[i] = strdup(str);
++
++        /* Do not decref pyobj since we stole a reference by using
++         * PyTuple_GET_ITEM().
++         */
 +        Py_DECREF(pystr);
++        if (result[i] == NULL) {
++            PyErr_SetNone(PyExc_MemoryError);
++            goto error;
++        }
      }
  
      result[argc] = NULL;
-@@ -62,6 +78,7 @@
+-
+     return result;
++
++error:
++    /* We can only iterate up to but not including i because malloc() does not
++     * initialize its memory.  Thus if we got here, i points to the index
++     * after the last strdup'd entry in result.
++     */
++    for (j = 0; j < i; j++)
++        free(result[j]);
++    free(result);
++    return NULL;
+ }
+ 
  static void
  Container_dealloc(Container* self)
  {
@@ -102,7 +135,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
      Py_TYPE(self)->tp_free((PyObject*)self);
  }
  
-@@ -80,18 +97,27 @@
+@@ -80,18 +123,27 @@
  {
      static char *kwlist[] = {"name", "config_path", NULL};
      char *name = NULL;
@@ -133,7 +166,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
      return 0;
  }
  
-@@ -109,13 +135,14 @@
+@@ -109,13 +161,14 @@
  
  // Container properties
  static PyObject *
@@ -151,7 +184,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  {
      if (self->container->is_defined(self->container)) {
          Py_RETURN_TRUE;
-@@ -125,19 +152,19 @@
+@@ -125,19 +178,19 @@
  }
  
  static PyObject *
@@ -175,7 +208,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  {
      if (self->container->is_running(self->container)) {
          Py_RETURN_TRUE;
-@@ -147,7 +174,7 @@
+@@ -147,7 +200,7 @@
  }
  
  static PyObject *
@@ -184,7 +217,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  {
      return PyUnicode_FromString(self->container->state(self->container));
  }
-@@ -159,9 +186,9 @@
+@@ -159,9 +212,9 @@
      static char *kwlist[] = {"key", NULL};
      char *key = NULL;
  
@@ -196,12 +229,13 @@ Index: raring-lxc/src/python-lxc/lxc.c
  
      if (self->container->clear_config_item(self->container, key)) {
          Py_RETURN_TRUE;
-@@ -175,25 +202,40 @@
+@@ -175,25 +228,43 @@
  {
      char* template_name = NULL;
      char** create_args = {NULL};
 -    PyObject *vargs = NULL;
 +    PyObject *retval = NULL, *vargs = NULL;
++    int i = 0;
      static char *kwlist[] = {"template", "args", NULL};
  
      if (! PyArg_ParseTupleAndKeywords(args, kwds, "s|O", kwlist,
@@ -236,6 +270,8 @@ Index: raring-lxc/src/python-lxc/lxc.c
 +        /* We cannot have gotten here unless vargs was given and create_args
 +         * was successfully allocated.
 +         */
++        for (i = 0; i < PyTuple_GET_SIZE(vargs); i++)
++            free(create_args[i]);
 +        free(create_args);
      }
  
@@ -245,7 +281,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  }
  
  static PyObject *
-@@ -222,23 +264,33 @@
+@@ -222,23 +293,33 @@
      static char *kwlist[] = {"key", NULL};
      char* key = NULL;
      int len = 0;
@@ -286,7 +322,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  }
  
  static PyObject *
-@@ -247,29 +299,40 @@
+@@ -247,29 +328,40 @@
      static char *kwlist[] = {"key", NULL};
      char* key = NULL;
      int len = 0;
@@ -334,7 +370,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  }
  
  static PyObject *
-@@ -278,39 +341,57 @@
+@@ -278,39 +370,57 @@
      static char *kwlist[] = {"key", NULL};
      char* key = NULL;
      int len = 0;
@@ -401,7 +437,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
      Py_RETURN_FALSE;
  }
  
-@@ -318,16 +399,24 @@
+@@ -318,16 +428,24 @@
  Container_save_config(Container *self, PyObject *args, PyObject *kwds)
  {
      static char *kwlist[] = {"path", NULL};
@@ -429,7 +465,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
      Py_RETURN_FALSE;
  }
  
-@@ -338,9 +427,9 @@
+@@ -338,9 +456,9 @@
      char *key = NULL;
      char *value = NULL;
  
@@ -441,7 +477,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  
      if (self->container->set_cgroup_item(self->container, key, value)) {
          Py_RETURN_TRUE;
-@@ -356,9 +445,9 @@
+@@ -356,9 +474,9 @@
      char *key = NULL;
      char *value = NULL;
  
@@ -453,7 +489,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  
      if (self->container->set_config_item(self->container, key, value)) {
          Py_RETURN_TRUE;
-@@ -373,9 +462,9 @@
+@@ -373,9 +491,9 @@
      static char *kwlist[] = {"path", NULL};
      char *path = NULL;
  
@@ -465,7 +501,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  
      if (self->container->set_config_path(self->container, path)) {
          Py_RETURN_TRUE;
-@@ -392,7 +481,7 @@
+@@ -392,7 +510,7 @@
  
      if (! PyArg_ParseTupleAndKeywords(args, kwds, "|i", kwlist,
                                        &timeout))
@@ -474,13 +510,14 @@ Index: raring-lxc/src/python-lxc/lxc.c
  
      if (self->container->shutdown(self->container, timeout)) {
          Py_RETURN_TRUE;
-@@ -405,13 +494,13 @@
+@@ -405,13 +523,13 @@
  Container_start(Container *self, PyObject *args, PyObject *kwds)
  {
      char** init_args = {NULL};
 -    PyObject *useinit = NULL, *vargs = NULL;
+-    int init_useinit = 0;
 +    PyObject *useinit = NULL, *retval = NULL, *vargs = NULL;
-     int init_useinit = 0;
++    int init_useinit = 0, i = 0;
      static char *kwlist[] = {"useinit", "cmd", NULL};
  
      if (! PyArg_ParseTupleAndKeywords(args, kwds, "|OO", kwlist,
@@ -490,7 +527,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  
      if (useinit && useinit == Py_True) {
          init_useinit = 1;
-@@ -426,11 +515,20 @@
+@@ -426,11 +544,22 @@
  
      self->container->want_daemonize(self->container);
  
@@ -505,6 +542,8 @@ Index: raring-lxc/src/python-lxc/lxc.c
 +        /* We cannot have gotten here unless vargs was given and create_args
 +         * was successfully allocated.
 +         */
++        for (i = 0; i < PyTuple_GET_SIZE(vargs); i++)
++            free(init_args[i]);
 +        free(init_args);
      }
  
@@ -514,7 +553,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  }
  
  static PyObject *
-@@ -462,7 +560,7 @@
+@@ -462,7 +591,7 @@
  
      if (! PyArg_ParseTupleAndKeywords(args, kwds, "s|i", kwlist,
                                        &state, &timeout))
@@ -523,7 +562,7 @@ Index: raring-lxc/src/python-lxc/lxc.c
  
      if (self->container->wait(self->container, state, timeout)) {
          Py_RETURN_TRUE;
-@@ -473,125 +571,143 @@
+@@ -473,125 +602,143 @@
  
  static PyGetSetDef Container_getseters[] = {
      {"config_file_name",
@@ -691,11 +730,21 @@ Index: raring-lxc/src/python-lxc/lxc.c
       "wait(state, timeout = -1) -> boolean\n"
       "\n"
       "Wait for the container to reach a given state or timeout."
-Index: raring-lxc/src/python-lxc/lxc/__init__.py
+Index: saucy-lxc/src/python-lxc/lxc/__init__.py
 ===================================================================
---- raring-lxc.orig/src/python-lxc/lxc/__init__.py	2013-04-18 22:26:44.219658989 +0200
-+++ raring-lxc/src/python-lxc/lxc/__init__.py	2013-04-18 22:26:44.215658989 +0200
-@@ -412,7 +412,10 @@
+--- saucy-lxc.orig/src/python-lxc/lxc/__init__.py	2013-04-18 16:28:01.000000000 -0400
++++ saucy-lxc/src/python-lxc/lxc/__init__.py	2013-04-23 16:11:38.000000000 -0400
+@@ -347,7 +347,8 @@
+             if count != 0:
+                 time.sleep(1)
+ 
+-            base_cmd = ["lxc-attach", "-s", "NETWORK", "-n", self.name, "--",
++            base_cmd = ["lxc-attach", "-s", "NETWORK",
++                        "-P", self.get_config_path(), "-n", self.name, "--",
+                         "ip"]
+ 
+             # Get IPv6
+@@ -412,7 +413,10 @@
              Set a config key to a provided value.
              The value can be a list for the keys supporting multiple values.
          """
@@ -707,3 +756,23 @@ Index: raring-lxc/src/python-lxc/lxc/__init__.py
  
          # Check if it's a list
          def set_key(key, value):
+Index: saucy-lxc/src/lxc/lxc-ls
+===================================================================
+--- saucy-lxc.orig/src/lxc/lxc-ls	2013-05-07 09:58:57.637927000 -0400
++++ saucy-lxc/src/lxc/lxc-ls	2013-05-07 09:59:09.741068318 -0400
+@@ -89,12 +89,13 @@
+ 
+ 
+ def getSubContainers(container, lxcpath):
+-    attach = ['lxc-attach', '-R', '-s', 'NETWORK|PID', '-n', container,
++    attach = ['lxc-attach', '-P', lxcpath, '-R', '-s', 'NETWORK|PID',
++              '-n', container,
+               '--', sys.argv[0], "--nesting"]
+ 
+     with open(os.devnull, "w") as fd:
+         newenv = dict(os.environ)
+-        newenv['NESTED'] = "/proc/1/root/%s" % lxcpath
++        newenv['NESTED'] = "/proc/1/root/%s" % lxc.default_config_path
+         sp = subprocess.Popen(attach, stderr=fd, stdout=subprocess.PIPE,
+                               env=newenv, universal_newlines=True)
+         sp.wait()
