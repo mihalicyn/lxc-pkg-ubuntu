@@ -1,3 +1,11 @@
+lxc (0.9.0-0ubuntu5) saucy; urgency=low
+
+  * push 0004-lxc-ps-handle-cgroup-collisions.patch from upstream to handle
+    the case where $container's cgroup is
+    /sys/fs/cgroup/$cgroup/lxc/$container-1.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Wed, 08 May 2013 16:02:44 -0500
+
 lxc (0.9.0-0ubuntu4) saucy; urgency=low
 
   * Fix lxc-list crashing when passed --nesting with nested containers.
