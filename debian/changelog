@@ -1,3 +1,11 @@
+lxc (0.9.0-0ubuntu6) saucy; urgency=low
+
+  * debian/lxc.default, debian/lxc.preinst: calculate an open 10.0.x.0 network
+    for lxcbr0 to use at package install time.  This allows easier package
+    installion when nested.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Tue, 14 May 2013 14:34:51 -0500
+
 lxc (0.9.0-0ubuntu5) saucy; urgency=low
 
   * push 0004-lxc-ps-handle-cgroup-collisions.patch from upstream to handle
