@@ -1,3 +1,10 @@
+lxc (0.9.0-0ubuntu7) saucy; urgency=low
+
+  * 0005-cgroup-prevent-DOS-when-a-hierachy-is-mounted-multip.patch: prevent
+    DOS when a cgroup hierarchy is mounted multiple times  (LP: #1176287)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Wed, 15 May 2013 22:19:59 +0000
+
 lxc (0.9.0-0ubuntu6) saucy; urgency=low
 
   * debian/lxc.default, debian/lxc.preinst: calculate an open 10.0.x.0 network
