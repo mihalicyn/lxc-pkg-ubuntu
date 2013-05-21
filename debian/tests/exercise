@@ -1,0 +1,80 @@
+#!/bin/sh
+#---------------------------------------------------------------------
+# Some very basic tests to run in a DEP-8 environment.
+#---------------------------------------------------------------------
+
+template_dir=/usr/share/lxc/templates
+
+# Exit with error message.
+#
+# @msg: message to display.
+die()
+{
+    msg="$*"
+    echo "ERROR: $msg" >&2
+    exit 1
+}
+
+# seconds to wait for container to be running/stopped
+boot_secs=10
+shutdown_secs=10
+
+distro=$(lsb_release --id|cut -d: -f2-|awk '{print $1}'|tr '[A-Z]' '[a-z]')
+[ -z "$distro" ] && die "failed to determine distro"
+
+[ ! -d "$template_dir" ] && die "template directory does not exist"
+
+file=$(ls "${template_dir}/lxc-${distro}" 2>/dev/null)
+[ -z "$file" ] && die "template does not exist for distro '$distro'"
+template="$distro"
+
+release=$(lsb_release -c|awk '{print $2}')
+[ -z "$release" ] && die "failed to establish release"
+
+orig_name="${release}-dep8"
+new_name="${orig_name}-clone"
+
+name="$orig_name"
+
+# flush cache to ensure we always get the latest bootstrap image
+lxc-create -n "$name" -t "$template" -- "$release" --flush-cache || \
+    die "failed to create container '$name' using template '$template' for release '$release'"
+
+lxc-ls -1 | grep -q "^${name}$" || \
+    die "container not known"
+
+lxc-start -n "$name" --daemon || die "failed to initiate container start"
+
+lxc-wait -n "$name" -s RUNNING -t $boot_secs || \
+    die "container $name: did not start after $boot_secs seconds"
+
+lxc-stop -n "$name" || die "container $name: failed to initiate shutdown"
+
+lxc-wait -n "$name" -s STOPPED -t $shutdown_secs || \
+    die "container $name: did not stop within $shutdown_secs seconds"
+
+lxc-clone -o "$orig_name" -n "$new_name" || \
+    die "failed to clone container '$orig_name' to '$new_name'"
+
+# switch attention to the clone
+name="$new_name"
+
+lxc-start -n "$name" --daemon || die "container $name: failed to initiate start"
+
+lxc-wait -n "$name" -s RUNNING -t $boot_secs || \
+    die "container $name: did not start after $boot_secs seconds"
+
+lxc-stop -n "$name" || die "container $new_nam: failed to initiate shutdown"
+
+lxc-wait -n "$name" -s STOPPED -t $shutdown_secs || \
+    die "container $name: did not stop within $shutdown_secs seconds"
+
+# clean up
+for name in "$orig_name" "$new_name"
+do
+    lxc-destroy -n "$name" || die "container: $name: cannot delete"
+done
+
+echo SUCCESS
+
+exit 0

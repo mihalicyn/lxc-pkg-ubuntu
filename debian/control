@@ -16,6 +16,7 @@ Build-Depends: autotools-dev,
 Standards-Version: 3.9.4
 Homepage: http://lxc.sourceforge.net/
 X-Python3-Version: >= 3.2
+XS-Testsuite: autopkgtest
 
 Package: lxc
 Architecture: linux-any

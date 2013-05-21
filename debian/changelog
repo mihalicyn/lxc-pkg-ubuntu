@@ -1,3 +1,11 @@
+lxc (0.9.0-0ubuntu8) saucy; urgency=low
+
+  [ James Hunt ]
+  * Add basic DEP-8 tests to ensure a container can be created, started,
+    stopped and cloned.
+
+ -- James Hunt <james.hunt@ubuntu.com>  Tue, 21 May 2013 14:44:12 +0100
+
 lxc (0.9.0-0ubuntu7) saucy; urgency=low
 
   * 0005-cgroup-prevent-DOS-when-a-hierachy-is-mounted-multip.patch: prevent
