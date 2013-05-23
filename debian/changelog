@@ -1,3 +1,10 @@
+lxc (0.9.0-0ubuntu9) saucy; urgency=low
+
+  * 0006-lxc-clone-fix-lvm-blockdev-usage: fix use of wrong pathnames for both
+    block devices and mount targets in the LVM case.  (LP: #1183354)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 23 May 2013 14:22:38 -0500
+
 lxc (0.9.0-0ubuntu8) saucy; urgency=low
 
   [ James Hunt ]

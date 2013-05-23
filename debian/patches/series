@@ -6,3 +6,4 @@ transition/01-redirect-lxc-list.patch
 0003-python-module-fixes
 0004-lxc-ps-handle-cgroup-collisions.patch
 0005-cgroup-prevent-DOS-when-a-hierachy-is-mounted-multip.patch
+0006-lxc-clone-fix-lvm-blockdev-usage
