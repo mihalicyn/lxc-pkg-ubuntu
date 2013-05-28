@@ -1,3 +1,10 @@
+lxc (0.9.0-0ubuntu12) saucy; urgency=low
+
+  * 0007-lxc.conf.doc: Fill in missing sections in lxc.conf(5) manual
+    page (LP: 1182085)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Tue, 28 May 2013 13:23:57 -0500
+
 lxc (0.9.0-0ubuntu11) saucy; urgency=low
 
   * lxc-net: deal with the fact that some kernels may not have the needed
