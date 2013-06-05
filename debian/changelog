@@ -1,3 +1,10 @@
+lxc (0.9.0-0ubuntu13) saucy; urgency=low
+
+  * 0008-ignore-rootfs-pin-fail.patch: don't refuse to start a container
+    on readonly fs.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Wed, 05 Jun 2013 21:35:40 +0200
+
 lxc (0.9.0-0ubuntu12) saucy; urgency=low
 
   * 0007-lxc.conf.doc: Fill in missing sections in lxc.conf(5) manual
