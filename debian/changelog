@@ -1,3 +1,12 @@
+lxc (0.9.0-0ubuntu14) saucy; urgency=low
+
+  * 0009-conf.c-if-we-don-t-specify-a-rootfs-we-still-need-pr.patch: if
+    apparmor is enabled and no rootfs was specified, then re-mount /proc
+    so that we can write the requested apparmor profile under /proc/1.
+    (LP: #1188501)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 10 Jun 2013 09:27:32 -0500
+
 lxc (0.9.0-0ubuntu13) saucy; urgency=low
 
   * 0008-ignore-rootfs-pin-fail.patch: don't refuse to start a container

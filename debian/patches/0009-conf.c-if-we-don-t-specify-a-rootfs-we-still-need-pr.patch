@@ -1,0 +1,32 @@
+From 9fe82e14c00a50381e674471a3cb8d3c4135278e Mon Sep 17 00:00:00 2001
+From: Serge Hallyn <serge.hallyn@ubuntu.com>
+Date: Mon, 10 Jun 2013 16:20:18 +0200
+Subject: [PATCH 1/1] conf.c: if we don't specify a rootfs, we still need proc
+ mounted
+
+otherwise we wont' be allowed to set an apparmor context (on pid 1)
+
+Signed-off-by: Serge Hallyn <serge.hallyn@ubuntu.com>
+---
+ src/lxc/conf.c |    8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+Index: lxc-0.9.0/src/lxc/conf.c
+===================================================================
+--- lxc-0.9.0.orig/src/lxc/conf.c	2013-06-10 09:27:27.560050211 -0500
++++ lxc-0.9.0/src/lxc/conf.c	2013-06-10 09:27:27.548050211 -0500
+@@ -2792,9 +2792,11 @@
+ #if HAVE_APPARMOR /* || HAVE_SMACK || HAVE_SELINUX */
+ 	INFO("rootfs path is .%s., mount is .%s.", lxc_conf->rootfs.path,
+ 		lxc_conf->rootfs.mount);
+-	if (lxc_conf->rootfs.path == NULL || strlen(lxc_conf->rootfs.path) == 0)
+-		mounted = 0;
+-	else
++	if (lxc_conf->rootfs.path == NULL || strlen(lxc_conf->rootfs.path) == 0) {
++		if (mount("proc", "/proc", "proc", 0, NULL))
++			return -1;
++		mounted = 1;
++	} else
+ 		mounted = lsm_mount_proc_if_needed(lxc_conf->rootfs.path, lxc_conf->rootfs.mount);
+ 	if (mounted == -1) {
+ 		SYSERROR("failed to mount /proc in the container.");
