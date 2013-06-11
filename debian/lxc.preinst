@@ -24,6 +24,10 @@ LXC_NETMASK="255.255.255.0"
 LXC_NETWORK="10.0.$i.0/24"
 LXC_DHCP_RANGE="10.0.$i.2,10.0.$i.254"
 LXC_DHCP_MAX="253"
+# Uncomment the next line if you'd like to use a conf-file for the lxcbr0
+# dnsmasq.  For instance, you can use 'dhcp-host=mail1,10.0.3.100' to have
+# container 'mail1' always get ip address 10.0.3.100.
+#LXC_DHCP_CONFILE=/etc/lxc/dnsmasq.conf
 EOF
 }
 

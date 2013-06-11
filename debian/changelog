@@ -1,3 +1,13 @@
+lxc (0.9.0-0ubuntu15) saucy; urgency=low
+
+  * lxc-net: support an optional dnsmasq configuration file.
+  * 0010-debian-template-set-hwaddr: set persistent macaddr when creating a
+    debian container (LP: #1080681)
+  * lxc.apport: add /etc/lxc/{dnsmasq,default,lxc}.conf and
+    /etc/default/lxc{,-net}.conf
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Tue, 11 Jun 2013 07:47:32 -0500
+
 lxc (0.9.0-0ubuntu14) saucy; urgency=low
 
   * 0009-conf.c-if-we-don-t-specify-a-rootfs-we-still-need-pr.patch: if

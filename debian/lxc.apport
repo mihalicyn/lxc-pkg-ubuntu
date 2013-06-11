@@ -19,3 +19,8 @@ def add_info(report):
 	# should we attach all lxc apparmor files
 	#command_output(['ls', '-l', '/etc/apparmor.d/lxc']
 	#command_output(['cat', '/etc/apparmor.d/lxc/*']
+	attach_file_if_exists(report, '/etc/default/lxc-net', key='lxc-net.default')
+	attach_file_if_exists(report, '/etc/default/lxc', key='lxc.default')
+	attach_file_if_exists(report, '/etc/lxc/lxc.conf', key='lxc.conf')
+	attach_file_if_exists(report, '/etc/lxc/default.conf', key='defaults.conf')
+	attach_file_if_exists(report, '/etc/lxc/dnsmasq.conf', key='dnsmasq.conf')
