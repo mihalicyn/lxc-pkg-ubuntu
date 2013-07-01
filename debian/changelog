@@ -1,3 +1,10 @@
+lxc (0.9.0-0ubuntu16) saucy; urgency=low
+
+  * conf.c-always-strdup-rootfs.mount: prevent segfault when using
+    lxc.rootfs.mount.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 01 Jul 2013 15:29:17 -0500
+
 lxc (0.9.0-0ubuntu15) saucy; urgency=low
 
   * lxc-net: support an optional dnsmasq configuration file.
