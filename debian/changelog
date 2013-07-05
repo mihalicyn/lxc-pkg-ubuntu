@@ -1,3 +1,11 @@
+lxc (0.9.0-0ubuntu17) saucy; urgency=low
+
+  * 0011-cgroup-hook-handle-stricter-kernel: fix the mountcgroups hook in the
+    face of new restrictions imposed by the kernel on devices cgroups.
+    (LP: #1196518)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Fri, 05 Jul 2013 20:44:57 +0200
+
 lxc (0.9.0-0ubuntu16) saucy; urgency=low
 
   * conf.c-always-strdup-rootfs.mount: prevent segfault when using

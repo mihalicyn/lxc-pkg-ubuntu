@@ -12,3 +12,4 @@ transition/01-redirect-lxc-list.patch
 0009-conf.c-if-we-don-t-specify-a-rootfs-we-still-need-pr.patch
 0010-debian-template-set-hwaddr
 conf.c-always-strdup-rootfs.mount
+0011-cgroup-hook-handle-stricter-kernel

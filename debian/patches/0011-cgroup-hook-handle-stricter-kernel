@@ -1,0 +1,286 @@
+Description: Accomodate stricter devices cgroup rules
+ The mountcgroup hook causes lxc-start to break with 3.10 kernels, because
+ you cannot write 'a' to devices.deny once you have a child cgroup.  With
+ this patch, (a) lxcpath is passed to hooks, (b) the cgroup mount hook sets
+ the container's devices cgroup, and (c) setup_cgroup() during lxc startup
+ ignores failures to write to devices subsystem if we are already in a
+ child of the container's new cgroup.
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/1196518
+Forwarded: yes
+
+Index: lxc-0.9.0/src/lxc/cgroup.c
+===================================================================
+--- lxc-0.9.0.orig/src/lxc/cgroup.c	2013-07-05 23:50:01.798227018 -0500
++++ lxc-0.9.0/src/lxc/cgroup.c	2013-07-05 23:50:01.778227019 -0500
+@@ -873,3 +873,40 @@
+ 
+ 	return lxc_cgroup_enter(dirpath, pid);
+ }
++
++bool is_in_subcgroup(int pid, const char *subsystem, const char *cgpath)
++{
++	char filepath[MAXPATHLEN], *line = NULL, v1[MAXPATHLEN], v2[MAXPATHLEN];
++	FILE *f;
++	int ret, junk;
++	size_t sz = 0, l1 = strlen(cgpath), l2;
++	char *end = index(subsystem, '.');
++	int len = end ? (end - subsystem) : strlen(subsystem);
++
++	ret = snprintf(filepath, MAXPATHLEN, "/proc/%d/cgroup", pid);
++	if (ret < 0 || ret >= MAXPATHLEN)
++		return false;
++	if ((f = fopen(filepath, "r")) == NULL)
++		return false;
++	while (getline(&line, &sz, f) != -1) {
++		// nr:subsystem:path
++		v2[0] = v2[1] = '\0';
++		ret = sscanf(line, "%d:%[^:]:%s", &junk, v1, v2);
++		if (ret != 3) {
++			fclose(f);
++			return false;
++		}
++		len = end ? end - subsystem : strlen(subsystem);
++		if (strncmp(v1, subsystem, len) != 0)
++			continue;
++		// v2 will start with '/', skip it by using v2+1
++		// we must be in SUBcgroup, so make sure l2 > l1
++		l2 = strlen(v2+1);
++		if (l2 > l1 && strncmp(v2+1, cgpath, l1) == 0) {
++			fclose(f);
++			return true;
++		}
++	}
++	fclose(f);
++	return false;
++}
+Index: lxc-0.9.0/src/lxc/cgroup.h
+===================================================================
+--- lxc-0.9.0.orig/src/lxc/cgroup.h	2013-07-05 23:50:01.798227018 -0500
++++ lxc-0.9.0/src/lxc/cgroup.h	2013-07-05 23:50:01.778227019 -0500
+@@ -22,6 +22,7 @@
+  */
+ #ifndef _cgroup_h
+ #define _cgroup_h
++#include <stdbool.h>
+ 
+ #define MAXPRIOLEN 24
+ 
+@@ -35,4 +36,5 @@
+ extern int lxc_cgroup_attach(pid_t pid, const char *name, const char *lxcpath);
+ extern int cgroup_path_get(char **path, const char *subsystem, const char *cgpath);
+ extern int lxc_get_cgpath(const char **path, const char *subsystem, const char *name, const char *lxcpath);
++extern bool is_in_subcgroup(int pid, const char *subsystem, const char *cgpath);
+ #endif
+Index: lxc-0.9.0/src/lxc/conf.c
+===================================================================
+--- lxc-0.9.0.orig/src/lxc/conf.c	2013-07-05 23:50:01.798227018 -0500
++++ lxc-0.9.0/src/lxc/conf.c	2013-07-05 23:51:24.978223983 -0500
+@@ -1380,7 +1380,8 @@
+ 	return 0;
+ }
+ 
+-int setup_cgroup(const char *cgpath, struct lxc_list *cgroups)
++extern bool is_in_subcgroup(int pid, const char *subsystem, const char *cgpath);
++int setup_cgroup(int initpid, const char *cgpath, struct lxc_list *cgroups)
+ {
+ 	struct lxc_list *iterator;
+ 	struct lxc_cgroup *cg;
+@@ -1393,8 +1394,17 @@
+ 
+ 		cg = iterator->elem;
+ 
++		/* an unfortunate special case: startup hooks may have already
++		 * setup the cgroup.  If a setting fails, and this is the devices
++		 * subsystem, *and* we are already in a subset of the cgroup,
++		 * then ignore the failure */
+ 		if (lxc_cgroup_set_bypath(cgpath, cg->subsystem, cg->value)) {
+-			ERROR("Error setting %s to %s for %s\n", cg->subsystem,
++			char *end = index(cg->subsystem, '.');
++			int len = end ? (end - cg->subsystem) : strlen(cg->subsystem);
++			if (strncmp(cg->subsystem, "devices", len) == 0)
++				if (is_in_subcgroup(initpid, cg->subsystem, cgpath))
++					continue;
++			ERROR("Error setting %s to %s for %s", cg->subsystem,
+ 				cg->value, cgpath);
+ 			goto out;
+ 		}
+@@ -2720,7 +2730,7 @@
+ 	return 0;
+ }
+ 
+-int lxc_setup(const char *name, struct lxc_conf *lxc_conf)
++int lxc_setup(const char *name, struct lxc_conf *lxc_conf, const char *lxcpath)
+ {
+ #if HAVE_APPARMOR /* || HAVE_SMACK || HAVE_SELINUX */
+ 	int mounted;
+@@ -2736,7 +2746,7 @@
+ 		return -1;
+ 	}
+ 
+-	if (run_lxc_hooks(name, "pre-mount", lxc_conf)) {
++	if (run_lxc_hooks(name, "pre-mount", lxc_conf, lxcpath)) {
+ 		ERROR("failed to run pre-mount hooks for container '%s'.", name);
+ 		return -1;
+ 	}
+@@ -2763,13 +2773,13 @@
+ 		return -1;
+ 	}
+ 
+-	if (run_lxc_hooks(name, "mount", lxc_conf)) {
++	if (run_lxc_hooks(name, "mount", lxc_conf, lxcpath)) {
+ 		ERROR("failed to run mount hooks for container '%s'.", name);
+ 		return -1;
+ 	}
+ 
+ 	if (lxc_conf->autodev) {
+-		if (run_lxc_hooks(name, "autodev", lxc_conf)) {
++		if (run_lxc_hooks(name, "autodev", lxc_conf, lxcpath)) {
+ 			ERROR("failed to run autodev hooks for container '%s'.", name);
+ 			return -1;
+ 		}
+@@ -2838,7 +2848,8 @@
+ 	return 0;
+ }
+ 
+-int run_lxc_hooks(const char *name, char *hook, struct lxc_conf *conf)
++int run_lxc_hooks(const char *name, char *hook, struct lxc_conf *conf,
++		  const char *lxcpath)
+ {
+ 	int which = -1;
+ 	struct lxc_list *it;
+@@ -2860,7 +2871,7 @@
+ 	lxc_list_for_each(it, &conf->hooks[which]) {
+ 		int ret;
+ 		char *hookname = it->elem;
+-		ret = run_script(name, "lxc", hookname, hook, NULL);
++		ret = run_script(name, "lxc", hookname, hook, lxcpath, NULL);
+ 		if (ret)
+ 			return ret;
+ 	}
+Index: lxc-0.9.0/src/lxc/conf.h
+===================================================================
+--- lxc-0.9.0.orig/src/lxc/conf.h	2013-07-05 23:50:01.798227018 -0500
++++ lxc-0.9.0/src/lxc/conf.h	2013-07-05 23:50:01.782227019 -0500
+@@ -284,9 +284,10 @@
+ 	char *rcfile;	// Copy of the top level rcfile we read
+ };
+ 
+-int run_lxc_hooks(const char *name, char *hook, struct lxc_conf *conf);
++int run_lxc_hooks(const char *name, char *hook, struct lxc_conf *conf,
++		  const char *lxcpath);
+ 
+-extern int setup_cgroup(const char *cgpath, struct lxc_list *cgroups);
++extern int setup_cgroup(int initpid, const char *cgpath, struct lxc_list *cgroups);
+ extern int detect_shared_rootfs(void);
+ 
+ /*
+@@ -313,15 +314,14 @@
+ extern int lxc_clear_mount_entries(struct lxc_conf *c);
+ extern int lxc_clear_hooks(struct lxc_conf *c, const char *key);
+ 
+-extern int setup_cgroup(const char *name, struct lxc_list *cgroups);
+-
+ extern int uid_shift_ttys(int pid, struct lxc_conf *conf);
+ 
+ /*
+  * Configure the container from inside
+  */
+ 
+-extern int lxc_setup(const char *name, struct lxc_conf *lxc_conf);
++extern int lxc_setup(const char *name, struct lxc_conf *lxc_conf,
++			const char *lxcpath);
+ 
+ extern void lxc_rename_phys_nics_on_shutdown(struct lxc_conf *conf);
+ #endif
+Index: lxc-0.9.0/src/lxc/start.c
+===================================================================
+--- lxc-0.9.0.orig/src/lxc/start.c	2013-07-05 23:50:01.798227018 -0500
++++ lxc-0.9.0/src/lxc/start.c	2013-07-05 23:50:01.782227019 -0500
+@@ -493,7 +493,7 @@
+ 	}
+ 	/* End of environment variable setup for hooks */
+ 
+-	if (run_lxc_hooks(name, "pre-start", conf)) {
++	if (run_lxc_hooks(name, "pre-start", conf, handler->lxcpath)) {
+ 		ERROR("failed to run pre-start hooks for container '%s'.", name);
+ 		goto out_aborting;
+ 	}
+@@ -545,7 +545,7 @@
+ 	lxc_set_state(name, handler, STOPPING);
+ 	lxc_set_state(name, handler, STOPPED);
+ 
+-	if (run_lxc_hooks(name, "post-stop", handler->conf))
++	if (run_lxc_hooks(name, "post-stop", handler->conf, handler->lxcpath))
+ 		ERROR("failed to run post-stop hooks for container '%s'.", name);
+ 
+ 	/* reset mask set by setup_signal_fd */
+@@ -693,7 +693,7 @@
+ 	#endif
+ 
+ 	/* Setup the container, ip, names, utsname, ... */
+-	if (lxc_setup(handler->name, handler->conf)) {
++	if (lxc_setup(handler->name, handler->conf, handler->lxcpath)) {
+ 		ERROR("failed to setup the container");
+ 		goto out_warn_father;
+ 	}
+@@ -708,7 +708,7 @@
+ 	if (lxc_seccomp_load(handler->conf) != 0)
+ 		goto out_warn_father;
+ 
+-	if (run_lxc_hooks(handler->name, "start", handler->conf)) {
++	if (run_lxc_hooks(handler->name, "start", handler->conf, handler->lxcpath)) {
+ 		ERROR("failed to run start hooks for container '%s'.", handler->name);
+ 		goto out_warn_father;
+ 	}
+@@ -870,7 +870,7 @@
+ 	if (lxc_sync_barrier_child(handler, LXC_SYNC_POST_CONFIGURE))
+ 		goto out_delete_net;
+ 
+-	if (setup_cgroup(handler->cgroup, &handler->conf->cgroup)) {
++	if (setup_cgroup(handler->pid, handler->cgroup, &handler->conf->cgroup)) {
+ 		ERROR("failed to setup the cgroups for '%s'", name);
+ 		goto out_delete_net;
+ 	}
+Index: lxc-0.9.0/hooks/mountcgroups
+===================================================================
+--- lxc-0.9.0.orig/hooks/mountcgroups	2013-07-05 23:50:01.798227018 -0500
++++ lxc-0.9.0/hooks/mountcgroups	2013-07-05 23:50:25.306226160 -0500
+@@ -28,15 +28,37 @@
+ c=$1
+ d=/sys/fs/cgroup
+ d2=$LXC_ROOTFS_MOUNT/${d}
++# name lxc hook lxcpath
++lxcpath=$4
+ if [ ! -d "$d" ]; then
+     exit 0
+ fi
+ 
+ mount -n -t tmpfs tmpfs ${d2}
+ 
++do_devices_setup() {
++    local devdir="$1"
++    local c="$2"
++    local line
++    local w  # which (allow or deny)
++    local v  # value
++    egrep "^lxc.cgroup.devices.(allow|deny)[ \t]*=" ${lxcpath}/${c}/config | while read line; do
++        w=`echo $line | awk -F. '{ print $4 }' | awk '{ print $1 }'`
++        v=`echo $line | awk -F= '{ print $2 }'`
++        echo "$v" >> "$devdir"/devices.$w
++    done
++}
++
+ # XXX TODO - we'll need to account for other cgroup groups beside 'lxc',
+ # i.e. 'build' or 'users/joe'.
+ for dir in `/bin/ls $d`; do
++    if [ "$dir" = "devices" ]; then
++        devicesdir="${d}/${dir}/lxc/${c}"
++        mkdir -p "$devicesdir"
++        # set the devices cgroup perms now - we can't change from blacklist to
++        # whitelist, or add perms, once we have children.
++        do_devices_setup "$devicesdir" "${c}"
++    fi
+     mkdir -p "${d}/${dir}/lxc/${c}/${c}.real"
+     echo 1 > "${d}/${dir}/lxc/${c}/${c}.real/tasks"
+     mkdir -p ${d2}/${dir}
