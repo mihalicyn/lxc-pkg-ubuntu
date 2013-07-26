@@ -1,3 +1,10 @@
+lxc (0.9.0-0ubuntu18) saucy; urgency=low
+
+  * 0012-add-kernel-filesystems-to-fstab: saucy containers will fail to start
+    unless security, debug, and connections are pre-mounted.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 25 Jul 2013 22:01:02 -0500
+
 lxc (0.9.0-0ubuntu17) saucy; urgency=low
 
   * 0011-cgroup-hook-handle-stricter-kernel: fix the mountcgroups hook in the

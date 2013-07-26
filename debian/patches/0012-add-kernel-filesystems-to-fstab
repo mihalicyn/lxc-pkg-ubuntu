@@ -1,0 +1,49 @@
+commit 6f259716e75552cf46ee5125bdbd21e34456d0c0
+Author: Serge Hallyn <serge.hallyn@ubuntu.com>
+Date:   Wed Jul 17 09:38:28 2013 -0500
+
+    ubuntu templates: add some kernel filesystems to container fstab
+    
+    The debugfs, fusectl, and securityfs may not be mounted inside a
+    non-init userns.  But mountall hangs waiting for them to be
+    mounted.  So just pre-mount them using $lxcpath/$name/fstab as
+    bind mounts, which will prevent mountall from trying to mount
+    them.
+    
+    If the kernel doesn't provide them, then the bind mount failure
+    will be ignored, and mountall in the container will proceed
+    without the mount since it is 'optional'.  But without these
+    bind mounts, starting a container inside a user namespace
+    hangs.
+    
+    Signed-off-by: Serge Hallyn <serge.hallyn@ubuntu.com>
+    Acked-by: Stéphane Graber <stgraber@ubuntu.com>
+
+diff --git a/templates/lxc-ubuntu-cloud.in b/templates/lxc-ubuntu-cloud.in
+index 5ffb5ba..480ef14 100644
+--- a/templates/lxc-ubuntu-cloud.in
++++ b/templates/lxc-ubuntu-cloud.in
+@@ -96,6 +96,9 @@ EOF
+     cat <<EOF > $path/fstab
+ proc            proc         proc    nodev,noexec,nosuid 0 0
+ sysfs           sys          sysfs defaults  0 0
++/sys/fs/fuse/connections sys/fs/fuse/connections none bind 0 0
++/sys/kernel/debug sys/kernel/debug none bind 0 0
++/sys/kernel/security sys/kernel/security none bind 0 0
+ EOF
+ 
+     # rmdir /dev/shm for containers that have /run/shm
+diff --git a/templates/lxc-ubuntu.in b/templates/lxc-ubuntu.in
+index 0b73529..af3c2b3 100644
+--- a/templates/lxc-ubuntu.in
++++ b/templates/lxc-ubuntu.in
+@@ -427,6 +427,9 @@ EOF
+     cat <<EOF > $path/fstab
+ proc            proc         proc    nodev,noexec,nosuid 0 0
+ sysfs           sys          sysfs defaults  0 0
++/sys/fs/fuse/connections sys/fs/fuse/connections none bind 0 0
++/sys/kernel/debug sys/kernel/debug none bind 0 0
++/sys/kernel/security sys/kernel/security none bind 0 0
+ EOF
+ 
+     if [ $? -ne 0 ]; then
