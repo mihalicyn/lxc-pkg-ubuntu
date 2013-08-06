@@ -1,3 +1,10 @@
+lxc (0.9.0-0ubuntu19) saucy; urgency=low
+
+  * Add variable in /etc/default/lxc-net to optionally resolve .lxc on
+    lxcbr0.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Tue, 06 Aug 2013 09:03:59 -0500
+
 lxc (0.9.0-0ubuntu18) saucy; urgency=low
 
   * 0012-add-kernel-filesystems-to-fstab: saucy containers will fail to start

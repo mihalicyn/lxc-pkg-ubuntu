@@ -28,6 +28,12 @@ LXC_DHCP_MAX="253"
 # dnsmasq.  For instance, you can use 'dhcp-host=mail1,10.0.3.100' to have
 # container 'mail1' always get ip address 10.0.3.100.
 #LXC_DHCP_CONFILE=/etc/lxc/dnsmasq.conf
+
+# Uncomment the next line if you want lxcbr0's dnsmasq to resolve the .lxc
+# domain.  You can then add "server=/lxc/10.0.3.1' (or your actual $LXC_ADDR)
+# to /etc/dnsmasq.conf, after which 'container1.lxc' will resolve on your
+# host.
+#LXC_DOMAIN="lxc"
 EOF
 }
 
