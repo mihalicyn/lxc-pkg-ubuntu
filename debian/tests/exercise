@@ -36,8 +36,11 @@ new_name="${orig_name}-clone"
 
 name="$orig_name"
 
+# adt sets TMPDIR, this confuses debootstrap/apt-get when creating a container
+unset TMPDIR
+
 # flush cache to ensure we always get the latest bootstrap image
-lxc-create -n "$name" -t "$template" -- "$release" --flush-cache || \
+lxc-create -n "$name" -t "$template" -- -r "$release" --flush-cache || \
     die "failed to create container '$name' using template '$template' for release '$release'"
 
 lxc-ls -1 | grep -q "^${name}$" || \
