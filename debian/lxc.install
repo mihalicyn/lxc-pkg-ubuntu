@@ -1,12 +1,12 @@
+
+debian/local/lxc-aa-custom-profile  /usr/bin
+debian/local/lxc.sh                 /etc/bash_completion.d
 etc
 usr/bin
 usr/lib/*/lxc/lxc-*
 usr/share/doc
-usr/share/man
-usr/share/lxc/lxc.functions
 usr/share/lxc/hooks
+usr/share/lxc/lxc.functions
+usr/share/man
 var/cache/lxc
 var/lib/lxc
-
-debian/local/lxc.sh                 /etc/bash_completion.d
-debian/local/lxc-aa-custom-profile  /usr/bin

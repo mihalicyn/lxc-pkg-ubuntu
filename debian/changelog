@@ -1,3 +1,11 @@
+lxc (0.9.0-0ubuntu20) saucy; urgency=low
+
+  * Build-depend on hardening-wrapper to meet MIR security requirements.
+    This is done instead of using the new dpkg-buildflags as those are a pain
+    to get to work when building both binaries and libraries when using -PIE.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Fri, 09 Aug 2013 14:33:59 +0200
+
 lxc (0.9.0-0ubuntu19) saucy; urgency=low
 
   * Add variable in /etc/default/lxc-net to optionally resolve .lxc on

@@ -1,4 +1,5 @@
 #!/usr/bin/make -f
+export DEB_BUILD_HARDENING = 1
 
 DEB_DH_INSTALLINIT_ARGS = --upstart-only
 
