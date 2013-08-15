@@ -1,3 +1,9 @@
+lxc (0.9.0-0ubuntu22) saucy; urgency=low
+
+  * ubuntu-cloud: fix typo keeping --hostid from working (LP: #1197357)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 15 Aug 2013 14:40:58 -0500
+
 lxc (0.9.0-0ubuntu21) saucy; urgency=low
 
   * Fix autopkgtest failure by unsetting TMPDIR in the test.
