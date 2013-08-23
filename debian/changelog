@@ -1,3 +1,12 @@
+lxc (0.9.0-0ubuntu23) saucy; urgency=low
+
+  * 0014-lxc-apparmor-null-terminate-buffer: make sure a value we fread is
+    null-terminated (LP: #1215386)
+  * 0015-fix-ipv6-pton: call inet_pton on the value without the netmask.
+    (LP: #1215391)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Fri, 23 Aug 2013 11:39:55 -0500
+
 lxc (0.9.0-0ubuntu22) saucy; urgency=low
 
   * ubuntu-cloud: fix typo keeping --hostid from working (LP: #1197357)

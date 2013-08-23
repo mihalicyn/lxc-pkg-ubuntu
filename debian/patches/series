@@ -15,3 +15,5 @@ conf.c-always-strdup-rootfs.mount
 0011-cgroup-hook-handle-stricter-kernel
 0012-add-kernel-filesystems-to-fstab
 0013-ubuntu-cloud-fix-hostid
+0014-lxc-apparmor-null-terminate-buffer
+0015-fix-ipv6-pton

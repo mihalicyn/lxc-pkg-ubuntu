@@ -1,0 +1,28 @@
+commit 626ad11bfee3e12e675f51e92920030a6f383b19
+Author: Christian Seiler <christian@iwakd.de>
+Date:   Tue Aug 13 21:33:19 2013 +0200
+
+    apparmor/attach: make sure buffer is NUL-terminated
+    
+    Signed-off-by: Christian Seiler <christian@iwakd.de>
+    Acked-by: Serge E. Hallyn <serge.hallyn@ubuntu.com>
+
+Index: lxc-0.9.0/src/lxc/apparmor.c
+===================================================================
+--- lxc-0.9.0.orig/src/lxc/apparmor.c	2013-08-23 11:37:03.149873001 -0500
++++ lxc-0.9.0/src/lxc/apparmor.c	2013-08-23 11:37:03.109873001 -0500
+@@ -40,12 +40,13 @@
+ 	}
+ 	sz += 1024;
+ 	buf = realloc(buf, sz);
++	memset(buf, 0, sz);
+ 	if (!buf) {
+ 		ERROR("out of memory");
+ 		fclose(f);
+ 		return NULL;
+ 	}
+-	ret = fread(buf, 1, sz, f);
++	ret = fread(buf, 1, sz - 1, f);
+ 	fclose(f);
+ 	if (ret >= sz)
+ 		goto again;
