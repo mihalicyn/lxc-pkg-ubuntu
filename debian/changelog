@@ -1,3 +1,11 @@
+lxc (1.0.0~alpha1-0ubuntu2) saucy; urgency=low
+
+  * Add allow-stderr to autopkgtst restrictions as the Ubuntu template
+    uses policy-rc.d to disable some daemons and that causes a message to
+    be printed on stderr when the service tries to start.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Thu, 12 Sep 2013 13:57:17 -0400
+
 lxc (1.0.0~alpha1-0ubuntu1) saucy; urgency=low
 
   * New upstream release (LP: #1218426)
