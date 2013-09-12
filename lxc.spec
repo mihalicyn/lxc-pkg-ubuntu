@@ -18,10 +18,10 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 Name: lxc
-Version: 0.9.0
+Version: 1.0.0.alpha1
 Release: 1%{?dist}
 URL: http://lxc.sourceforge.net
 Source: http://dl.sourceforge.net/sourceforge/%{name}/%{name}-%{version}.tar.gz
@@ -100,7 +100,6 @@ rm -rf %{buildroot}
 %attr(4111,root,root) %{_bindir}/lxc-attach
 %attr(4111,root,root) %{_bindir}/lxc-create
 %attr(4111,root,root) %{_bindir}/lxc-clone
-%attr(4111,root,root) %{_bindir}/lxc-shutdown
 %attr(4111,root,root) %{_bindir}/lxc-start
 %attr(4111,root,root) %{_bindir}/lxc-netstat
 %attr(4111,root,root) %{_bindir}/lxc-unshare

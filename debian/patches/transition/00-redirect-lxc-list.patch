@@ -6,16 +6,16 @@ Author: Stéphane Graber <stgraber@ubuntu.com>
 Origin: vendor
 Forwarded: not-needed
 
-Index: saucy-lxc/src/lxc/lxc-ls
+Index: stgraber-lxc-git/src/lxc/lxc-ls
 ===================================================================
---- saucy-lxc.orig/src/lxc/lxc-ls	2013-04-18 16:28:01.000000000 -0400
-+++ saucy-lxc/src/lxc/lxc-ls	2013-05-07 10:34:39.629968320 -0400
-@@ -142,6 +142,13 @@
+--- stgraber-lxc-git.orig/src/lxc/lxc-ls	2013-05-27 14:37:35.988415931 -0400
++++ stgraber-lxc-git/src/lxc/lxc-ls	2013-05-27 14:37:35.984415931 -0400
+@@ -143,6 +143,13 @@
  
  args = parser.parse_args()
  
 +# lxc-list is an alias for --fancy
-+if sys.argv[0].endswith("lxc-list") and not 'NESTED' in os.environ:
++if sys.argv[0].endswith("lxc-list"):
 +    args.fancy = True
 +    print("WARNING: lxc-list is deprecated, please use lxc-ls --fancy.")
 +    print("         This symlink will be dropped in LXC 1.0.")

@@ -1,0 +1,73 @@
+From 00ec333b2e6c7a29e99da196979a496fb05ee923 Mon Sep 17 00:00:00 2001
+From: Serge Hallyn <serge.hallyn@ubuntu.com>
+Date: Tue, 10 Sep 2013 23:17:46 -0500
+Subject: [PATCH 1/6] pin_rootfs: be quiet and don't fail container start
+
+It's a legitimate use case to use read-only $lxcpath.  If we can't
+create the pin file, then we're not worried about marking the fs
+readonly on exit.
+
+Signed-off-by: Serge Hallyn <serge.hallyn@ubuntu.com>
+---
+ src/lxc/conf.c  | 17 ++++-------------
+ src/lxc/start.c |  6 ++----
+ 2 files changed, 6 insertions(+), 17 deletions(-)
+
+Index: saucy-lxc/src/lxc/conf.c
+===================================================================
+--- saucy-lxc.orig/src/lxc/conf.c	2013-09-11 23:13:23.251925309 -0400
++++ saucy-lxc/src/lxc/conf.c	2013-09-11 23:13:23.243925310 -0400
+@@ -687,32 +687,23 @@
+ 	if (rootfs == NULL || strlen(rootfs) == 0)
+ 		return -2;
+ 
+-	if (!realpath(rootfs, absrootfs)) {
+-		INFO("failed to get real path for '%s', not pinning", rootfs);
++	if (!realpath(rootfs, absrootfs))
+ 		return -2;
+-	}
+ 
+-	if (access(absrootfs, F_OK)) {
+-		SYSERROR("'%s' is not accessible", absrootfs);
++	if (access(absrootfs, F_OK))
+ 		return -1;
+-	}
+ 
+-	if (stat(absrootfs, &s)) {
+-		SYSERROR("failed to stat '%s'", absrootfs);
++	if (stat(absrootfs, &s))
+ 		return -1;
+-	}
+ 
+ 	if (!S_ISDIR(s.st_mode))
+ 		return -2;
+ 
+ 	ret = snprintf(absrootfspin, MAXPATHLEN, "%s%s", absrootfs, ".hold");
+-	if (ret >= MAXPATHLEN) {
+-		SYSERROR("pathname too long for rootfs hold file");
++	if (ret >= MAXPATHLEN)
+ 		return -1;
+-	}
+ 
+ 	fd = open(absrootfspin, O_CREAT | O_RDWR, S_IWUSR|S_IRUSR);
+-	INFO("opened %s as fd %d\n", absrootfspin, fd);
+ 	return fd;
+ }
+ 
+Index: saucy-lxc/src/lxc/start.c
+===================================================================
+--- saucy-lxc.orig/src/lxc/start.c	2013-09-11 23:13:23.251925309 -0400
++++ saucy-lxc/src/lxc/start.c	2013-09-11 23:13:23.243925310 -0400
+@@ -652,10 +652,8 @@
+ 	 */
+ 
+ 	handler->pinfd = pin_rootfs(handler->conf->rootfs.path);
+-	if (handler->pinfd == -1) {
+-		ERROR("failed to pin the container's rootfs");
+-		goto out_delete_net;
+-	}
++	if (handler->pinfd == -1)
++		INFO("failed to pin the container's rootfs");
+ 
+ 	/* Create a process in a new set of namespaces */
+ 	handler->pid = lxc_clone(do_start, handler, handler->clone_flags);

@@ -1,3 +1,43 @@
+lxc (1.0.0~alpha1-0ubuntu1) saucy; urgency=low
+
+  * New upstream release (LP: #1218426)
+    - A very long list of bugfixes, including:
+      (LP: #1081786, LP: #1029777, LP: #987770, LP: #1212290, LP: #1199146,
+       LP: #1124526, LP: #1014916, LP: #1212414, LP: #1168526, LP: #1135871)
+  * Removed patches:
+    - transition/00-redirect-lxc-halt.patch
+    - 0001-fix-race-with-fast-init
+    - 0002-lxc-functions-safe-in-dash
+    - 0003-python-module-fixes
+    - 0004-lxc-ps-handle-cgroup-collisions.patch
+    - 0005-cgroup-prevent-DOS-when-a-hierachy-is-mounted-multip.patch
+    - 0006-lxc-clone-fix-lvm-blockdev-usage
+    - 0007-lxc.conf.doc
+    - 0008-ignore-rootfs-pin-fail.patch
+    - 0009-conf.c-if-we-don-t-specify-a-rootfs-we-still-need-pr.patch
+    - conf.c-always-strdup-rootfs.mount
+    - 0011-cgroup-hook-handle-stricter-kernel
+    - 0012-add-kernel-filesystems-to-fstab
+    - 0013-ubuntu-cloud-fix-hostid
+    - 0014-lxc-apparmor-null-terminate-buffer
+    - 0015-fix-ipv6-pton
+  * Refreshed patches:
+    - transition/00-redirect-lxc-list.patch
+    - 0000-add-autostart.patch
+    - 0001-debian-template-set-hwaddr
+  * New patches (fix regression when /var/lib/lxc is read-only):
+    - 0002-pin_rootfs-be-quiet-and-don-t-fail-container-start.patch
+    - 0003-move-monitor-fifo-and-monitor-sock-to-run.patch
+    - 0004-hash-lxcname-for-use-in-monitor-unix-socket-sun_path.patch
+    - 0005-ignore-ability-to-init-lxc-monitord.log.patch
+  * Updated debian/copyright to reflect reality.
+  * Fix lxc-template's short description.
+  * Replace the cloud-utils recommends by cloud-image-utils | cloud-utils
+    to use the new saucy package and still allow for easy backports.
+    (LP: #1224545)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Thu, 12 Sep 2013 12:45:05 -0400
+
 lxc (0.9.0-0ubuntu23) saucy; urgency=low
 
   * 0014-lxc-apparmor-null-terminate-buffer: make sure a value we fread is

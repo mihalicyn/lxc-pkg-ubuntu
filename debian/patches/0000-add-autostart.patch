@@ -5,22 +5,11 @@ Author: Stéphane Graber <stgraber@ubuntu.com>
 Origin: vendor
 Forwarded: no
 
-Index: raring-lxc/src/lxc/lxc-destroy.in
+Index: saucy-lxc/src/lxc/lxc-ls
 ===================================================================
---- raring-lxc.orig/src/lxc/lxc-destroy.in	2013-03-19 10:35:53.501404552 -0400
-+++ raring-lxc/src/lxc/lxc-destroy.in	2013-03-19 10:35:53.493404552 -0400
-@@ -144,3 +144,6 @@
- 
- # recursively remove the container to remove old container configuration
- rm -rf --one-file-system --preserve-root $lxc_path/$lxc_name
-+
-+# remove auto-start file if present
-+rm -f /etc/lxc/auto/$lxc_name.conf /etc/lxc/auto/$lxc_name
-Index: raring-lxc/src/lxc/lxc-ls
-===================================================================
---- raring-lxc.orig/src/lxc/lxc-ls	2013-03-19 10:35:53.501404552 -0400
-+++ raring-lxc/src/lxc/lxc-ls	2013-03-19 10:35:53.493404552 -0400
-@@ -131,7 +131,8 @@
+--- saucy-lxc.orig/src/lxc/lxc-ls	2013-09-10 18:40:46.024436751 -0400
++++ saucy-lxc/src/lxc/lxc-ls	2013-09-10 18:40:46.020436751 -0400
+@@ -132,7 +132,8 @@
  parser.add_argument("--fancy", action="store_true",
                      help=_("use fancy output"))
  
@@ -30,7 +19,7 @@ Index: raring-lxc/src/lxc/lxc-ls
                      help=_("comma separated list of fields to show"))
  
  parser.add_argument("--nesting", dest="nesting", action="store_true",
-@@ -206,6 +207,11 @@
+@@ -207,6 +208,11 @@
          entry['pid'] = "-"
          if container.init_pid != -1:
              entry['pid'] = str(container.init_pid)
@@ -41,4 +30,4 @@ Index: raring-lxc/src/lxc/lxc-ls
 +        entry['autostart'] = "NO"
  
      # Get the IPs
-     for protocol in ('ipv4', 'ipv6'):
+     for family, protocol in {'inet': 'ipv4', 'inet6': 'ipv6'}.items():

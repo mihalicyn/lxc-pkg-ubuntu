@@ -1,10 +1,10 @@
 /* src/config.h.in.  Generated from configure.ac by autoheader.  */
 
-/* Lua is available */
-#undef ENABLE_LUA
-
 /* Python3 is available */
 #undef ENABLE_PYTHON
+
+/* Define to 1 if you have the `confstr' function. */
+#undef HAVE_CONFSTR
 
 /* Define to 1 if you have the declaration of `PR_CAPBSET_DROP', and to 0 if
    you don't. */
@@ -22,11 +22,17 @@
 /* Define to 1 if you have the `hasmntopt' function. */
 #undef HAVE_HASMNTOPT
 
+/* Define to 1 if you have the <ifaddrs.h> header file. */
+#undef HAVE_IFADDRS_H
+
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
 /* Define to 1 if you have the `apparmor' library (-lapparmor). */
 #undef HAVE_LIBAPPARMOR
+
+/* Define to 1 if you have the `gnutls' library (-lgnutls). */
+#undef HAVE_LIBGNUTLS
 
 /* Define to 1 if you have the `seccomp' library (-lseccomp). */
 #undef HAVE_LIBSECCOMP
@@ -54,6 +60,9 @@
 
 /* Define to 1 if you have the <pty.h> header file. */
 #undef HAVE_PTY_H
+
+/* Define to 1 if you have the `rand_r' function. */
+#undef HAVE_RAND_R
 
 /* Define to 1 if the system has the type `scmp_filter_ctx'. */
 #undef HAVE_SCMP_FILTER_CTX
