@@ -5,3 +5,4 @@ transition/00-redirect-lxc-list.patch
 0003-move-monitor-fifo-and-monitor-sock-to-run.patch
 0004-hash-lxcname-for-use-in-monitor-unix-socket-sun_path.patch
 0005-ignore-ability-to-init-lxc-monitord.log.patch
+0006-add-pstore-to-container-fstab.patch

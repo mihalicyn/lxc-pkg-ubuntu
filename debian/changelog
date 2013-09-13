@@ -1,3 +1,11 @@
+lxc (1.0.0~alpha1-0ubuntu3) saucy; urgency=low
+
+  * Cherrypick bugfix from upstream
+    (pre-mount pstore to avoid mountall hanging at boot time):
+    - 0006-add-pstore-to-container-fstab.patch
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Fri, 13 Sep 2013 16:57:29 -0400
+
 lxc (1.0.0~alpha1-0ubuntu2) saucy; urgency=low
 
   * Add allow-stderr to autopkgtst restrictions as the Ubuntu template
