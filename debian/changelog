@@ -1,3 +1,10 @@
+lxc (1.0.0~alpha1-0ubuntu4) saucy; urgency=low
+
+  * modify 0006-add-pstore-to-container-fstab.patch: make pstore mount
+    optional.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 16 Sep 2013 11:50:05 -0500
+
 lxc (1.0.0~alpha1-0ubuntu3) saucy; urgency=low
 
   * Cherrypick bugfix from upstream

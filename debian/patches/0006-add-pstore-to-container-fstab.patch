@@ -15,30 +15,27 @@ Acked-by: Stéphane Graber <stgraber@ubuntu.com>
  templates/lxc-ubuntu.in       | 1 +
  2 files changed, 2 insertions(+)
 
-diff --git a/templates/lxc-ubuntu-cloud.in b/templates/lxc-ubuntu-cloud.in
-index 0abc932..b024de8 100644
---- a/templates/lxc-ubuntu-cloud.in
-+++ b/templates/lxc-ubuntu-cloud.in
-@@ -116,6 +116,7 @@ sysfs           sys          sysfs defaults  0 0
+Index: lxc-1.0.0~alpha1/templates/lxc-ubuntu-cloud.in
+===================================================================
+--- lxc-1.0.0~alpha1.orig/templates/lxc-ubuntu-cloud.in	2013-09-10 17:22:00.000000000 -0500
++++ lxc-1.0.0~alpha1/templates/lxc-ubuntu-cloud.in	2013-09-16 11:49:57.373028184 -0500
+@@ -116,6 +116,7 @@ sysfs           sys          sysfs defau
  /sys/fs/fuse/connections sys/fs/fuse/connections none bind 0 0
  /sys/kernel/debug sys/kernel/debug none bind 0 0
  /sys/kernel/security sys/kernel/security none bind 0 0
-+/sys/fs/pstore sys/fs/pstore none bind 0 0
++/sys/fs/pstore sys/fs/pstore none bind,optional 0 0
  EOF
  
      # unprivileged user can't mknod these.  One day we may allow
-diff --git a/templates/lxc-ubuntu.in b/templates/lxc-ubuntu.in
-index 6f6f3e1..02ccbc2 100644
---- a/templates/lxc-ubuntu.in
-+++ b/templates/lxc-ubuntu.in
-@@ -430,6 +430,7 @@ sysfs           sys          sysfs defaults  0 0
+Index: lxc-1.0.0~alpha1/templates/lxc-ubuntu.in
+===================================================================
+--- lxc-1.0.0~alpha1.orig/templates/lxc-ubuntu.in	2013-09-10 17:22:00.000000000 -0500
++++ lxc-1.0.0~alpha1/templates/lxc-ubuntu.in	2013-09-16 11:50:02.525028383 -0500
+@@ -430,6 +430,7 @@ sysfs           sys          sysfs defau
  /sys/fs/fuse/connections sys/fs/fuse/connections none bind 0 0
  /sys/kernel/debug sys/kernel/debug none bind 0 0
  /sys/kernel/security sys/kernel/security none bind 0 0
-+/sys/fs/pstore sys/fs/pstore none bind 0 0
++/sys/fs/pstore sys/fs/pstore none bind,optional 0 0
  EOF
  
      if [ $? -ne 0 ]; then
--- 
-1.8.3.2
-
