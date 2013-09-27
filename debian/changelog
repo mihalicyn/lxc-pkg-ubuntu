@@ -1,3 +1,10 @@
+lxc (1.0.0~alpha1-0ubuntu5) saucy; urgency=low
+
+  * Cherrypicking bugfix from upstream (LP: #1227313)
+    - 0001-apparmor.c-drop-newline-when-reading-current-profile.patch
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Fri, 27 Sep 2013 15:14:24 -0500
+
 lxc (1.0.0~alpha1-0ubuntu4) saucy; urgency=low
 
   * modify 0006-add-pstore-to-container-fstab.patch: make pstore mount

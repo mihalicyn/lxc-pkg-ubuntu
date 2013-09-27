@@ -6,3 +6,4 @@ transition/00-redirect-lxc-list.patch
 0004-hash-lxcname-for-use-in-monitor-unix-socket-sun_path.patch
 0005-ignore-ability-to-init-lxc-monitord.log.patch
 0006-add-pstore-to-container-fstab.patch
+0007-apparmor.c-drop-newline-when-reading-current-profile.patch
