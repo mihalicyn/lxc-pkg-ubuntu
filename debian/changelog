@@ -1,7 +1,15 @@
+lxc (1.0.0~alpha1-0ubuntu6) saucy; urgency=low
+
+  * Cherrypicking bugfix from upstream
+    - 0008-Fix-crasher-in-get_ips.patch
+      (Fixes lxc-list on Ubuntu Touch amongst other cases)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Sun, 29 Sep 2013 20:52:53 -0400
+
 lxc (1.0.0~alpha1-0ubuntu5) saucy; urgency=low
 
   * Cherrypicking bugfix from upstream (LP: #1227313)
-    - 0001-apparmor.c-drop-newline-when-reading-current-profile.patch
+    - 0007-apparmor.c-drop-newline-when-reading-current-profile.patch
 
  -- Serge Hallyn <serge.hallyn@ubuntu.com>  Fri, 27 Sep 2013 15:14:24 -0500
 

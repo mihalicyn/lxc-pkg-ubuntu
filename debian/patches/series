@@ -7,3 +7,4 @@ transition/00-redirect-lxc-list.patch
 0005-ignore-ability-to-init-lxc-monitord.log.patch
 0006-add-pstore-to-container-fstab.patch
 0007-apparmor.c-drop-newline-when-reading-current-profile.patch
+0008-Fix-crasher-in-get_ips.patch
