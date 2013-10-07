@@ -1,3 +1,10 @@
+lxc (1.0.0~alpha1-0ubuntu7) saucy; urgency=low
+
+  * Cherrypicking bugfix from upstream (LP: #1236577)
+    - 0009-lxc-ubuntu-cloud-pass-numeric-owner-and-p-to-untar.patch
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 07 Oct 2013 16:17:27 -0500
+
 lxc (1.0.0~alpha1-0ubuntu6) saucy; urgency=low
 
   * Cherrypicking bugfix from upstream

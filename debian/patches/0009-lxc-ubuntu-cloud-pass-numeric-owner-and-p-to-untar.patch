@@ -1,0 +1,30 @@
+From 6d105a365c35860fc63e0d96596820f509b44048 Mon Sep 17 00:00:00 2001
+From: Serge Hallyn <serge.hallyn@ubuntu.com>
+Date: Mon, 7 Oct 2013 16:10:12 -0500
+Subject: [PATCH 1/1] lxc-ubuntu-cloud: pass --numeric-owner and -p to untar
+
+An example of where this can break is if you pass in sshkey to user
+ubuntu in the container, where user ubuntu exists with different uid
+on host.
+
+Signed-off-by: Serge Hallyn <serge.hallyn@ubuntu.com>
+---
+ templates/lxc-ubuntu-cloud.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/templates/lxc-ubuntu-cloud.in b/templates/lxc-ubuntu-cloud.in
+index 47a5fca..fdea822 100644
+--- a/templates/lxc-ubuntu-cloud.in
++++ b/templates/lxc-ubuntu-cloud.in
+@@ -371,7 +371,7 @@ do_extract_rootfs() {
+     echo "Extracting container rootfs"
+     mkdir -p $rootfs
+     cd $rootfs
+-    tar -zxf $cache/$filename
++    tar --numeric-uid -xpzf "$cache/$filename"
+ }
+ 
+ if [ -n "$tarball" ]; then
+-- 
+1.8.1.2
+
