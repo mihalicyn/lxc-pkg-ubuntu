@@ -1,3 +1,10 @@
+lxc (1.0.0~alpha1-0ubuntu8) saucy; urgency=low
+
+  * Add a recommends on uuid-runtime to lxc-templates as the
+    ubuntu-cloud template uses uuidgen.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 07 Oct 2013 17:35:56 -0400
+
 lxc (1.0.0~alpha1-0ubuntu7) saucy; urgency=low
 
   * Cherrypicking bugfix from upstream (LP: #1236577)

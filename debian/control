@@ -81,7 +81,8 @@ Depends: lxc (>= 0.8.0~rc1-4ubuntu43), ${misc:Depends}
 Recommends: cloud-image-utils | cloud-utils,
             debootstrap | cdebootstrap,
             openssl,
-            rsync
+            rsync,
+            uuid-runtime
 Suggests: qemu-user-static
 Replaces: lxc (<< 0.8.0~rc1-4ubuntu43)
 Breaks: lxc (<< 0.8.0~rc1-4ubuntu43)
