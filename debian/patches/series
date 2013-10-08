@@ -9,3 +9,4 @@ transition/00-redirect-lxc-list.patch
 0007-apparmor.c-drop-newline-when-reading-current-profile.patch
 0008-Fix-crasher-in-get_ips.patch
 0009-lxc-ubuntu-cloud-pass-numeric-owner-and-p-to-untar.patch
+0010-lxc-ubuntu-cloud-Cope-with-spaces-in-paths.patch

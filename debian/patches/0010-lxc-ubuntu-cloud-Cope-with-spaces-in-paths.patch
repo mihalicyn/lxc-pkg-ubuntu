@@ -1,0 +1,42 @@
+From 9c3bc32c5789b76b8c42b75d7625377d61e052c1 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?St=C3=A9phane=20Graber?= <stgraber@ubuntu.com>
+Date: Tue, 8 Oct 2013 10:51:53 -0400
+Subject: [PATCH] lxc-ubuntu-cloud: Cope with spaces in paths
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reported-by: Scott Moser <smoser@ubuntu.com>
+Signed-off-by: Stéphane Graber <stgraber@ubuntu.com>
+---
+ templates/lxc-ubuntu-cloud.in | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/templates/lxc-ubuntu-cloud.in b/templates/lxc-ubuntu-cloud.in
+index a2af003..82a7f74 100644
+--- a/templates/lxc-ubuntu-cloud.in
++++ b/templates/lxc-ubuntu-cloud.in
+@@ -338,9 +338,9 @@ build_root_tgz()
+         wget $url || { echo "Couldn't find cloud image $url."; exit 1; }
+     fi
+     echo "Creating new cached cloud image rootfs"
+-    tar --wildcards -zxf $tarname $imgname
++    tar --wildcards -zxf "$tarname" "$imgname"
+     mount -o loop $imgname $xdir
+-    (cd $xdir; tar --numeric-owner -cpzf ../$filename .)
++    (cd $xdir; tar --numeric-owner -cpzf "../$filename" .)
+     umount $xdir
+     rm -f $tarname $imgname
+     rmdir $xdir
+@@ -371,7 +371,7 @@ do_extract_rootfs() {
+     echo "Extracting container rootfs"
+     mkdir -p $rootfs
+     cd $rootfs
+-    tar --numeric-owner -xpzf $cache/$filename
++    tar --numeric-owner -xpzf "$cache/$filename"
+ }
+ 
+ if [ -n "$tarball" ]; then
+-- 
+1.8.3.2
+
