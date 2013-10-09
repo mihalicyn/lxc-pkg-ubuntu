@@ -10,3 +10,4 @@ transition/00-redirect-lxc-list.patch
 0008-Fix-crasher-in-get_ips.patch
 0009-lxc-ubuntu-cloud-pass-numeric-owner-and-p-to-untar.patch
 0010-lxc-ubuntu-cloud-Cope-with-spaces-in-paths.patch
+0011-ubuntu-cloud-prep-hook-fix-debug-helper-to-not-inapp.patch

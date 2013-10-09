@@ -1,3 +1,15 @@
+lxc (1.0.0~alpha1-0ubuntu10) saucy; urgency=low
+
+  [ Serge Hallyn ]
+  * Cherrypicking bugfix from upstream
+    - 0011-ubuntu-cloud-prep-hook-fix-debug-helper-to-not-inapp.patch
+
+  [ Stéphane Graber ]
+  * On saucy and higher, add "dbus," to the container-base profile.
+    (done that way as LXC is backported down to 12.04)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Wed, 09 Oct 2013 14:04:23 -0400
+
 lxc (1.0.0~alpha1-0ubuntu9) saucy; urgency=low
 
   * Update patch with current upstream version (LP: #1236726)
