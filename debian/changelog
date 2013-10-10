@@ -1,3 +1,11 @@
+lxc (1.0.0~alpha1-0ubuntu11) saucy; urgency=low
+
+  * Deny any kind of access to /sys/kernel/security/** as the containers
+    have no reason to read that and it's been causing dbus-daemon to think
+    it can integrate with apparmor.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Thu, 10 Oct 2013 12:58:54 -0400
+
 lxc (1.0.0~alpha1-0ubuntu10) saucy; urgency=low
 
   [ Serge Hallyn ]
