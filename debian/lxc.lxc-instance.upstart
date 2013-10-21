@@ -16,8 +16,8 @@ usage "NAME=name of LXC instance, CONFIG=full path to configuration file"
 pre-start script
 	LXC_PATH=$(dirname $(dirname $(readlink $CONFIG)))
 
-	lxc-info -P $LXC_PATH -n $NAME 2>/dev/null | grep state | grep -q "RUNNING" && {stop; exit 0; }
-	[ -f $CONFIG ] || {stop; exit 0; }
+	lxc-info -P $LXC_PATH -n $NAME 2>/dev/null | grep state | grep -q "RUNNING" && { stop; exit 0; }
+	[ -f $CONFIG ] || { stop; exit 0; }
 end script
 
 script

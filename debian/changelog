@@ -1,3 +1,9 @@
+lxc (1.0.0~alpha2-0ubuntu3) trusty; urgency=low
+
+  * Fix syntax error in upstart job.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 21 Oct 2013 18:51:36 -0400
+
 lxc (1.0.0~alpha2-0ubuntu2) trusty; urgency=low
 
   * Set lxcpath in lxc-instance, that should make the containers visible
