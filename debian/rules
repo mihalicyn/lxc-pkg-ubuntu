@@ -15,7 +15,8 @@ override_dh_auto_configure:
 		--libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
 		--with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc \
 		--enable-python $(shell DEB_CFLAGS_MAINT_APPEND="$$(python3-config --includes)" dpkg-buildflags --export=configure) \
-		--enable-doc --disable-rpath --enable-apparmor --with-distro=ubuntu
+		--enable-doc --disable-rpath --enable-apparmor --enable-selinux \
+		--enable-tests --with-distro=ubuntu
 
 override_dh_install:
 	# copy apparmor profiles
@@ -43,6 +44,10 @@ override_dh_install:
 	cp debian/lxc.dnsmasq debian/lxc/etc/dnsmasq.d-available/lxc
 
 	dh_install --fail-missing
+
+	# move the tests
+	mkdir -p debian/lxc-tests/usr/bin
+	mv debian/lxc/usr/bin/lxc-test-* debian/lxc-tests/usr/bin/
 
 override_dh_installinit:
 	dh_installinit --no-restart-on-upgrade --name=lxc

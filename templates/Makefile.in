@@ -83,9 +83,10 @@ DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(srcdir)/lxc-cirros.in $(srcdir)/lxc-debian.in \
 	$(srcdir)/lxc-ubuntu.in $(srcdir)/lxc-ubuntu-cloud.in \
 	$(srcdir)/lxc-opensuse.in $(srcdir)/lxc-busybox.in \
-	$(srcdir)/lxc-fedora.in $(srcdir)/lxc-oracle.in \
-	$(srcdir)/lxc-altlinux.in $(srcdir)/lxc-sshd.in \
-	$(srcdir)/lxc-archlinux.in $(srcdir)/lxc-alpine.in
+	$(srcdir)/lxc-fedora.in $(srcdir)/lxc-openmandriva.in \
+	$(srcdir)/lxc-oracle.in $(srcdir)/lxc-altlinux.in \
+	$(srcdir)/lxc-sshd.in $(srcdir)/lxc-archlinux.in \
+	$(srcdir)/lxc-alpine.in $(srcdir)/lxc-plamo.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acinclude.m4 \
 	$(top_srcdir)/configure.ac
@@ -94,8 +95,9 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/src/config.h
 CONFIG_CLEAN_FILES = lxc-cirros lxc-debian lxc-ubuntu lxc-ubuntu-cloud \
-	lxc-opensuse lxc-busybox lxc-fedora lxc-oracle lxc-altlinux \
-	lxc-sshd lxc-archlinux lxc-alpine
+	lxc-opensuse lxc-busybox lxc-fedora lxc-openmandriva \
+	lxc-oracle lxc-altlinux lxc-sshd lxc-archlinux lxc-alpine \
+	lxc-plamo
 CONFIG_CLEAN_VPATH_FILES =
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
@@ -164,6 +166,7 @@ CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DATADIR = @DATADIR@
+DEFAULT_CGROUP_PATTERN = @DEFAULT_CGROUP_PATTERN@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DOCDIR = @DOCDIR@
@@ -228,6 +231,7 @@ PYTHON_PREFIX = @PYTHON_PREFIX@
 PYTHON_VERSION = @PYTHON_VERSION@
 SECCOMP_LIBS = @SECCOMP_LIBS@
 SED = @SED@
+SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
@@ -296,13 +300,15 @@ templates_SCRIPTS = \
 	lxc-ubuntu-cloud \
 	lxc-opensuse \
 	lxc-fedora \
+	lxc-openmandriva \
 	lxc-oracle \
 	lxc-altlinux \
 	lxc-busybox \
 	lxc-sshd \
 	lxc-archlinux \
 	lxc-alpine \
-	lxc-cirros
+	lxc-cirros \
+	lxc-plamo
 
 all: all-am
 
@@ -351,6 +357,8 @@ lxc-busybox: $(top_builddir)/config.status $(srcdir)/lxc-busybox.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-fedora: $(top_builddir)/config.status $(srcdir)/lxc-fedora.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+lxc-openmandriva: $(top_builddir)/config.status $(srcdir)/lxc-openmandriva.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-oracle: $(top_builddir)/config.status $(srcdir)/lxc-oracle.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-altlinux: $(top_builddir)/config.status $(srcdir)/lxc-altlinux.in
@@ -360,6 +368,8 @@ lxc-sshd: $(top_builddir)/config.status $(srcdir)/lxc-sshd.in
 lxc-archlinux: $(top_builddir)/config.status $(srcdir)/lxc-archlinux.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-alpine: $(top_builddir)/config.status $(srcdir)/lxc-alpine.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+lxc-plamo: $(top_builddir)/config.status $(srcdir)/lxc-plamo.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 install-templatesSCRIPTS: $(templates_SCRIPTS)
 	@$(NORMAL_INSTALL)

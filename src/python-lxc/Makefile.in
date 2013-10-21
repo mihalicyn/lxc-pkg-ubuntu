@@ -126,6 +126,7 @@ CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DATADIR = @DATADIR@
+DEFAULT_CGROUP_PATTERN = @DEFAULT_CGROUP_PATTERN@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DOCDIR = @DOCDIR@
@@ -190,6 +191,7 @@ PYTHON_PREFIX = @PYTHON_PREFIX@
 PYTHON_VERSION = @PYTHON_VERSION@
 SECCOMP_LIBS = @SECCOMP_LIBS@
 SED = @SED@
+SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
@@ -257,7 +259,9 @@ EXTRA_DIST = \
 	setup.py \
 	lxc.c \
 	lxc/__init__.py \
-	examples/api_test.py
+	examples/api_test.py \
+	examples/pyconsole.py \
+	examples/pyconsole-vte.py
 
 all: all-am
 

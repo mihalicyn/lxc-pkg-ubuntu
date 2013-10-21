@@ -77,11 +77,12 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_TRUE@am__append_1 = lxc-device.1 \
+@USE_DOCBOOK2X_TRUE@am__append_1 = ja
+@ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_TRUE@am__append_2 = lxc-device.1 \
 @ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_TRUE@	lxc-ls.1 \
 @ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_TRUE@	lxc-start-ephemeral.1
-@ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_FALSE@am__append_2 = legacy/lxc-ls.1
-@ENABLE_DOCBOOK_TRUE@@ENABLE_LUA_TRUE@am__append_3 = lxc-top.1
+@ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_FALSE@am__append_3 = legacy/lxc-ls.1
+@ENABLE_DOCBOOK_TRUE@@ENABLE_LUA_TRUE@am__append_4 = lxc-top.1
 subdir = doc
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(srcdir)/lxc-attach.sgml.in $(srcdir)/lxc-cgroup.sgml.in \
@@ -93,7 +94,7 @@ DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(srcdir)/lxc-info.sgml.in $(srcdir)/lxc-kill.sgml.in \
 	$(srcdir)/lxc-ls.sgml.in $(srcdir)/lxc-monitor.sgml.in \
 	$(srcdir)/lxc-netstat.sgml.in $(srcdir)/lxc-ps.sgml.in \
-	$(srcdir)/lxc-restart.sgml.in \
+	$(srcdir)/lxc-restart.sgml.in $(srcdir)/lxc-snapshot.sgml.in \
 	$(srcdir)/lxc-start-ephemeral.sgml.in \
 	$(srcdir)/lxc-start.sgml.in $(srcdir)/lxc-stop.sgml.in \
 	$(srcdir)/lxc-top.sgml.in $(srcdir)/lxc-unfreeze.sgml.in \
@@ -113,10 +114,11 @@ CONFIG_CLEAN_FILES = lxc-attach.sgml lxc-cgroup.sgml \
 	lxc-console.sgml lxc-create.sgml lxc-destroy.sgml \
 	lxc-device.sgml lxc-execute.sgml lxc-freeze.sgml lxc-info.sgml \
 	lxc-kill.sgml lxc-ls.sgml lxc-monitor.sgml lxc-netstat.sgml \
-	lxc-ps.sgml lxc-restart.sgml lxc-start-ephemeral.sgml \
-	lxc-start.sgml lxc-stop.sgml lxc-top.sgml lxc-unfreeze.sgml \
-	lxc-unshare.sgml lxc-version.sgml lxc-wait.sgml lxc.conf.sgml \
-	lxc.sgml common_options.sgml see_also.sgml
+	lxc-ps.sgml lxc-restart.sgml lxc-snapshot.sgml \
+	lxc-start-ephemeral.sgml lxc-start.sgml lxc-stop.sgml \
+	lxc-top.sgml lxc-unfreeze.sgml lxc-unshare.sgml \
+	lxc-version.sgml lxc-wait.sgml lxc.conf.sgml lxc.sgml \
+	common_options.sgml see_also.sgml
 CONFIG_CLEAN_VPATH_FILES =
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -249,6 +251,7 @@ CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DATADIR = @DATADIR@
+DEFAULT_CGROUP_PATTERN = @DEFAULT_CGROUP_PATTERN@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DOCDIR = @DOCDIR@
@@ -313,6 +316,7 @@ PYTHON_PREFIX = @PYTHON_PREFIX@
 PYTHON_VERSION = @PYTHON_VERSION@
 SECCOMP_LIBS = @SECCOMP_LIBS@
 SED = @SED@
+SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
@@ -374,8 +378,8 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = examples rootfs
-DIST_SUBDIRS = examples rootfs
+SUBDIRS = examples rootfs $(am__append_1)
+DIST_SUBDIRS = examples rootfs ja
 EXTRA_DIST = \
 	FAQ.txt
 
@@ -385,10 +389,11 @@ EXTRA_DIST = \
 @ENABLE_DOCBOOK_TRUE@	lxc-destroy.1 lxc-execute.1 lxc-freeze.1 \
 @ENABLE_DOCBOOK_TRUE@	lxc-info.1 lxc-kill.1 lxc-monitor.1 \
 @ENABLE_DOCBOOK_TRUE@	lxc-netstat.1 lxc-ps.1 lxc-restart.1 \
-@ENABLE_DOCBOOK_TRUE@	lxc-start.1 lxc-stop.1 lxc-unfreeze.1 \
-@ENABLE_DOCBOOK_TRUE@	lxc-unshare.1 lxc-version.1 lxc-wait.1 \
-@ENABLE_DOCBOOK_TRUE@	lxc.conf.5 lxc.7 $(am__append_1) \
-@ENABLE_DOCBOOK_TRUE@	$(am__append_2) $(am__append_3)
+@ENABLE_DOCBOOK_TRUE@	lxc-snapshot.1 lxc-start.1 lxc-stop.1 \
+@ENABLE_DOCBOOK_TRUE@	lxc-unfreeze.1 lxc-unshare.1 \
+@ENABLE_DOCBOOK_TRUE@	lxc-version.1 lxc-wait.1 lxc.conf.5 lxc.7 \
+@ENABLE_DOCBOOK_TRUE@	$(am__append_2) $(am__append_3) \
+@ENABLE_DOCBOOK_TRUE@	$(am__append_4)
 all: all-recursive
 
 .SUFFIXES:
@@ -457,6 +462,8 @@ lxc-netstat.sgml: $(top_builddir)/config.status $(srcdir)/lxc-netstat.sgml.in
 lxc-ps.sgml: $(top_builddir)/config.status $(srcdir)/lxc-ps.sgml.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-restart.sgml: $(top_builddir)/config.status $(srcdir)/lxc-restart.sgml.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+lxc-snapshot.sgml: $(top_builddir)/config.status $(srcdir)/lxc-snapshot.sgml.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-start-ephemeral.sgml: $(top_builddir)/config.status $(srcdir)/lxc-start-ephemeral.sgml.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@

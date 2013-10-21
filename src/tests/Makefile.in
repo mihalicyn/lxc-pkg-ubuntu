@@ -79,6 +79,8 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+@ENABLE_APPARMOR_TRUE@@ENABLE_TESTS_TRUE@am__append_1 = -DHAVE_APPARMOR
+@ENABLE_SELINUX_TRUE@@ENABLE_TESTS_TRUE@am__append_2 = -DHAVE_SELINUX
 @ENABLE_TESTS_TRUE@bin_PROGRAMS = lxc-test-containertests$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-locktests$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-startone$(EXEEXT) \
@@ -92,7 +94,14 @@ host_triplet = @host@
 @ENABLE_TESTS_TRUE@	lxc-test-cgpath$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-clonetest$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-console$(EXEEXT) \
-@ENABLE_TESTS_TRUE@	lxc-usernic-test$(EXEEXT)
+@ENABLE_TESTS_TRUE@	lxc-usernic-test$(EXEEXT) \
+@ENABLE_TESTS_TRUE@	lxc-test-snapshot$(EXEEXT) \
+@ENABLE_TESTS_TRUE@	lxc-test-concurrent$(EXEEXT) \
+@ENABLE_TESTS_TRUE@	lxc-test-may-control$(EXEEXT) \
+@ENABLE_TESTS_TRUE@	lxc-test-reboot$(EXEEXT) \
+@ENABLE_TESTS_TRUE@	lxc-test-list$(EXEEXT) \
+@ENABLE_TESTS_TRUE@	lxc-test-attach$(EXEEXT)
+@DISTRO_UBUNTU_TRUE@@ENABLE_TESTS_TRUE@am__append_3 = lxc-test-ubuntu
 subdir = src/tests
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/config/depcomp
@@ -107,6 +116,11 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
+am__lxc_test_attach_SOURCES_DIST = attach.c
+@ENABLE_TESTS_TRUE@am_lxc_test_attach_OBJECTS = attach.$(OBJEXT)
+lxc_test_attach_OBJECTS = $(am_lxc_test_attach_OBJECTS)
+lxc_test_attach_LDADD = $(LDADD)
+@ENABLE_TESTS_TRUE@lxc_test_attach_DEPENDENCIES = ../lxc/liblxc.so
 am__lxc_test_cgpath_SOURCES_DIST = cgpath.c
 @ENABLE_TESTS_TRUE@am_lxc_test_cgpath_OBJECTS = cgpath.$(OBJEXT)
 lxc_test_cgpath_OBJECTS = $(am_lxc_test_cgpath_OBJECTS)
@@ -118,6 +132,13 @@ am__lxc_test_clonetest_SOURCES_DIST = clonetest.c
 lxc_test_clonetest_OBJECTS = $(am_lxc_test_clonetest_OBJECTS)
 lxc_test_clonetest_LDADD = $(LDADD)
 @ENABLE_TESTS_TRUE@lxc_test_clonetest_DEPENDENCIES = ../lxc/liblxc.so
+am__lxc_test_concurrent_SOURCES_DIST = concurrent.c
+@ENABLE_TESTS_TRUE@am_lxc_test_concurrent_OBJECTS =  \
+@ENABLE_TESTS_TRUE@	concurrent.$(OBJEXT)
+lxc_test_concurrent_OBJECTS = $(am_lxc_test_concurrent_OBJECTS)
+lxc_test_concurrent_LDADD = $(LDADD)
+@ENABLE_TESTS_TRUE@lxc_test_concurrent_DEPENDENCIES =  \
+@ENABLE_TESTS_TRUE@	../lxc/liblxc.so
 am__lxc_test_console_SOURCES_DIST = console.c
 @ENABLE_TESTS_TRUE@am_lxc_test_console_OBJECTS = console.$(OBJEXT)
 lxc_test_console_OBJECTS = $(am_lxc_test_console_OBJECTS)
@@ -155,6 +176,11 @@ am__lxc_test_getkeys_SOURCES_DIST = getkeys.c
 lxc_test_getkeys_OBJECTS = $(am_lxc_test_getkeys_OBJECTS)
 lxc_test_getkeys_LDADD = $(LDADD)
 @ENABLE_TESTS_TRUE@lxc_test_getkeys_DEPENDENCIES = ../lxc/liblxc.so
+am__lxc_test_list_SOURCES_DIST = list.c
+@ENABLE_TESTS_TRUE@am_lxc_test_list_OBJECTS = list.$(OBJEXT)
+lxc_test_list_OBJECTS = $(am_lxc_test_list_OBJECTS)
+lxc_test_list_LDADD = $(LDADD)
+@ENABLE_TESTS_TRUE@lxc_test_list_DEPENDENCIES = ../lxc/liblxc.so
 am__lxc_test_locktests_SOURCES_DIST = locktests.c
 @ENABLE_TESTS_TRUE@am_lxc_test_locktests_OBJECTS =  \
 @ENABLE_TESTS_TRUE@	locktests.$(OBJEXT)
@@ -166,6 +192,18 @@ am__lxc_test_lxcpath_SOURCES_DIST = lxcpath.c
 lxc_test_lxcpath_OBJECTS = $(am_lxc_test_lxcpath_OBJECTS)
 lxc_test_lxcpath_LDADD = $(LDADD)
 @ENABLE_TESTS_TRUE@lxc_test_lxcpath_DEPENDENCIES = ../lxc/liblxc.so
+am__lxc_test_may_control_SOURCES_DIST = may_control.c
+@ENABLE_TESTS_TRUE@am_lxc_test_may_control_OBJECTS =  \
+@ENABLE_TESTS_TRUE@	may_control.$(OBJEXT)
+lxc_test_may_control_OBJECTS = $(am_lxc_test_may_control_OBJECTS)
+lxc_test_may_control_LDADD = $(LDADD)
+@ENABLE_TESTS_TRUE@lxc_test_may_control_DEPENDENCIES =  \
+@ENABLE_TESTS_TRUE@	../lxc/liblxc.so
+am__lxc_test_reboot_SOURCES_DIST = reboot.c
+@ENABLE_TESTS_TRUE@am_lxc_test_reboot_OBJECTS = reboot.$(OBJEXT)
+lxc_test_reboot_OBJECTS = $(am_lxc_test_reboot_OBJECTS)
+lxc_test_reboot_LDADD = $(LDADD)
+@ENABLE_TESTS_TRUE@lxc_test_reboot_DEPENDENCIES = ../lxc/liblxc.so
 am__lxc_test_saveconfig_SOURCES_DIST = saveconfig.c
 @ENABLE_TESTS_TRUE@am_lxc_test_saveconfig_OBJECTS =  \
 @ENABLE_TESTS_TRUE@	saveconfig.$(OBJEXT)
@@ -180,6 +218,11 @@ lxc_test_shutdowntest_OBJECTS = $(am_lxc_test_shutdowntest_OBJECTS)
 lxc_test_shutdowntest_LDADD = $(LDADD)
 @ENABLE_TESTS_TRUE@lxc_test_shutdowntest_DEPENDENCIES =  \
 @ENABLE_TESTS_TRUE@	../lxc/liblxc.so
+am__lxc_test_snapshot_SOURCES_DIST = snapshot.c
+@ENABLE_TESTS_TRUE@am_lxc_test_snapshot_OBJECTS = snapshot.$(OBJEXT)
+lxc_test_snapshot_OBJECTS = $(am_lxc_test_snapshot_OBJECTS)
+lxc_test_snapshot_LDADD = $(LDADD)
+@ENABLE_TESTS_TRUE@lxc_test_snapshot_DEPENDENCIES = ../lxc/liblxc.so
 am__lxc_test_startone_SOURCES_DIST = startone.c
 @ENABLE_TESTS_TRUE@am_lxc_test_startone_OBJECTS = startone.$(OBJEXT)
 lxc_test_startone_OBJECTS = $(am_lxc_test_startone_OBJECTS)
@@ -254,26 +297,34 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(lxc_test_cgpath_SOURCES) $(lxc_test_clonetest_SOURCES) \
+SOURCES = $(lxc_test_attach_SOURCES) $(lxc_test_cgpath_SOURCES) \
+	$(lxc_test_clonetest_SOURCES) $(lxc_test_concurrent_SOURCES) \
 	$(lxc_test_console_SOURCES) $(lxc_test_containertests_SOURCES) \
 	$(lxc_test_createtest_SOURCES) $(lxc_test_destroytest_SOURCES) \
 	$(lxc_test_get_item_SOURCES) $(lxc_test_getkeys_SOURCES) \
-	$(lxc_test_locktests_SOURCES) $(lxc_test_lxcpath_SOURCES) \
-	$(lxc_test_saveconfig_SOURCES) \
-	$(lxc_test_shutdowntest_SOURCES) $(lxc_test_startone_SOURCES) \
-	$(lxc_usernic_test_SOURCES)
-DIST_SOURCES = $(am__lxc_test_cgpath_SOURCES_DIST) \
+	$(lxc_test_list_SOURCES) $(lxc_test_locktests_SOURCES) \
+	$(lxc_test_lxcpath_SOURCES) $(lxc_test_may_control_SOURCES) \
+	$(lxc_test_reboot_SOURCES) $(lxc_test_saveconfig_SOURCES) \
+	$(lxc_test_shutdowntest_SOURCES) $(lxc_test_snapshot_SOURCES) \
+	$(lxc_test_startone_SOURCES) $(lxc_usernic_test_SOURCES)
+DIST_SOURCES = $(am__lxc_test_attach_SOURCES_DIST) \
+	$(am__lxc_test_cgpath_SOURCES_DIST) \
 	$(am__lxc_test_clonetest_SOURCES_DIST) \
+	$(am__lxc_test_concurrent_SOURCES_DIST) \
 	$(am__lxc_test_console_SOURCES_DIST) \
 	$(am__lxc_test_containertests_SOURCES_DIST) \
 	$(am__lxc_test_createtest_SOURCES_DIST) \
 	$(am__lxc_test_destroytest_SOURCES_DIST) \
 	$(am__lxc_test_get_item_SOURCES_DIST) \
 	$(am__lxc_test_getkeys_SOURCES_DIST) \
+	$(am__lxc_test_list_SOURCES_DIST) \
 	$(am__lxc_test_locktests_SOURCES_DIST) \
 	$(am__lxc_test_lxcpath_SOURCES_DIST) \
+	$(am__lxc_test_may_control_SOURCES_DIST) \
+	$(am__lxc_test_reboot_SOURCES_DIST) \
 	$(am__lxc_test_saveconfig_SOURCES_DIST) \
 	$(am__lxc_test_shutdowntest_SOURCES_DIST) \
+	$(am__lxc_test_snapshot_SOURCES_DIST) \
 	$(am__lxc_test_startone_SOURCES_DIST) \
 	$(am__lxc_usernic_test_SOURCES_DIST)
 am__can_run_installinfo = \
@@ -318,6 +369,7 @@ CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DATADIR = @DATADIR@
+DEFAULT_CGROUP_PATTERN = @DEFAULT_CGROUP_PATTERN@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DOCDIR = @DOCDIR@
@@ -382,6 +434,7 @@ PYTHON_PREFIX = @PYTHON_PREFIX@
 PYTHON_VERSION = @PYTHON_VERSION@
 SECCOMP_LIBS = @SECCOMP_LIBS@
 SED = @SED@
+SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
@@ -459,14 +512,20 @@ top_srcdir = @top_srcdir@
 @ENABLE_TESTS_TRUE@lxc_test_console_SOURCES = console.c
 @ENABLE_TESTS_TRUE@lxc_usernic_test_SOURCES = ../lxc/lxc_user_nic.c ../lxc/nl.c
 @ENABLE_TESTS_TRUE@lxc_usernic_test_CFLAGS = -DISTEST
+@ENABLE_TESTS_TRUE@lxc_test_snapshot_SOURCES = snapshot.c
+@ENABLE_TESTS_TRUE@lxc_test_concurrent_SOURCES = concurrent.c
+@ENABLE_TESTS_TRUE@lxc_test_may_control_SOURCES = may_control.c
+@ENABLE_TESTS_TRUE@lxc_test_reboot_SOURCES = reboot.c
+@ENABLE_TESTS_TRUE@lxc_test_list_SOURCES = list.c
+@ENABLE_TESTS_TRUE@lxc_test_attach_SOURCES = attach.c
 @ENABLE_TESTS_TRUE@AM_CFLAGS = -I$(top_srcdir)/src \
 @ENABLE_TESTS_TRUE@	-DLXCROOTFSMOUNT=\"$(LXCROOTFSMOUNT)\" \
 @ENABLE_TESTS_TRUE@	-DLXCPATH=\"$(LXCPATH)\" \
 @ENABLE_TESTS_TRUE@	-DLXC_GLOBAL_CONF=\"$(LXC_GLOBAL_CONF)\" \
 @ENABLE_TESTS_TRUE@	-DLXCINITDIR=\"$(LXCINITDIR)\" \
-@ENABLE_TESTS_TRUE@	-DLXC_DEFAULT_CONFIG=\"$(LXC_DEFAULT_CONFIG)\"
-
-@ENABLE_TESTS_TRUE@bin_SCRIPTS = lxc-test-usernic
+@ENABLE_TESTS_TRUE@	-DLXC_DEFAULT_CONFIG=\"$(LXC_DEFAULT_CONFIG)\" \
+@ENABLE_TESTS_TRUE@	$(am__append_1) $(am__append_2)
+@ENABLE_TESTS_TRUE@bin_SCRIPTS = lxc-test-usernic $(am__append_3)
 EXTRA_DIST = \
 	cgpath.c \
 	containertests.c \
@@ -481,7 +540,12 @@ EXTRA_DIST = \
 	clonetest.c \
 	startone.c \
 	console.c \
-	lxc-test-usernic
+	lxc-test-usernic \
+	snapshot.c \
+	concurrent.c \
+	may_control.c \
+	lxc-test-ubuntu \
+	list.c
 
 all: all-am
 
@@ -560,6 +624,10 @@ uninstall-binPROGRAMS:
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
 
+lxc-test-attach$(EXEEXT): $(lxc_test_attach_OBJECTS) $(lxc_test_attach_DEPENDENCIES) $(EXTRA_lxc_test_attach_DEPENDENCIES) 
+	@rm -f lxc-test-attach$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(lxc_test_attach_OBJECTS) $(lxc_test_attach_LDADD) $(LIBS)
+
 lxc-test-cgpath$(EXEEXT): $(lxc_test_cgpath_OBJECTS) $(lxc_test_cgpath_DEPENDENCIES) $(EXTRA_lxc_test_cgpath_DEPENDENCIES) 
 	@rm -f lxc-test-cgpath$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(lxc_test_cgpath_OBJECTS) $(lxc_test_cgpath_LDADD) $(LIBS)
@@ -567,6 +635,10 @@ lxc-test-cgpath$(EXEEXT): $(lxc_test_cgpath_OBJECTS) $(lxc_test_cgpath_DEPENDENC
 lxc-test-clonetest$(EXEEXT): $(lxc_test_clonetest_OBJECTS) $(lxc_test_clonetest_DEPENDENCIES) $(EXTRA_lxc_test_clonetest_DEPENDENCIES) 
 	@rm -f lxc-test-clonetest$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(lxc_test_clonetest_OBJECTS) $(lxc_test_clonetest_LDADD) $(LIBS)
+
+lxc-test-concurrent$(EXEEXT): $(lxc_test_concurrent_OBJECTS) $(lxc_test_concurrent_DEPENDENCIES) $(EXTRA_lxc_test_concurrent_DEPENDENCIES) 
+	@rm -f lxc-test-concurrent$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(lxc_test_concurrent_OBJECTS) $(lxc_test_concurrent_LDADD) $(LIBS)
 
 lxc-test-console$(EXEEXT): $(lxc_test_console_OBJECTS) $(lxc_test_console_DEPENDENCIES) $(EXTRA_lxc_test_console_DEPENDENCIES) 
 	@rm -f lxc-test-console$(EXEEXT)
@@ -592,6 +664,10 @@ lxc-test-getkeys$(EXEEXT): $(lxc_test_getkeys_OBJECTS) $(lxc_test_getkeys_DEPEND
 	@rm -f lxc-test-getkeys$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(lxc_test_getkeys_OBJECTS) $(lxc_test_getkeys_LDADD) $(LIBS)
 
+lxc-test-list$(EXEEXT): $(lxc_test_list_OBJECTS) $(lxc_test_list_DEPENDENCIES) $(EXTRA_lxc_test_list_DEPENDENCIES) 
+	@rm -f lxc-test-list$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(lxc_test_list_OBJECTS) $(lxc_test_list_LDADD) $(LIBS)
+
 lxc-test-locktests$(EXEEXT): $(lxc_test_locktests_OBJECTS) $(lxc_test_locktests_DEPENDENCIES) $(EXTRA_lxc_test_locktests_DEPENDENCIES) 
 	@rm -f lxc-test-locktests$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(lxc_test_locktests_OBJECTS) $(lxc_test_locktests_LDADD) $(LIBS)
@@ -600,6 +676,14 @@ lxc-test-lxcpath$(EXEEXT): $(lxc_test_lxcpath_OBJECTS) $(lxc_test_lxcpath_DEPEND
 	@rm -f lxc-test-lxcpath$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(lxc_test_lxcpath_OBJECTS) $(lxc_test_lxcpath_LDADD) $(LIBS)
 
+lxc-test-may-control$(EXEEXT): $(lxc_test_may_control_OBJECTS) $(lxc_test_may_control_DEPENDENCIES) $(EXTRA_lxc_test_may_control_DEPENDENCIES) 
+	@rm -f lxc-test-may-control$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(lxc_test_may_control_OBJECTS) $(lxc_test_may_control_LDADD) $(LIBS)
+
+lxc-test-reboot$(EXEEXT): $(lxc_test_reboot_OBJECTS) $(lxc_test_reboot_DEPENDENCIES) $(EXTRA_lxc_test_reboot_DEPENDENCIES) 
+	@rm -f lxc-test-reboot$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(lxc_test_reboot_OBJECTS) $(lxc_test_reboot_LDADD) $(LIBS)
+
 lxc-test-saveconfig$(EXEEXT): $(lxc_test_saveconfig_OBJECTS) $(lxc_test_saveconfig_DEPENDENCIES) $(EXTRA_lxc_test_saveconfig_DEPENDENCIES) 
 	@rm -f lxc-test-saveconfig$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(lxc_test_saveconfig_OBJECTS) $(lxc_test_saveconfig_LDADD) $(LIBS)
@@ -607,6 +691,10 @@ lxc-test-saveconfig$(EXEEXT): $(lxc_test_saveconfig_OBJECTS) $(lxc_test_saveconf
 lxc-test-shutdowntest$(EXEEXT): $(lxc_test_shutdowntest_OBJECTS) $(lxc_test_shutdowntest_DEPENDENCIES) $(EXTRA_lxc_test_shutdowntest_DEPENDENCIES) 
 	@rm -f lxc-test-shutdowntest$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(lxc_test_shutdowntest_OBJECTS) $(lxc_test_shutdowntest_LDADD) $(LIBS)
+
+lxc-test-snapshot$(EXEEXT): $(lxc_test_snapshot_OBJECTS) $(lxc_test_snapshot_DEPENDENCIES) $(EXTRA_lxc_test_snapshot_DEPENDENCIES) 
+	@rm -f lxc-test-snapshot$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(lxc_test_snapshot_OBJECTS) $(lxc_test_snapshot_LDADD) $(LIBS)
 
 lxc-test-startone$(EXEEXT): $(lxc_test_startone_OBJECTS) $(lxc_test_startone_DEPENDENCIES) $(EXTRA_lxc_test_startone_DEPENDENCIES) 
 	@rm -f lxc-test-startone$(EXEEXT)
@@ -670,18 +758,24 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@../lxc/$(DEPDIR)/lxc_usernic_test-lxc_user_nic.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@../lxc/$(DEPDIR)/lxc_usernic_test-nl.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/attach.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cgpath.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/clonetest.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/concurrent.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/console.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/containertests.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/createtest.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/destroytest.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/get_item.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/getkeys.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/list.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/locktests.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lxcpath.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/may_control.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/reboot.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/saveconfig.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/shutdowntest.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/snapshot.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/startone.Po@am__quote@
 
 .c.o:

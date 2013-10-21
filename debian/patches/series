@@ -1,13 +1,3 @@
 transition/00-redirect-lxc-list.patch
 0000-add-autostart.patch
 0001-debian-template-set-hwaddr
-0002-pin_rootfs-be-quiet-and-don-t-fail-container-start.patch
-0003-move-monitor-fifo-and-monitor-sock-to-run.patch
-0004-hash-lxcname-for-use-in-monitor-unix-socket-sun_path.patch
-0005-ignore-ability-to-init-lxc-monitord.log.patch
-0006-add-pstore-to-container-fstab.patch
-0007-apparmor.c-drop-newline-when-reading-current-profile.patch
-0008-Fix-crasher-in-get_ips.patch
-0009-lxc-ubuntu-cloud-pass-numeric-owner-and-p-to-untar.patch
-0010-lxc-ubuntu-cloud-Cope-with-spaces-in-paths.patch
-0011-ubuntu-cloud-prep-hook-fix-debug-helper-to-not-inapp.patch

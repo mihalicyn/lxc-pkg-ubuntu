@@ -11,11 +11,12 @@ Build-Depends: autotools-dev,
                libapparmor-dev,
                libcap-dev,
                libseccomp-dev [i386 amd64],
+               libselinux1-dev,
                linux-libc-dev,
                pkg-config,
                python3-dev (>= 3.2.3)
 Standards-Version: 3.9.4
-Homepage: http://lxc.sourceforge.net/
+Homepage: http://linuxcontainers.org
 X-Python3-Version: >= 3.2
 XS-Testsuite: autopkgtest
 
@@ -94,8 +95,20 @@ Description: Linux Containers userspace tools (templates)
  .
  This package contains the templates.
 
+Package: lxc-tests
+Architecture: linux-any
+Depends: liblxc0 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Recommends: lxc, lxc-templates
+Description: Linux Containers userspace tools (test binaries)
+ Containers are insulated areas inside a system, which have their own namespace
+ for filesystem, network, PID, IPC, CPU and memory allocation and which can be
+ created using the Control Group and Namespace features included in the Linux
+ kernel.
+ .
+ This package contains the test binaries.
+
 Package: liblxc0
-Architecture: any
+Architecture: linux-any
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Replaces: lxc (<< 0.9.0~alpha3-0ubuntu1~)
@@ -109,7 +122,7 @@ Description: Linux Containers userspace tools (library)
  This package contains the libraries.
 
 Package: python3-lxc
-Architecture: any
+Architecture: linux-any
 Section: python
 Depends: liblxc0 (=${binary:Version}),
          python3,

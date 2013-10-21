@@ -1,7 +1,7 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: lxc
 Upstream-Contact: lxc-devel@lists.sourceforge.net
-Source: http://lxc.sourceforge.net/download/lxc/
+Source: http://linuxcontainers.org/downloads/
 
 Files: *
 Copyright: 2007-2013 various LXC contributors (see headers for details)

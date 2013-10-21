@@ -15,7 +15,7 @@ Index: stgraber-lxc-git/src/lxc/lxc-ls
  args = parser.parse_args()
  
 +# lxc-list is an alias for --fancy
-+if sys.argv[0].endswith("lxc-list"):
++if sys.argv[0].endswith("lxc-list") and not "NESTED" in os.environ:
 +    args.fancy = True
 +    print("WARNING: lxc-list is deprecated, please use lxc-ls --fancy.")
 +    print("         This symlink will be dropped in LXC 1.0.")

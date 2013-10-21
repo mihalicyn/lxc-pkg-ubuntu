@@ -3,13 +3,13 @@ Author: Serge Hallyn <serge.hallyn@ubuntu.com>
 Bug-Ubuntu: https://bugs.launchpad.net/ubuntu/+source/lxc/+bug/1080681
 Forwarded: no
 
-Index: saucy-lxc/templates/lxc-debian.in
+Index: trusty-lxc/templates/lxc-debian.in
 ===================================================================
---- saucy-lxc.orig/templates/lxc-debian.in	2013-09-10 18:44:49.608427600 -0400
-+++ saucy-lxc/templates/lxc-debian.in	2013-09-10 18:44:49.604427600 -0400
-@@ -213,6 +213,13 @@
-     rootfs=$2
+--- trusty-lxc.orig/templates/lxc-debian.in	2013-10-20 00:01:15.535554448 -0400
++++ trusty-lxc/templates/lxc-debian.in	2013-10-20 00:01:15.527554449 -0400
+@@ -207,6 +207,13 @@
      hostname=$3
+     arch=$4
  
 +    # if there is exactly one veth network entry, make sure it has an
 +    # associated hwaddr.
