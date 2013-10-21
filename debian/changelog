@@ -1,3 +1,10 @@
+lxc (1.0.0~alpha2-0ubuntu2) trusty; urgency=low
+
+  * Set lxcpath in lxc-instance, that should make the containers visible
+    in lxc-ls and other tools again. (LP: #1242074)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 21 Oct 2013 15:27:05 -0400
+
 lxc (1.0.0~alpha2-0ubuntu1) trusty; urgency=low
 
   * New upstream release (1.0.0~alpha2).
