@@ -1,3 +1,4 @@
 transition/00-redirect-lxc-list.patch
 0000-add-autostart.patch
 0001-debian-template-set-hwaddr
+get_rid_of_lxcpath_anon_idea.patch

@@ -1,3 +1,11 @@
+lxc (1.0.0~alpha2-0ubuntu4) trusty; urgency=low
+
+  * get_rid_of_lxcpath_anon_idea.patch: allow lxc-stop and lxc-attach to
+    work more easily with containers started with a custom config (-f).
+    (LP: #1244301)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 24 Oct 2013 11:55:06 -0500
+
 lxc (1.0.0~alpha2-0ubuntu3) trusty; urgency=low
 
   * Fix syntax error in upstart job.
