@@ -107,5 +107,14 @@ if [ "$1" = "configure" ]; then
         # Try to restart a potential system wide dnsmasq
         invoke-rc.d dnsmasq restart 2>/dev/null || true
     fi
+
+    # Up to version 1.0.0~alpha2-0ubuntu4 lxc was installed world
+    # readable.  After that version if users want it that way for
+    # convenience, then that's fine.  But one time go ahead and
+    # forcibly change the permissions.
+    if dpkg --compare-versions "$2" lt "1.0.0~alpha2-0ubuntu5"; then
+        chmod 700 /var/lib/lxc
+        chmod 700 /var/cache/lxc
+    fi
 fi
 exit 0

@@ -9,8 +9,6 @@ env LXC_AUTO="false"
 pre-start script
 	[ -f /etc/default/lxc ] && . /etc/default/lxc
 
-	[ "x$LXC_AUTO" = "xtrue" ] || { stop; exit 0; }
-
 	# don't load profiles if mount mediation is not supported
 	SYSF=/sys/kernel/security/apparmor/features/mount/mask
 	if [ -f $SYSF ]; then
@@ -20,7 +18,9 @@ pre-start script
 		fi
 	fi
 
-	ls /etc/lxc/auto/* > /dev/null 2>&1 || exit 0;
+	[ "x$LXC_AUTO" = "xtrue" ] || exit 0
+
+	ls /etc/lxc/auto/* > /dev/null 2>&1 || exit 0
 	for f in /etc/lxc/auto/*; do
 		c="$(basename $f .conf)"
 		start lxc-instance NAME=$c CONFIG=$f

@@ -1,3 +1,19 @@
+lxc (1.0.0~alpha2-0ubuntu5) trusty; urgency=low
+
+  [ Serge Hallyn] 
+  * debian/rules and debian/lxc.postinst: set /var/lib/lxc and /var/cache/lxc
+    to be perms 700.  That prevents unprivileged users from running setuid-root
+    applications.  Install that way by default, and for any previous versions,
+    update the permissions.  After this version, respect the user's choice.
+    (LP: #1244635)
+
+  [ Stéphane Graber ]
+  * Allow lxc.conf to start even if LXC_AUTO=false so that other jobs
+    can depend on it. Also make sure we always load our apparmor profiles.
+    (LP: #1227937)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Tue, 29 Oct 2013 12:15:21 -0400
+
 lxc (1.0.0~alpha2-0ubuntu4) trusty; urgency=low
 
   * get_rid_of_lxcpath_anon_idea.patch: allow lxc-stop and lxc-attach to
