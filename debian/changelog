@@ -1,3 +1,11 @@
+lxc (1.0.0~alpha2-0ubuntu6) trusty; urgency=low
+
+  * d/p/0002-lxc-start-if-we-pass-in-a-config-file-then-don-t-use.patch
+    fix lxc-start -with -f option to not use multiple configuration
+    files (LP: #1251352)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 14 Nov 2013 14:19:02 -0600
+
 lxc (1.0.0~alpha2-0ubuntu5) trusty; urgency=low
 
   [ Serge Hallyn] 
