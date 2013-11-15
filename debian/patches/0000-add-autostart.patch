@@ -5,11 +5,11 @@ Author: Stéphane Graber <stgraber@ubuntu.com>
 Origin: vendor
 Forwarded: no
 
-Index: saucy-lxc/src/lxc/lxc-ls
+Index: trusty-lxc/src/lxc/lxc-ls
 ===================================================================
---- saucy-lxc.orig/src/lxc/lxc-ls	2013-09-10 18:40:46.024436751 -0400
-+++ saucy-lxc/src/lxc/lxc-ls	2013-09-10 18:40:46.020436751 -0400
-@@ -132,7 +132,8 @@
+--- trusty-lxc.orig/src/lxc/lxc-ls	2013-11-15 16:18:52.392212673 -0500
++++ trusty-lxc/src/lxc/lxc-ls	2013-11-15 16:18:52.384212674 -0500
+@@ -138,7 +138,8 @@
  parser.add_argument("--fancy", action="store_true",
                      help=_("use fancy output"))
  
@@ -19,7 +19,7 @@ Index: saucy-lxc/src/lxc/lxc-ls
                      help=_("comma separated list of fields to show"))
  
  parser.add_argument("--nesting", dest="nesting", action="store_true",
-@@ -207,6 +208,11 @@
+@@ -213,6 +214,11 @@
          entry['pid'] = "-"
          if container.init_pid != -1:
              entry['pid'] = str(container.init_pid)

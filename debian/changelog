@@ -1,3 +1,13 @@
+lxc (1.0.0~alpha3-0ubuntu1) trusty; urgency=low
+
+  * New upstream release (1.0.0~alpha3).
+  * Removed patches:
+    - 0001-debian-template-set-hwaddr
+    - 0002-lxc-start-if-we-pass-in-a-config-file-then-don-t-use.patch
+    - get_rid_of_lxcpath_anon_idea.patch
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Fri, 15 Nov 2013 16:31:01 -0500
+
 lxc (1.0.0~alpha2-0ubuntu6) trusty; urgency=low
 
   * d/p/0002-lxc-start-if-we-pass-in-a-config-file-then-don-t-use.patch

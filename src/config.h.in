@@ -121,8 +121,8 @@
 /* bionic libc */
 #undef IS_BIONIC
 
-/* Define to 1 if your C compiler doesn't accept -c and -o together. */
-#undef NO_MINUS_C_MINUS_O
+/* Enabling mutex debugging */
+#undef MUTEX_DEBUGGING
 
 /* Name of package */
 #undef PACKAGE

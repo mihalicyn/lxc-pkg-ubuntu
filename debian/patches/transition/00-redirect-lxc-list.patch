@@ -6,11 +6,11 @@ Author: Stéphane Graber <stgraber@ubuntu.com>
 Origin: vendor
 Forwarded: not-needed
 
-Index: stgraber-lxc-git/src/lxc/lxc-ls
+Index: trusty-lxc/src/lxc/lxc-ls
 ===================================================================
---- stgraber-lxc-git.orig/src/lxc/lxc-ls	2013-05-27 14:37:35.988415931 -0400
-+++ stgraber-lxc-git/src/lxc/lxc-ls	2013-05-27 14:37:35.984415931 -0400
-@@ -143,6 +143,13 @@
+--- trusty-lxc.orig/src/lxc/lxc-ls	2013-11-15 16:18:47.820212867 -0500
++++ trusty-lxc/src/lxc/lxc-ls	2013-11-15 16:18:47.812212867 -0500
+@@ -149,6 +149,13 @@
  
  args = parser.parse_args()
  
