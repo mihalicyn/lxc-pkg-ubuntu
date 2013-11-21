@@ -1,2 +1,3 @@
 transition/00-redirect-lxc-list.patch
 0000-add-autostart.patch
+0001-lxcapi_clone-set-the-right-environment-variable-for-.patch

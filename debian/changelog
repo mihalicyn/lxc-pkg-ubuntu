@@ -1,3 +1,11 @@
+lxc (1.0.0~alpha3-0ubuntu2) trusty; urgency=low
+
+  * Cherry-pick fix for lxc-clone hook script environment variable.
+    0001-lxcapi_clone-set-the-right-environment-variable-for-.patch
+    (LP: #1253573)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Thu, 21 Nov 2013 10:29:45 -0500
+
 lxc (1.0.0~alpha3-0ubuntu1) trusty; urgency=low
 
   * New upstream release (1.0.0~alpha3).

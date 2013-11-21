@@ -1,0 +1,38 @@
+From 24ef39f4d54e83996129463f7138ba90b26a166a Mon Sep 17 00:00:00 2001
+From: Serge Hallyn <serge.hallyn@ubuntu.com>
+Date: Thu, 21 Nov 2013 09:05:59 -0600
+Subject: [PATCH] lxcapi_clone: set the right environment variable for mounted
+ fs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If the container is dir-backed, we don't actually mount it (to
+support unprivileged use).  So always set the LXC_ROOTFS_MOUNT
+to bdev->dest, not to the rootfs path specified in the container
+configuration.
+
+This should fix bug http://pad.lv/1253573
+
+Signed-off-by: Serge Hallyn <serge.hallyn@ubuntu.com>
+Acked-by: Stéphane Graber <stgraber@ubuntu.com>
+---
+ src/lxc/lxccontainer.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lxc/lxccontainer.c b/src/lxc/lxccontainer.c
+index 11e70cb..c1f99d5 100644
+--- a/src/lxc/lxccontainer.c
++++ b/src/lxc/lxccontainer.c
+@@ -2399,7 +2399,7 @@ static int clone_update_rootfs(struct lxc_container *c0,
+ 		if (setenv("LXC_CONFIG_FILE", conf->rcfile, 1)) {
+ 			SYSERROR("failed to set environment variable for config path");
+ 		}
+-		if (setenv("LXC_ROOTFS_MOUNT", conf->rootfs.mount, 1)) {
++		if (setenv("LXC_ROOTFS_MOUNT", bdev->dest, 1)) {
+ 			SYSERROR("failed to set environment variable for rootfs mount");
+ 		}
+ 		if (setenv("LXC_ROOTFS_PATH", conf->rootfs.path, 1)) {
+-- 
+1.8.4.3
+
