@@ -1,3 +1,10 @@
+lxc (1.0.0~alpha3-0ubuntu3) trusty; urgency=low
+
+  * d/p/0002-don-t-fail-lxc-init-if-we-couldn-t-mount-proc.patch: fix
+    failure to run lxc-init when lxc.cap.drop=sys_admin.  (LP: #1253669)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Fri, 22 Nov 2013 15:57:59 -0600
+
 lxc (1.0.0~alpha3-0ubuntu2) trusty; urgency=low
 
   * Cherry-pick fix for lxc-clone hook script environment variable.
