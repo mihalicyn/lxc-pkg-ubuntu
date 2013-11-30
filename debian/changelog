@@ -1,3 +1,9 @@
+lxc (1.0.0~alpha3-0ubuntu4) trusty; urgency=low
+
+  * Build-depend on libgnutls-dev for template checksuming.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Fri, 29 Nov 2013 20:16:56 -0500
+
 lxc (1.0.0~alpha3-0ubuntu3) trusty; urgency=low
 
   * d/p/0002-don-t-fail-lxc-init-if-we-couldn-t-mount-proc.patch: fix
