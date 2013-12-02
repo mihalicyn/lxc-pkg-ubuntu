@@ -1,3 +1,9 @@
+lxc (1.0.0~alpha3-0ubuntu5) trusty; urgency=low
+
+  * Add -w to iptables calls in lxc-net (LP: #1257117)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 02 Dec 2013 17:49:28 -0600
+
 lxc (1.0.0~alpha3-0ubuntu4) trusty; urgency=low
 
   * Build-depend on libgnutls-dev for template checksuming.
