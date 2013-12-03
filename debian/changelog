@@ -1,3 +1,10 @@
+lxc (1.0.0~alpha3-0ubuntu6) trusty; urgency=low
+
+  * lxc-net: detect whether iptables -w flag is supported, so that backports
+    won't be broken.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 02 Dec 2013 21:06:47 -0600
+
 lxc (1.0.0~alpha3-0ubuntu5) trusty; urgency=low
 
   * Add -w to iptables calls in lxc-net (LP: #1257117)
