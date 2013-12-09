@@ -1,3 +1,10 @@
+lxc (1.0.0~alpha3-0ubuntu7) trusty; urgency=low
+
+  * Add a lxc-default-with-mounting profile which allows the container to
+    mount block filesystems.  (LP: #1257389)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Mon, 09 Dec 2013 13:19:31 -0600
+
 lxc (1.0.0~alpha3-0ubuntu6) trusty; urgency=low
 
   * lxc-net: detect whether iptables -w flag is supported, so that backports
