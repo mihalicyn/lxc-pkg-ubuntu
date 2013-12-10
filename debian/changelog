@@ -1,3 +1,9 @@
+lxc (1.0.0~alpha3-0ubuntu8) trusty; urgency=low
+
+  * Add iptables rule to fix checksum of udp packets for dhcp  (LP: #930962)
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Tue, 10 Dec 2013 11:27:09 -0600
+
 lxc (1.0.0~alpha3-0ubuntu7) trusty; urgency=low
 
   * Add a lxc-default-with-mounting profile which allows the container to
