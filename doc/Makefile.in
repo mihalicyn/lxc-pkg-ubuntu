@@ -78,11 +78,12 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 @USE_DOCBOOK2X_TRUE@am__append_1 = ja
-@ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_TRUE@am__append_2 = lxc-device.1 \
+@ENABLE_API_DOCS_TRUE@am__append_2 = api
+@ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_TRUE@am__append_3 = lxc-device.1 \
 @ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_TRUE@	lxc-ls.1 \
 @ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_TRUE@	lxc-start-ephemeral.1
-@ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_FALSE@am__append_3 = legacy/lxc-ls.1
-@ENABLE_DOCBOOK_TRUE@@ENABLE_LUA_TRUE@am__append_4 = lxc-top.1
+@ENABLE_DOCBOOK_TRUE@@ENABLE_PYTHON_FALSE@am__append_4 = legacy/lxc-ls.1
+@ENABLE_DOCBOOK_TRUE@@ENABLE_LUA_TRUE@am__append_5 = lxc-top.1
 subdir = doc
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(srcdir)/lxc-attach.sgml.in $(srcdir)/lxc-cgroup.sgml.in \
@@ -98,8 +99,9 @@ DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(srcdir)/lxc-start-ephemeral.sgml.in \
 	$(srcdir)/lxc-start.sgml.in $(srcdir)/lxc-stop.sgml.in \
 	$(srcdir)/lxc-top.sgml.in $(srcdir)/lxc-unfreeze.sgml.in \
-	$(srcdir)/lxc-unshare.sgml.in $(srcdir)/lxc-version.sgml.in \
-	$(srcdir)/lxc-wait.sgml.in $(srcdir)/lxc.conf.sgml.in \
+	$(srcdir)/lxc-unshare.sgml.in $(srcdir)/lxc-user-nic.sgml.in \
+	$(srcdir)/lxc-version.sgml.in $(srcdir)/lxc-wait.sgml.in \
+	$(srcdir)/lxc.conf.sgml.in $(srcdir)/lxc-usernet.sgml.in \
 	$(srcdir)/lxc.sgml.in $(srcdir)/common_options.sgml.in \
 	$(srcdir)/see_also.sgml.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -117,8 +119,8 @@ CONFIG_CLEAN_FILES = lxc-attach.sgml lxc-cgroup.sgml \
 	lxc-ps.sgml lxc-restart.sgml lxc-snapshot.sgml \
 	lxc-start-ephemeral.sgml lxc-start.sgml lxc-stop.sgml \
 	lxc-top.sgml lxc-unfreeze.sgml lxc-unshare.sgml \
-	lxc-version.sgml lxc-wait.sgml lxc.conf.sgml lxc.sgml \
-	common_options.sgml see_also.sgml
+	lxc-user-nic.sgml lxc-version.sgml lxc-wait.sgml lxc.conf.sgml \
+	lxc-usernet.sgml lxc.sgml common_options.sgml see_also.sgml
 CONFIG_CLEAN_VPATH_FILES =
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -261,6 +263,7 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 GREP = @GREP@
+HAVE_DOXYGEN = @HAVE_DOXYGEN@
 INCLUDEDIR = @INCLUDEDIR@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -284,6 +287,7 @@ LXCHOOKDIR = @LXCHOOKDIR@
 LXCINITDIR = @LXCINITDIR@
 LXCPATH = @LXCPATH@
 LXCROOTFSMOUNT = @LXCROOTFSMOUNT@
+LXCTEMPLATECONFIG = @LXCTEMPLATECONFIG@
 LXCTEMPLATEDIR = @LXCTEMPLATEDIR@
 LXC_DEFAULT_CONFIG = @LXC_DEFAULT_CONFIG@
 LXC_DISTRO_CONF = @LXC_DISTRO_CONF@
@@ -291,11 +295,14 @@ LXC_GENERATE_DATE = @LXC_GENERATE_DATE@
 LXC_GLOBAL_CONF = @LXC_GLOBAL_CONF@
 LXC_USERNIC_CONF = @LXC_USERNIC_CONF@
 LXC_USERNIC_DB = @LXC_USERNIC_DB@
+LXC_VERSION = @LXC_VERSION@
 LXC_VERSION_BASE = @LXC_VERSION_BASE@
 LXC_VERSION_BETA = @LXC_VERSION_BETA@
+LXC_VERSION_MAJOR = @LXC_VERSION_MAJOR@
+LXC_VERSION_MICRO = @LXC_VERSION_MICRO@
+LXC_VERSION_MINOR = @LXC_VERSION_MINOR@
 MAKEINFO = @MAKEINFO@
 MKDIR_P = @MKDIR_P@
-NEWUIDMAP = @NEWUIDMAP@
 OBJEXT = @OBJEXT@
 PACKAGE = @PACKAGE@
 PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
@@ -380,8 +387,8 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = examples rootfs $(am__append_1)
-DIST_SUBDIRS = examples rootfs ja
+SUBDIRS = examples rootfs $(am__append_1) $(am__append_2)
+DIST_SUBDIRS = examples rootfs ja api
 EXTRA_DIST = \
 	FAQ.txt
 
@@ -393,9 +400,10 @@ EXTRA_DIST = \
 @ENABLE_DOCBOOK_TRUE@	lxc-netstat.1 lxc-ps.1 lxc-restart.1 \
 @ENABLE_DOCBOOK_TRUE@	lxc-snapshot.1 lxc-start.1 lxc-stop.1 \
 @ENABLE_DOCBOOK_TRUE@	lxc-unfreeze.1 lxc-unshare.1 \
-@ENABLE_DOCBOOK_TRUE@	lxc-version.1 lxc-wait.1 lxc.conf.5 lxc.7 \
-@ENABLE_DOCBOOK_TRUE@	$(am__append_2) $(am__append_3) \
-@ENABLE_DOCBOOK_TRUE@	$(am__append_4)
+@ENABLE_DOCBOOK_TRUE@	lxc-user-nic.1 lxc-version.1 lxc-wait.1 \
+@ENABLE_DOCBOOK_TRUE@	lxc.conf.5 lxc-usernet.5 lxc.7 \
+@ENABLE_DOCBOOK_TRUE@	$(am__append_3) $(am__append_4) \
+@ENABLE_DOCBOOK_TRUE@	$(am__append_5)
 all: all-recursive
 
 .SUFFIXES:
@@ -479,11 +487,15 @@ lxc-unfreeze.sgml: $(top_builddir)/config.status $(srcdir)/lxc-unfreeze.sgml.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-unshare.sgml: $(top_builddir)/config.status $(srcdir)/lxc-unshare.sgml.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+lxc-user-nic.sgml: $(top_builddir)/config.status $(srcdir)/lxc-user-nic.sgml.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-version.sgml: $(top_builddir)/config.status $(srcdir)/lxc-version.sgml.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-wait.sgml: $(top_builddir)/config.status $(srcdir)/lxc-wait.sgml.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc.conf.sgml: $(top_builddir)/config.status $(srcdir)/lxc.conf.sgml.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+lxc-usernet.sgml: $(top_builddir)/config.status $(srcdir)/lxc-usernet.sgml.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc.sgml: $(top_builddir)/config.status $(srcdir)/lxc.sgml.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@

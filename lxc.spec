@@ -26,8 +26,8 @@
 # RPM needs alpha/beta/rc in Release: not Version: to ensure smooth
 # package upgrades from alpha->beta->rc->release. For more info see:
 # http://fedoraproject.org/wiki/Packaging%3aNamingGuidelines#NonNumericRelease
-%if "xalpha3" != "x"
-%global beta_rel alpha3
+%if "xbeta1" != "x"
+%global beta_rel beta1
 %global beta_dot .%{beta_rel}
 %else
 %global norm_rel 1
@@ -52,8 +52,8 @@ BuildRequires: python3-devel
 
 %description
 Containers are insulated areas inside a system, which have their own namespace
-for filesystem, network, PID, IPC, CPU and memory allocation and which can be 
-created using the Control Group and Namespace features included in the Linux  
+for filesystem, network, PID, IPC, CPU and memory allocation and which can be
+created using the Control Group and Namespace features included in the Linux
 kernel.
 
 This package provides the lxc-* tools, which can be used to start a single
@@ -102,6 +102,11 @@ rm -rf %{buildroot}
 make install DESTDIR=%{buildroot}
 find %{buildroot} -type f -name '*.la' -exec rm -f {} ';'
 
+# Install some of our systemd stuff...
+install -d -m 755 %{buildroot}/lib/systemd/system
+install -c -m 644 src/lxc/lxc.service %{buildroot}/lib/systemd/system
+install -c -m 755 src/lxc/lxc-devsetup %{buildroot}/%{_libexecdir}/%{name}
+
 %clean
 rm -rf %{buildroot}
 
@@ -131,6 +136,8 @@ rm -rf %{buildroot}
 %{_datadir}/lxc/*
 %config(noreplace) %{_sysconfdir}/lxc/*
 
+/lib/systemd/system/*
+
 %files libs
 %defattr(-,root,root)
 %{_libdir}/*.so.*
@@ -140,6 +147,7 @@ rm -rf %{buildroot}
 %endif
 %{_localstatedir}/*
 %attr(4555,root,root) %{_libexecdir}/%{name}/lxc-init
+%attr(555,root,root) %{_libexecdir}/%{name}/lxc-devsetup
 
 %if %{with_lua}
 %files lua

@@ -49,6 +49,10 @@ override_dh_install:
 	mkdir -p debian/lxc-tests/usr/bin
 	mv debian/lxc/usr/bin/lxc-test-* debian/lxc-tests/usr/bin/
 
+override_dh_fixperms:
+	dh_fixperms
+	chmod u+s debian/lxc/usr/bin/lxc-user-nic
+
 override_dh_builddeb:
 	# prevent system users from using setuid-root binaries under /var/lib/lxc
 	chmod 700 debian/lxc/var/lib/lxc

@@ -1,4 +1,2 @@
 transition/00-redirect-lxc-list.patch
 0000-add-autostart.patch
-0001-lxcapi_clone-set-the-right-environment-variable-for-.patch
-0002-don-t-fail-lxc-init-if-we-couldn-t-mount-proc.patch

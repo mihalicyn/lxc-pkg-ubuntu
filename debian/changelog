@@ -1,3 +1,12 @@
+lxc (1.0.0~beta1-0ubuntu1) trusty; urgency=medium
+
+  * New upstream release (1.0.0~beta1).
+  * Removed patches:
+    - 0001-lxcapi_clone-set-the-right-environment-variable-for-.patch
+    - 0002-don-t-fail-lxc-init-if-we-couldn-t-mount-proc.patch
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Tue, 17 Dec 2013 15:52:17 -0500
+
 lxc (1.0.0~alpha3-0ubuntu8) trusty; urgency=low
 
   * Add iptables rule to fix checksum of udp packets for dhcp  (LP: #930962)

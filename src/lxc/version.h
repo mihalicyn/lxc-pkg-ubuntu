@@ -20,12 +20,12 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef _version_h
-#define _version_h
+#ifndef _VERSION_H
+#define _VERSION_H
 
-/*
- * Returns the version number of the library
- */
-extern const char *lxc_version(void);
+#define LXC_VERSION_MAJOR 1
+#define LXC_VERSION_MINOR 0
+#define LXC_VERSION_MICRO 0
+#define LXC_VERSION "1.0.0.beta1"
 
 #endif

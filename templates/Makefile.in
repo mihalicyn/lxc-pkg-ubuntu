@@ -83,10 +83,11 @@ DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(srcdir)/lxc-cirros.in $(srcdir)/lxc-debian.in \
 	$(srcdir)/lxc-ubuntu.in $(srcdir)/lxc-ubuntu-cloud.in \
 	$(srcdir)/lxc-opensuse.in $(srcdir)/lxc-busybox.in \
-	$(srcdir)/lxc-fedora.in $(srcdir)/lxc-openmandriva.in \
-	$(srcdir)/lxc-oracle.in $(srcdir)/lxc-altlinux.in \
-	$(srcdir)/lxc-sshd.in $(srcdir)/lxc-archlinux.in \
-	$(srcdir)/lxc-alpine.in $(srcdir)/lxc-plamo.in
+	$(srcdir)/lxc-centos.in $(srcdir)/lxc-fedora.in \
+	$(srcdir)/lxc-openmandriva.in $(srcdir)/lxc-oracle.in \
+	$(srcdir)/lxc-altlinux.in $(srcdir)/lxc-sshd.in \
+	$(srcdir)/lxc-archlinux.in $(srcdir)/lxc-alpine.in \
+	$(srcdir)/lxc-plamo.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acinclude.m4 \
 	$(top_srcdir)/configure.ac
@@ -95,9 +96,9 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/src/config.h
 CONFIG_CLEAN_FILES = lxc-cirros lxc-debian lxc-ubuntu lxc-ubuntu-cloud \
-	lxc-opensuse lxc-busybox lxc-fedora lxc-openmandriva \
-	lxc-oracle lxc-altlinux lxc-sshd lxc-archlinux lxc-alpine \
-	lxc-plamo
+	lxc-opensuse lxc-busybox lxc-centos lxc-fedora \
+	lxc-openmandriva lxc-oracle lxc-altlinux lxc-sshd \
+	lxc-archlinux lxc-alpine lxc-plamo
 CONFIG_CLEAN_VPATH_FILES =
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
@@ -176,6 +177,7 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 GREP = @GREP@
+HAVE_DOXYGEN = @HAVE_DOXYGEN@
 INCLUDEDIR = @INCLUDEDIR@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -199,6 +201,7 @@ LXCHOOKDIR = @LXCHOOKDIR@
 LXCINITDIR = @LXCINITDIR@
 LXCPATH = @LXCPATH@
 LXCROOTFSMOUNT = @LXCROOTFSMOUNT@
+LXCTEMPLATECONFIG = @LXCTEMPLATECONFIG@
 LXCTEMPLATEDIR = @LXCTEMPLATEDIR@
 LXC_DEFAULT_CONFIG = @LXC_DEFAULT_CONFIG@
 LXC_DISTRO_CONF = @LXC_DISTRO_CONF@
@@ -206,11 +209,14 @@ LXC_GENERATE_DATE = @LXC_GENERATE_DATE@
 LXC_GLOBAL_CONF = @LXC_GLOBAL_CONF@
 LXC_USERNIC_CONF = @LXC_USERNIC_CONF@
 LXC_USERNIC_DB = @LXC_USERNIC_DB@
+LXC_VERSION = @LXC_VERSION@
 LXC_VERSION_BASE = @LXC_VERSION_BASE@
 LXC_VERSION_BETA = @LXC_VERSION_BETA@
+LXC_VERSION_MAJOR = @LXC_VERSION_MAJOR@
+LXC_VERSION_MICRO = @LXC_VERSION_MICRO@
+LXC_VERSION_MINOR = @LXC_VERSION_MINOR@
 MAKEINFO = @MAKEINFO@
 MKDIR_P = @MKDIR_P@
-NEWUIDMAP = @NEWUIDMAP@
 OBJEXT = @OBJEXT@
 PACKAGE = @PACKAGE@
 PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
@@ -301,6 +307,7 @@ templates_SCRIPTS = \
 	lxc-ubuntu \
 	lxc-ubuntu-cloud \
 	lxc-opensuse \
+	lxc-centos \
 	lxc-fedora \
 	lxc-openmandriva \
 	lxc-oracle \
@@ -356,6 +363,8 @@ lxc-ubuntu-cloud: $(top_builddir)/config.status $(srcdir)/lxc-ubuntu-cloud.in
 lxc-opensuse: $(top_builddir)/config.status $(srcdir)/lxc-opensuse.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-busybox: $(top_builddir)/config.status $(srcdir)/lxc-busybox.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+lxc-centos: $(top_builddir)/config.status $(srcdir)/lxc-centos.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 lxc-fedora: $(top_builddir)/config.status $(srcdir)/lxc-fedora.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@

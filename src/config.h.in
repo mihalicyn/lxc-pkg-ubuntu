@@ -31,6 +31,9 @@
 /* Define to 1 if you have the `apparmor' library (-lapparmor). */
 #undef HAVE_LIBAPPARMOR
 
+/* Define to 1 if you have the `cap' library (-lcap). */
+#undef HAVE_LIBCAP
+
 /* Define to 1 if you have the `gnutls' library (-lgnutls). */
 #undef HAVE_LIBGNUTLS
 

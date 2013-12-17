@@ -94,7 +94,6 @@ host_triplet = @host@
 @ENABLE_TESTS_TRUE@	lxc-test-cgpath$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-clonetest$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-console$(EXEEXT) \
-@ENABLE_TESTS_TRUE@	lxc-usernic-test$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-snapshot$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-concurrent$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-may-control$(EXEEXT) \
@@ -228,15 +227,6 @@ am__lxc_test_startone_SOURCES_DIST = startone.c
 lxc_test_startone_OBJECTS = $(am_lxc_test_startone_OBJECTS)
 lxc_test_startone_LDADD = $(LDADD)
 @ENABLE_TESTS_TRUE@lxc_test_startone_DEPENDENCIES = ../lxc/liblxc.so
-am__lxc_usernic_test_SOURCES_DIST = ../lxc/lxc_user_nic.c ../lxc/nl.c
-am__dirstamp = $(am__leading_dot)dirstamp
-@ENABLE_TESTS_TRUE@am_lxc_usernic_test_OBJECTS = ../lxc/lxc_usernic_test-lxc_user_nic.$(OBJEXT) \
-@ENABLE_TESTS_TRUE@	../lxc/lxc_usernic_test-nl.$(OBJEXT)
-lxc_usernic_test_OBJECTS = $(am_lxc_usernic_test_OBJECTS)
-lxc_usernic_test_LDADD = $(LDADD)
-@ENABLE_TESTS_TRUE@lxc_usernic_test_DEPENDENCIES = ../lxc/liblxc.so
-lxc_usernic_test_LINK = $(CCLD) $(lxc_usernic_test_CFLAGS) $(CFLAGS) \
-	$(AM_LDFLAGS) $(LDFLAGS) -o $@
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -281,10 +271,6 @@ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__depfiles_maybe = depfiles
 am__mv = mv -f
-AM_V_lt = $(am__v_lt_@AM_V@)
-am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
-am__v_lt_0 = --silent
-am__v_lt_1 = 
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 AM_V_CC = $(am__v_CC_@AM_V@)
@@ -306,7 +292,7 @@ SOURCES = $(lxc_test_attach_SOURCES) $(lxc_test_cgpath_SOURCES) \
 	$(lxc_test_lxcpath_SOURCES) $(lxc_test_may_control_SOURCES) \
 	$(lxc_test_reboot_SOURCES) $(lxc_test_saveconfig_SOURCES) \
 	$(lxc_test_shutdowntest_SOURCES) $(lxc_test_snapshot_SOURCES) \
-	$(lxc_test_startone_SOURCES) $(lxc_usernic_test_SOURCES)
+	$(lxc_test_startone_SOURCES)
 DIST_SOURCES = $(am__lxc_test_attach_SOURCES_DIST) \
 	$(am__lxc_test_cgpath_SOURCES_DIST) \
 	$(am__lxc_test_clonetest_SOURCES_DIST) \
@@ -325,8 +311,7 @@ DIST_SOURCES = $(am__lxc_test_attach_SOURCES_DIST) \
 	$(am__lxc_test_saveconfig_SOURCES_DIST) \
 	$(am__lxc_test_shutdowntest_SOURCES_DIST) \
 	$(am__lxc_test_snapshot_SOURCES_DIST) \
-	$(am__lxc_test_startone_SOURCES_DIST) \
-	$(am__lxc_usernic_test_SOURCES_DIST)
+	$(am__lxc_test_startone_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -379,6 +364,7 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 GREP = @GREP@
+HAVE_DOXYGEN = @HAVE_DOXYGEN@
 INCLUDEDIR = @INCLUDEDIR@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -402,6 +388,7 @@ LXCHOOKDIR = @LXCHOOKDIR@
 LXCINITDIR = @LXCINITDIR@
 LXCPATH = @LXCPATH@
 LXCROOTFSMOUNT = @LXCROOTFSMOUNT@
+LXCTEMPLATECONFIG = @LXCTEMPLATECONFIG@
 LXCTEMPLATEDIR = @LXCTEMPLATEDIR@
 LXC_DEFAULT_CONFIG = @LXC_DEFAULT_CONFIG@
 LXC_DISTRO_CONF = @LXC_DISTRO_CONF@
@@ -409,11 +396,14 @@ LXC_GENERATE_DATE = @LXC_GENERATE_DATE@
 LXC_GLOBAL_CONF = @LXC_GLOBAL_CONF@
 LXC_USERNIC_CONF = @LXC_USERNIC_CONF@
 LXC_USERNIC_DB = @LXC_USERNIC_DB@
+LXC_VERSION = @LXC_VERSION@
 LXC_VERSION_BASE = @LXC_VERSION_BASE@
 LXC_VERSION_BETA = @LXC_VERSION_BETA@
+LXC_VERSION_MAJOR = @LXC_VERSION_MAJOR@
+LXC_VERSION_MICRO = @LXC_VERSION_MICRO@
+LXC_VERSION_MINOR = @LXC_VERSION_MINOR@
 MAKEINFO = @MAKEINFO@
 MKDIR_P = @MKDIR_P@
-NEWUIDMAP = @NEWUIDMAP@
 OBJEXT = @OBJEXT@
 PACKAGE = @PACKAGE@
 PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
@@ -512,8 +502,6 @@ top_srcdir = @top_srcdir@
 @ENABLE_TESTS_TRUE@lxc_test_cgpath_SOURCES = cgpath.c
 @ENABLE_TESTS_TRUE@lxc_test_clonetest_SOURCES = clonetest.c
 @ENABLE_TESTS_TRUE@lxc_test_console_SOURCES = console.c
-@ENABLE_TESTS_TRUE@lxc_usernic_test_SOURCES = ../lxc/lxc_user_nic.c ../lxc/nl.c
-@ENABLE_TESTS_TRUE@lxc_usernic_test_CFLAGS = -DISTEST
 @ENABLE_TESTS_TRUE@lxc_test_snapshot_SOURCES = snapshot.c
 @ENABLE_TESTS_TRUE@lxc_test_concurrent_SOURCES = concurrent.c
 @ENABLE_TESTS_TRUE@lxc_test_may_control_SOURCES = may_control.c
@@ -701,20 +689,6 @@ lxc-test-snapshot$(EXEEXT): $(lxc_test_snapshot_OBJECTS) $(lxc_test_snapshot_DEP
 lxc-test-startone$(EXEEXT): $(lxc_test_startone_OBJECTS) $(lxc_test_startone_DEPENDENCIES) $(EXTRA_lxc_test_startone_DEPENDENCIES) 
 	@rm -f lxc-test-startone$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(lxc_test_startone_OBJECTS) $(lxc_test_startone_LDADD) $(LIBS)
-../lxc/$(am__dirstamp):
-	@$(MKDIR_P) ../lxc
-	@: > ../lxc/$(am__dirstamp)
-../lxc/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) ../lxc/$(DEPDIR)
-	@: > ../lxc/$(DEPDIR)/$(am__dirstamp)
-../lxc/lxc_usernic_test-lxc_user_nic.$(OBJEXT):  \
-	../lxc/$(am__dirstamp) ../lxc/$(DEPDIR)/$(am__dirstamp)
-../lxc/lxc_usernic_test-nl.$(OBJEXT): ../lxc/$(am__dirstamp) \
-	../lxc/$(DEPDIR)/$(am__dirstamp)
-
-lxc-usernic-test$(EXEEXT): $(lxc_usernic_test_OBJECTS) $(lxc_usernic_test_DEPENDENCIES) $(EXTRA_lxc_usernic_test_DEPENDENCIES) 
-	@rm -f lxc-usernic-test$(EXEEXT)
-	$(AM_V_CCLD)$(lxc_usernic_test_LINK) $(lxc_usernic_test_OBJECTS) $(lxc_usernic_test_LDADD) $(LIBS)
 install-binSCRIPTS: $(bin_SCRIPTS)
 	@$(NORMAL_INSTALL)
 	@list='$(bin_SCRIPTS)'; test -n "$(bindir)" || list=; \
@@ -753,13 +727,10 @@ uninstall-binSCRIPTS:
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
-	-rm -f ../lxc/*.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@../lxc/$(DEPDIR)/lxc_usernic_test-lxc_user_nic.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@../lxc/$(DEPDIR)/lxc_usernic_test-nl.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/attach.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cgpath.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/clonetest.Po@am__quote@
@@ -795,34 +766,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
-
-../lxc/lxc_usernic_test-lxc_user_nic.o: ../lxc/lxc_user_nic.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lxc_usernic_test_CFLAGS) $(CFLAGS) -MT ../lxc/lxc_usernic_test-lxc_user_nic.o -MD -MP -MF ../lxc/$(DEPDIR)/lxc_usernic_test-lxc_user_nic.Tpo -c -o ../lxc/lxc_usernic_test-lxc_user_nic.o `test -f '../lxc/lxc_user_nic.c' || echo '$(srcdir)/'`../lxc/lxc_user_nic.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) ../lxc/$(DEPDIR)/lxc_usernic_test-lxc_user_nic.Tpo ../lxc/$(DEPDIR)/lxc_usernic_test-lxc_user_nic.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='../lxc/lxc_user_nic.c' object='../lxc/lxc_usernic_test-lxc_user_nic.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lxc_usernic_test_CFLAGS) $(CFLAGS) -c -o ../lxc/lxc_usernic_test-lxc_user_nic.o `test -f '../lxc/lxc_user_nic.c' || echo '$(srcdir)/'`../lxc/lxc_user_nic.c
-
-../lxc/lxc_usernic_test-lxc_user_nic.obj: ../lxc/lxc_user_nic.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lxc_usernic_test_CFLAGS) $(CFLAGS) -MT ../lxc/lxc_usernic_test-lxc_user_nic.obj -MD -MP -MF ../lxc/$(DEPDIR)/lxc_usernic_test-lxc_user_nic.Tpo -c -o ../lxc/lxc_usernic_test-lxc_user_nic.obj `if test -f '../lxc/lxc_user_nic.c'; then $(CYGPATH_W) '../lxc/lxc_user_nic.c'; else $(CYGPATH_W) '$(srcdir)/../lxc/lxc_user_nic.c'; fi`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) ../lxc/$(DEPDIR)/lxc_usernic_test-lxc_user_nic.Tpo ../lxc/$(DEPDIR)/lxc_usernic_test-lxc_user_nic.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='../lxc/lxc_user_nic.c' object='../lxc/lxc_usernic_test-lxc_user_nic.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lxc_usernic_test_CFLAGS) $(CFLAGS) -c -o ../lxc/lxc_usernic_test-lxc_user_nic.obj `if test -f '../lxc/lxc_user_nic.c'; then $(CYGPATH_W) '../lxc/lxc_user_nic.c'; else $(CYGPATH_W) '$(srcdir)/../lxc/lxc_user_nic.c'; fi`
-
-../lxc/lxc_usernic_test-nl.o: ../lxc/nl.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lxc_usernic_test_CFLAGS) $(CFLAGS) -MT ../lxc/lxc_usernic_test-nl.o -MD -MP -MF ../lxc/$(DEPDIR)/lxc_usernic_test-nl.Tpo -c -o ../lxc/lxc_usernic_test-nl.o `test -f '../lxc/nl.c' || echo '$(srcdir)/'`../lxc/nl.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) ../lxc/$(DEPDIR)/lxc_usernic_test-nl.Tpo ../lxc/$(DEPDIR)/lxc_usernic_test-nl.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='../lxc/nl.c' object='../lxc/lxc_usernic_test-nl.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lxc_usernic_test_CFLAGS) $(CFLAGS) -c -o ../lxc/lxc_usernic_test-nl.o `test -f '../lxc/nl.c' || echo '$(srcdir)/'`../lxc/nl.c
-
-../lxc/lxc_usernic_test-nl.obj: ../lxc/nl.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lxc_usernic_test_CFLAGS) $(CFLAGS) -MT ../lxc/lxc_usernic_test-nl.obj -MD -MP -MF ../lxc/$(DEPDIR)/lxc_usernic_test-nl.Tpo -c -o ../lxc/lxc_usernic_test-nl.obj `if test -f '../lxc/nl.c'; then $(CYGPATH_W) '../lxc/nl.c'; else $(CYGPATH_W) '$(srcdir)/../lxc/nl.c'; fi`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) ../lxc/$(DEPDIR)/lxc_usernic_test-nl.Tpo ../lxc/$(DEPDIR)/lxc_usernic_test-nl.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='../lxc/nl.c' object='../lxc/lxc_usernic_test-nl.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lxc_usernic_test_CFLAGS) $(CFLAGS) -c -o ../lxc/lxc_usernic_test-nl.obj `if test -f '../lxc/nl.c'; then $(CYGPATH_W) '../lxc/nl.c'; else $(CYGPATH_W) '$(srcdir)/../lxc/nl.c'; fi`
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
@@ -939,8 +882,6 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
-	-rm -f ../lxc/$(DEPDIR)/$(am__dirstamp)
-	-rm -f ../lxc/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -950,7 +891,7 @@ clean: clean-am
 clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 
 distclean: distclean-am
-	-rm -rf ../lxc/$(DEPDIR) ./$(DEPDIR)
+	-rm -rf ./$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -996,7 +937,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-	-rm -rf ../lxc/$(DEPDIR) ./$(DEPDIR)
+	-rm -rf ./$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

@@ -7,9 +7,9 @@ Forwarded: no
 
 Index: trusty-lxc/src/lxc/lxc-ls
 ===================================================================
---- trusty-lxc.orig/src/lxc/lxc-ls	2013-11-15 16:18:52.392212673 -0500
-+++ trusty-lxc/src/lxc/lxc-ls	2013-11-15 16:18:52.384212674 -0500
-@@ -138,7 +138,8 @@
+--- trusty-lxc.orig/src/lxc/lxc-ls	2013-12-17 15:49:09.449489311 -0500
++++ trusty-lxc/src/lxc/lxc-ls	2013-12-17 15:49:09.441489310 -0500
+@@ -137,7 +137,8 @@
  parser.add_argument("--fancy", action="store_true",
                      help=_("use fancy output"))
  
@@ -19,9 +19,9 @@ Index: trusty-lxc/src/lxc/lxc-ls
                      help=_("comma separated list of fields to show"))
  
  parser.add_argument("--nesting", dest="nesting", action="store_true",
-@@ -213,6 +214,11 @@
-         entry['pid'] = "-"
-         if container.init_pid != -1:
+@@ -235,6 +236,11 @@
+             entry['pid'] = state
+         elif container.init_pid != -1:
              entry['pid'] = str(container.init_pid)
 +    if (os.path.exists("/etc/lxc/auto/%s.conf" % container_name) or
 +            os.path.exists("/etc/lxc/%s" % container_name)):
