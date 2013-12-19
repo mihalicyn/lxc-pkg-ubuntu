@@ -1,0 +1,30 @@
+From b543ce9624d7f88b6ef99b4ae0096b5c9c0bfcf4 Mon Sep 17 00:00:00 2001
+From: Serge Hallyn <serge.hallyn@ubuntu.com>
+Date: Thu, 19 Dec 2013 13:59:30 -0600
+Subject: [PATCH 1/1] fix lxc-usernsexec regression
+
+In what should have been a straightforward fix for a bug found by
+priority, I sent 1 instead of '1' from parent to child, while the
+child checked for '1'.  Fix.
+
+Signed-off-by: Serge Hallyn <serge.hallyn@ubuntu.com>
+---
+ src/lxc/lxc_usernsexec.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lxc/lxc_usernsexec.c b/src/lxc/lxc_usernsexec.c
+index 98e4fa2..e36ff34 100644
+--- a/src/lxc/lxc_usernsexec.c
++++ b/src/lxc/lxc_usernsexec.c
+@@ -425,7 +425,7 @@ int main(int argc, char *argv[])
+ 		exit(1);
+ 	}
+ 
+-	buf[0] = 1;
++	buf[0] = '1';
+ 	if (map_child_uids(pid, active_map)) {
+ 		fprintf(stderr, "error mapping child\n");
+ 		ret = 0;
+-- 
+1.8.5.2
+
