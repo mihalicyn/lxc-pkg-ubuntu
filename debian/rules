@@ -25,6 +25,7 @@ override_dh_install:
 	cp debian/apparmor/usr.bin.lxc-start debian/lxc/etc/apparmor.d/usr.bin.lxc-start
 	cp debian/apparmor/lxc-containers debian/lxc/etc/apparmor.d/lxc-containers
 	cp debian/apparmor/lxc-default debian/lxc/etc/apparmor.d/lxc/lxc-default
+	cp debian/apparmor/lxc-default-with-mounting debian/lxc/etc/apparmor.d/lxc/lxc-default-with-mounting
 	cp debian/apparmor/lxc-default-with-nesting debian/lxc/etc/apparmor.d/lxc/lxc-default-with-nesting
 	cp debian/apparmor/abstractions-lxc-container-base debian/lxc/etc/apparmor.d/abstractions/lxc/container-base
 	cp debian/apparmor/abstractions-lxc-start-container debian/lxc/etc/apparmor.d/abstractions/lxc/start-container

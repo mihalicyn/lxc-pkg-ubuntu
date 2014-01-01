@@ -24,7 +24,12 @@ pre-start script
 	iptables -w -L -n 2>&1 > /dev/null || use_iptables_lock=""
 	cleanup() {
 		# dnsmasq failed to start, clean up the bridge
+		iptables $use_iptables_lock -D INPUT -i ${LXC_BRIDGE} -p udp --dport 67 -j ACCEPT
+		iptables $use_iptables_lock -D INPUT -i ${LXC_BRIDGE} -p tcp --dport 67 -j ACCEPT
+		iptables $use_iptables_lock -D INPUT -i ${LXC_BRIDGE} -p udp --dport 53 -j ACCEPT
+		iptables $use_iptables_lock -D INPUT -i ${LXC_BRIDGE} -p tcp --dport 53 -j ACCEPT
 		iptables $use_iptables_lock -t nat -D POSTROUTING -s ${LXC_NETWORK} ! -d ${LXC_NETWORK} -j MASQUERADE || true
+		iptables $use_iptables_lock -t mangle -D POSTROUTING -o ${LXC_BRIDGE} -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
 		ifconfig ${LXC_BRIDGE} down || true
 		brctl delbr ${LXC_BRIDGE} || true
 	}
@@ -42,6 +47,10 @@ pre-start script
 	echo 1 > /proc/sys/net/ipv4/ip_forward
 	mkdir -p ${varrun}
 	ifconfig ${LXC_BRIDGE} ${LXC_ADDR} netmask ${LXC_NETMASK} up
+	iptables $use_iptables_lock -I INPUT -i ${LXC_BRIDGE} -p udp --dport 67 -j ACCEPT
+	iptables $use_iptables_lock -I INPUT -i ${LXC_BRIDGE} -p tcp --dport 67 -j ACCEPT
+	iptables $use_iptables_lock -I INPUT -i ${LXC_BRIDGE} -p udp --dport 53 -j ACCEPT
+	iptables $use_iptables_lock -I INPUT -i ${LXC_BRIDGE} -p tcp --dport 53 -j ACCEPT
 	iptables $use_iptables_lock -t nat -A POSTROUTING -s ${LXC_NETWORK} ! -d ${LXC_NETWORK} -j MASQUERADE
 	iptables $use_iptables_lock -t mangle -A POSTROUTING -o ${LXC_BRIDGE} -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
 
@@ -63,6 +72,10 @@ post-stop script
 		use_iptables_lock="-w"
 		iptables -w -L -n 2>&1 > /dev/null || use_iptables_lock=""
 		ifconfig ${LXC_BRIDGE} down
+		iptables $use_iptables_lock -D INPUT -i ${LXC_BRIDGE} -p udp --dport 67 -j ACCEPT
+		iptables $use_iptables_lock -D INPUT -i ${LXC_BRIDGE} -p tcp --dport 67 -j ACCEPT
+		iptables $use_iptables_lock -D INPUT -i ${LXC_BRIDGE} -p udp --dport 53 -j ACCEPT
+		iptables $use_iptables_lock -D INPUT -i ${LXC_BRIDGE} -p tcp --dport 53 -j ACCEPT
 		iptables $use_iptables_lock -t nat -D POSTROUTING -s ${LXC_NETWORK} ! -d ${LXC_NETWORK} -j MASQUERADE || true
 		iptables $use_iptables_lock -t mangle -D POSTROUTING -o ${LXC_BRIDGE} -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
 		pid=`cat ${varrun}/dnsmasq.pid 2>/dev/null` && kill -9 $pid || true

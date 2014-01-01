@@ -16,7 +16,7 @@ Build-Depends: autotools-dev,
                linux-libc-dev,
                pkg-config,
                python3-dev (>= 3.2.3)
-Standards-Version: 3.9.4
+Standards-Version: 3.9.5
 Homepage: http://linuxcontainers.org
 X-Python3-Version: >= 3.2
 XS-Testsuite: autopkgtest

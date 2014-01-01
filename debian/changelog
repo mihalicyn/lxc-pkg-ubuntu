@@ -1,3 +1,11 @@
+lxc (1.0.0~beta1-0ubuntu3) trusty; urgency=medium
+
+  * Add lxc-container-with-mounting apparmor profile.
+  * Add iptables rules to always allow DHCP and DNS from the containers
+    to the host.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Wed, 01 Jan 2014 14:37:49 +0100
+
 lxc (1.0.0~beta1-0ubuntu2) trusty; urgency=medium
 
   * d/p/0001-fix-lxc-usernsexec-regression.patch: fix a regression breaking
