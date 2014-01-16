@@ -26,7 +26,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
-#include <lxc/state.h>
+#include "lxc/state.h"
 
 #define MYNAME "lxctest1"
 
@@ -72,7 +72,7 @@ static int create_busybox(void)
 		return -1;
 	}
 	if (pid == 0) {
-		ret = execlp("lxc-create", "lxc-create", "-t", "busybox", "-f", LXC_DEFAULT_CONFIG, "-n", MYNAME, NULL);
+		ret = execlp("lxc-create", "lxc-create", "-t", "busybox", "-n", MYNAME, NULL);
 		// Should not return
 		perror("execl");
 		exit(1);

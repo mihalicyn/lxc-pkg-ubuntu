@@ -27,9 +27,11 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <lxc/utils.h>
-#include <lxc/log.h>
+
 #include <lxc/lxccontainer.h>
+
+#include "utils.h"
+#include "log.h"
 
 #ifdef MUTEX_DEBUGGING
 #include <execinfo.h>
@@ -43,10 +45,9 @@
 lxc_log_define(lxc_lock, lxc);
 
 #ifdef MUTEX_DEBUGGING
-pthread_mutex_t thread_mutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
-pthread_mutex_t static_mutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+static pthread_mutex_t thread_mutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 
-inline void dump_stacktrace(void)
+static inline void dump_stacktrace(void)
 {
 	void *array[MAX_STACKDEPTH];
 	size_t size;
@@ -65,13 +66,12 @@ inline void dump_stacktrace(void)
 	free (strings);
 }
 #else
-pthread_mutex_t thread_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t static_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t thread_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-inline void dump_stacktrace(void) {;}
+static inline void dump_stacktrace(void) {;}
 #endif
 
-void lock_mutex(pthread_mutex_t *l)
+static void lock_mutex(pthread_mutex_t *l)
 {
 	int ret;
 
@@ -82,12 +82,12 @@ void lock_mutex(pthread_mutex_t *l)
 	}
 }
 
-void unlock_mutex(pthread_mutex_t *l)
+static void unlock_mutex(pthread_mutex_t *l)
 {
 	int ret;
 
 	if ((ret = pthread_mutex_unlock(l)) != 0) {
-		fprintf(stderr, "pthread_mutex_lock returned:%d %s", ret, strerror(ret));
+		fprintf(stderr, "pthread_mutex_unlock returned:%d %s", ret, strerror(ret));
 		dump_stacktrace();
 		exit(1);
 	}
@@ -119,15 +119,29 @@ static char *lxclock_name(const char *p, const char *n)
 		free(dest);
 		return NULL;
 	}
-	process_lock();
 	ret = mkdir_p(dest, 0755);
-	process_unlock();
 	if (ret < 0) {
-		free(dest);
-		return NULL;
-	}
+		/* fall back to "/tmp/" $(id -u) "/lxc/" $lxcpath / $lxcname + '\0' */
+		int l2 = 33 + strlen(n) + strlen(p);
+		if (l2 > len) {
+			char *d;
+			d = realloc(dest, l2);
+			if (!d) {
+				free(dest);
+				return NULL;
+			}
+			len = l2;
+			dest = d;
+		}
+		ret = snprintf(dest, len, "/tmp/%d/lxc/%s", geteuid(), p);
+		if (ret < 0 || ret >= len) {
+			free(dest);
+			return NULL;
+		}
+		ret = snprintf(dest, len, "/tmp/%d/lxc/%s/%s", geteuid(), p, n);
+	} else
+		ret = snprintf(dest, len, "%s/lock/lxc/%s/%s", rundir, p, n);
 
-	ret = snprintf(dest, len, "%s/lock/lxc/%s/%s", rundir, p, n);
 	if (ret < 0 || ret >= len) {
 		free(dest);
 		return NULL;
@@ -217,12 +231,10 @@ int lxclock(struct lxc_lock *l, int timeout)
 			ret = -2;
 			goto out;
 		}
-		process_lock();
 		if (l->u.f.fd == -1) {
 			l->u.f.fd = open(l->u.f.fname, O_RDWR|O_CREAT,
 					S_IWUSR | S_IRUSR);
 			if (l->u.f.fd == -1) {
-				process_unlock();
 				ERROR("Error opening %s", l->u.f.fname);
 				goto out;
 			}
@@ -232,7 +244,6 @@ int lxclock(struct lxc_lock *l, int timeout)
 		lk.l_start = 0;
 		lk.l_len = 0;
 		ret = fcntl(l->u.f.fd, F_SETLKW, &lk);
-		process_unlock();
 		if (ret == -1)
 			saved_errno = errno;
 		break;
@@ -258,7 +269,6 @@ int lxcunlock(struct lxc_lock *l)
 		}
 		break;
 	case LXC_LOCK_FLOCK:
-		process_lock();
 		if (l->u.f.fd != -1) {
 			lk.l_type = F_UNLCK;
 			lk.l_whence = SEEK_SET;
@@ -271,7 +281,6 @@ int lxcunlock(struct lxc_lock *l)
 			l->u.f.fd = -1;
 		} else
 			ret = -2;
-		process_unlock();
 		break;
 	}
 
@@ -299,12 +308,10 @@ void lxc_putlock(struct lxc_lock *l)
 		}
 		break;
 	case LXC_LOCK_FLOCK:
-		process_lock();
 		if (l->u.f.fd != -1) {
 			close(l->u.f.fd);
 			l->u.f.fd = -1;
 		}
-		process_unlock();
 		if (l->u.f.fname) {
 			free(l->u.f.fname);
 			l->u.f.fname = NULL;
@@ -324,16 +331,22 @@ void process_unlock(void)
 	unlock_mutex(&thread_mutex);
 }
 
-/* Protects static const values inside the lxc_global_config_value funtion */
-void static_lock(void)
+/* One thread can do fork() while another one is holding a mutex.
+ * There is only one thread in child just after the fork(), so noone will ever release that mutex.
+ * We setup a "child" fork handler to unlock the mutex just after the fork().
+ * For several mutex types, unlocking an unlocked mutex can lead to undefined behavior.
+ * One way to deal with it is to setup "prepare" fork handler
+ * to lock the mutex before fork() and both "parent" and "child" fork handlers
+ * to unlock the mutex.
+ * This forbids doing fork() while explicitly holding the lock.
+ */
+#ifdef HAVE_PTHREAD_ATFORK
+__attribute__((constructor))
+static void process_lock_setup_atfork(void)
 {
-	lock_mutex(&static_mutex);
+	pthread_atfork(process_lock, process_unlock, process_unlock);
 }
-
-void static_unlock(void)
-{
-	unlock_mutex(&static_mutex);
-}
+#endif
 
 int container_mem_lock(struct lxc_container *c)
 {

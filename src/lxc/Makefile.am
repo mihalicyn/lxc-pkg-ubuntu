@@ -131,13 +131,14 @@ AM_CFLAGS += -DUSE_CONFIGPATH_LOGS
 endif
 
 if ENABLE_SECCOMP
-AM_CFLAGS += -DHAVE_SECCOMP
+AM_CFLAGS += -DHAVE_SECCOMP $(SECCOMP_CFLAGS)
 liblxc_so_SOURCES += seccomp.c
 endif
 
-liblxc_so_CFLAGS = -fPIC -DPIC $(AM_CFLAGS)
+liblxc_so_CFLAGS = -fPIC -DPIC $(AM_CFLAGS) -pthread
 
 liblxc_so_LDFLAGS = \
+	-pthread \
 	-shared \
 	-Wl,-soname,liblxc.so.$(firstword $(subst ., ,$(VERSION)))
 
@@ -154,7 +155,8 @@ EXTRA_DIST = \
 	lxc-devsetup \
 	lxc-ls \
 	lxc-top \
-	lxc.service
+	lxc.service \
+	lxc.sysvinit
 
 if ENABLE_PYTHON
 bin_SCRIPTS += lxc-device
@@ -170,6 +172,7 @@ endif
 
 bin_PROGRAMS = \
 	lxc-attach \
+	lxc-autostart \
 	lxc-unshare \
 	lxc-stop \
 	lxc-start \
@@ -196,6 +199,43 @@ bin_PROGRAMS = \
 pkglibexec_PROGRAMS = \
 	lxc-init
 
+if INIT_SCRIPT_SYSV
+install-init: lxc.sysvinit
+	$(MKDIR_P) $(DESTDIR)$(sysconfdir)/rc.d/init.d
+	$(INSTALL_SCRIPT) lxc.sysvinit $(DESTDIR)$(sysconfdir)/rc.d/init.d/lxc
+
+uninstall-init:
+	rm -f $(DESTDIR)$(sysconfdir)/rc.d/init.d/lxc
+	rmdir $(DESTDIR)$(sysconfdir)/rc.d/init.d || :
+else
+install-init:
+uninstall-init:
+endif
+
+if INIT_SCRIPT_SYSTEMD
+SYSTEMD_UNIT_DIR = /usr/lib/systemd/system
+install-systemd: lxc.service lxc-devsetup
+	$(MKDIR_P) $(DESTDIR)$(SYSTEMD_UNIT_DIR)
+	$(INSTALL_DATA) lxc.service $(DESTDIR)$(SYSTEMD_UNIT_DIR)/
+
+uninstall-systemd:
+	rm -f $(DESTDIR)$(SYSTEMD_UNIT_DIR)/lxc.service
+	rmdir $(DESTDIR)$(SYSTEMD_UNIT_DIR) || :
+pkglibexec_SCRIPTS = lxc-devsetup
+else
+install-systemd:
+uninstall-systemd:
+endif
+
+if INIT_SCRIPT_UPSTART
+# FIXME: install/uninstall upstart script here
+install-upstart:
+uninstall-upstart:
+else
+install-upstart:
+uninstall-upstart:
+endif
+
 AM_LDFLAGS = -Wl,-E
 if ENABLE_RPATH
 AM_LDFLAGS += -Wl,-rpath -Wl,$(libdir)
@@ -203,6 +243,7 @@ endif
 LDADD=liblxc.so @CAP_LIBS@ @APPARMOR_LIBS@ @SECCOMP_LIBS@
 
 lxc_attach_SOURCES = lxc_attach.c
+lxc_autostart_SOURCES = lxc_autostart.c
 lxc_cgroup_SOURCES = lxc_cgroup.c
 lxc_checkpoint_SOURCES = lxc_checkpoint.c
 lxc_config_SOURCES = lxc_config.c
@@ -226,6 +267,10 @@ lxc_create_SOURCES = lxc_create.c
 lxc_snapshot_SOURCES = lxc_snapshot.c
 lxc_usernsexec_SOURCES = lxc_usernsexec.c
 lxc_user_nic_SOURCES = lxc_user_nic.c network.c network.h
+
+install-data-local: install-init install-systemd install-upstart
+
+uninstall-local: uninstall-init uninstall-systemd uninstall-upstart
 
 install-exec-local: install-soPROGRAMS
 	mkdir -p $(DESTDIR)$(datadir)/lxc

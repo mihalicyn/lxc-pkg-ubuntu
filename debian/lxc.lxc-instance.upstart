@@ -11,17 +11,12 @@ kill signal SIGPWR
 
 
 instance $NAME
-usage "NAME=name of LXC instance, CONFIG=full path to configuration file"
+usage "NAME=name of LXC instance"
 
 pre-start script
-	LXC_PATH=$(dirname $(dirname $(readlink $CONFIG)))
-
-	lxc-info -P $LXC_PATH -n $NAME 2>/dev/null | grep state | grep -q "RUNNING" && { stop; exit 0; }
-	[ -f $CONFIG ] || { stop; exit 0; }
+	lxc-wait -s RUNNING -n $NAME -t 0 && { stop; exit 0; } || true
 end script
 
 script
-	LXC_PATH=$(dirname $(dirname $(readlink $CONFIG)))
-
-	exec lxc-start -P $LXC_PATH -n $NAME
+	exec lxc-start -n $NAME
 end script

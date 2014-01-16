@@ -156,13 +156,36 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
     </refsect2>
 
     <refsect2>
+      <title>Halt signal</title>
+      <para>
+    Allows one to specify signal name or number, sent by lxc-stop to the
+    container's init process to cleanly shutdown the container. Different
+    init systems could use different signals to perform clean shutdown
+    sequence. This option allows the signal to be specified in kill(1)
+    fashion, e.g. SIGPWR, SIGRTMIN+14, SIGRTMAX-10 or plain number. The
+    default signal is SIGPWR.
+      </para>
+      <variablelist>
+    <varlistentry>
+      <term>
+        <option>lxc.haltsignal</option>
+      </term>
+      <listitem>
+        <para>
+          specify the signal used to halt the container
+        </para>
+      </listitem>
+    </varlistentry>
+      </variablelist>
+    </refsect2>
+
+    <refsect2>
       <title>Stop signal</title>
       <para>
-    Allows one to specify signal name or number, sent by lxc-stop to
-    shutdown the container. Different init systems could use
-    different signals to perform clean shutdown sequence. Option
-    allows signal to be specified in kill(1) fashion, e.g.
-    SIGKILL, SIGRTMIN+14, SIGRTMAX-10 or plain number.
+    Allows one to specify signal name or number, sent by lxc-stop to forcibly
+    shutdown the container. This option allows signal to be specified in
+    kill(1) fashion, e.g. SIGKILL, SIGRTMIN+14, SIGRTMAX-10 or plain number.
+    The default signal is SIGKILL.
       </para>
       <variablelist>
     <varlistentry>
@@ -204,6 +227,15 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 	      for the same container, as well as assigning several
 	      network interfaces for one container. The different
 	      virtualization types can be:
+	    </para>
+
+	    <para>
+	      <option>none:</option> will cause the container to share
+	      the host's network namespace.  This means the host
+	      network devices are usable in the container.  It also
+	      means that if both the container and host have upstart as
+	      init, 'halt' in a container (for instance) will shut down the
+	      host.
 	    </para>
 
 	    <para>
@@ -304,6 +336,17 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 	<varlistentry>
 	  <term>
+	    <option>lxc.network.mtu</option>
+	  </term>
+	  <listitem>
+	    <para>
+	      specify the maximum transfer unit for this interface.
+	    </para>
+	  </listitem>
+	</varlistentry>
+
+	<varlistentry>
+	  <term>
 	    <option>lxc.network.name</option>
 	  </term>
 	  <listitem>
@@ -326,7 +369,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 	      the interface mac address is dynamically allocated by
 	      default to the virtual interface, but in some cases,
 	      this is needed to resolve a mac address conflict or to
-	      always have the same link-local ipv6 address
+	      always have the same link-local ipv6 address.
+	      Any "x" in address will be replaced by random value,
+	      this allows setting hwaddr templates.
 	    </para>
 	  </listitem>
 	</varlistentry>
@@ -1246,7 +1291,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
     </refsect2>
     <refsect2>
-    <title> Logging</title>
+    <title>Logging</title>
     <para>
       Logging can be configured on a per-container basis.  By default,
       depending upon how the lxc package was compiled, container startup
@@ -1294,6 +1339,63 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
       </variablelist>
     </refsect2>
 
+    <refsect2>
+    <title>Autostart</title>
+    <para>
+        The autostart options support marking which containers should be
+        auto-started and in what order. These options may be used by LXC tools
+        directly or by external tooling provided by the distributions.
+    </para>
+
+    <variablelist>
+        <varlistentry>
+          <term>
+            <option>lxc.start.auto</option>
+          </term>
+          <listitem>
+            <para>
+              Whether the container should be auto-started.
+              Valid values are 0 (off) and 1 (on).
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term>
+            <option>lxc.start.delay</option>
+          </term>
+          <listitem>
+            <para>
+              How long to wait (in seconds) after the container is
+              started before starting the next one.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term>
+            <option>lxc.start.order</option>
+          </term>
+          <listitem>
+            <para>
+              An integer used to sort the containers when auto-starting
+              a series of containers at once.
+            </para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term>
+            <option>lxc.group</option>
+          </term>
+          <listitem>
+            <para>
+              A multi-value key (can be used multiple times) to put the
+              container in a container group. Those groups can then be
+              used (amongst other things) to start a series of related
+              containers.
+            </para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect2>
   </refsect1>
 
   <refsect1>

@@ -41,9 +41,8 @@
 #include "config.h"
 #include "confile.h"
 #include "utils.h"
-
-#include <lxc/log.h>
-#include <lxc/conf.h>
+#include "log.h"
+#include "conf.h"
 #include "network.h"
 
 #if HAVE_SYS_PERSONALITY_H
@@ -91,7 +90,10 @@ static int config_seccomp(const char *, const char *, struct lxc_conf *);
 static int config_includefile(const char *, const char *, struct lxc_conf *);
 static int config_network_nic(const char *, const char *, struct lxc_conf *);
 static int config_autodev(const char *, const char *, struct lxc_conf *);
+static int config_haltsignal(const char *, const char *, struct lxc_conf *);
 static int config_stopsignal(const char *, const char *, struct lxc_conf *);
+static int config_start(const char *, const char *, struct lxc_conf *);
+static int config_group(const char *, const char *, struct lxc_conf *);
 
 static struct lxc_config_t config[] = {
 
@@ -141,15 +143,20 @@ static struct lxc_config_t config[] = {
 	{ "lxc.seccomp",              config_seccomp              },
 	{ "lxc.include",              config_includefile          },
 	{ "lxc.autodev",              config_autodev              },
+	{ "lxc.haltsignal",           config_haltsignal           },
 	{ "lxc.stopsignal",           config_stopsignal           },
+	{ "lxc.start.auto",           config_start                },
+	{ "lxc.start.delay",          config_start                },
+	{ "lxc.start.order",          config_start                },
+	{ "lxc.group",                config_group                },
 };
 
 struct signame {
 	int num;
-	char *name;
+	const char *name;
 };
 
-struct signame signames[] = {
+static const struct signame signames[] = {
 	{ SIGHUP,    "HUP" },
 	{ SIGINT,    "INT" },
 	{ SIGQUIT,   "QUIT" },
@@ -503,6 +510,37 @@ static int macvlan_mode(int *valuep, const char *value)
 	return -1;
 }
 
+static int rand_complete_hwaddr(char *hwaddr)
+{
+	const char hex[] = "0123456789abcdef";
+	char *curs = hwaddr;
+
+#ifndef HAVE_RAND_R
+	randseed(true);
+#else
+	unsigned int seed=randseed(false);
+#endif
+	while (*curs != '\0')
+	{
+		if ( *curs == 'x' || *curs == 'X' ) {
+			if (curs - hwaddr == 1) {
+				//ensure address is unicast
+#ifdef HAVE_RAND_R
+				*curs = hex[rand_r(&seed) & 0x0E];
+			} else {
+				*curs = hex[rand_r(&seed) & 0x0F];
+#else
+				*curs = hex[rand() & 0x0E];
+			} else {
+				*curs = hex[rand() & 0x0F];
+#endif
+			}
+		}
+		curs++;
+	}
+	return 0;
+}
+
 static int config_network_flags(const char *key, const char *value,
 				struct lxc_conf *lxc_conf)
 {
@@ -570,11 +608,27 @@ static int config_network_hwaddr(const char *key, const char *value,
 {
 	struct lxc_netdev *netdev;
 
-	netdev = network_netdev(key, value, &lxc_conf->network);
-	if (!netdev)
+	char *new_value = strdup(value);
+	if (!new_value) {
+		SYSERROR("failed to strdup '%s': %m", value);
 		return -1;
+	}
+	rand_complete_hwaddr(new_value);
 
-	return config_string_item(&netdev->hwaddr, value);
+	netdev = network_netdev(key, new_value, &lxc_conf->network);
+	if (!netdev) {
+		free(new_value);
+		return -1;
+	};
+
+	if (!new_value || strlen(new_value) == 0) {
+		free(new_value);
+		netdev->hwaddr = NULL;
+		return 0;
+	}
+
+	netdev->hwaddr = new_value;
+	return 0;
 }
 
 static int config_network_vlan_id(const char *key, const char *value,
@@ -925,6 +979,71 @@ static int config_pts(const char *key, const char *value,
 	return 0;
 }
 
+static int config_start(const char *key, const char *value,
+		      struct lxc_conf *lxc_conf)
+{
+	if(strcmp(key, "lxc.start.auto") == 0) {
+		lxc_conf->start_auto = atoi(value);
+		return 0;
+	}
+	else if (strcmp(key, "lxc.start.delay") == 0) {
+		lxc_conf->start_delay = atoi(value);
+		return 0;
+	}
+	else if (strcmp(key, "lxc.start.order") == 0) {
+		lxc_conf->start_order = atoi(value);
+		return 0;
+	}
+	SYSERROR("Unknown key: %s", key);
+	return -1;
+}
+
+static int config_group(const char *key, const char *value,
+		      struct lxc_conf *lxc_conf)
+{
+	char *groups, *groupptr, *sptr, *token;
+	struct lxc_list *grouplist;
+	int ret = -1;
+
+	if (!strlen(value))
+		return lxc_clear_groups(lxc_conf);
+
+	groups = strdup(value);
+	if (!groups) {
+		SYSERROR("failed to dup '%s'", value);
+		return -1;
+	}
+
+	/* in case several groups are specified in a single line
+	 * split these groups in a single element for the list */
+	for (groupptr = groups;;groupptr = NULL) {
+                token = strtok_r(groupptr, " \t", &sptr);
+                if (!token) {
+			ret = 0;
+                        break;
+		}
+
+		grouplist = malloc(sizeof(*grouplist));
+		if (!grouplist) {
+			SYSERROR("failed to allocate groups list");
+			break;
+		}
+
+		grouplist->elem = strdup(token);
+		if (!grouplist->elem) {
+			SYSERROR("failed to dup '%s'", token);
+			free(grouplist);
+			break;
+		}
+
+		lxc_list_add_tail(&lxc_conf->groups, grouplist);
+        }
+
+	free(groups);
+
+	return ret;
+}
+
 static int config_tty(const char *key, const char *value,
 		      struct lxc_conf *lxc_conf)
 {
@@ -1038,6 +1157,16 @@ static int rt_sig_num(const char *signame)
 	return sig_n;
 }
 
+static const char *sig_name(int signum) {
+	int n;
+
+	for (n = 0; n < sizeof(signames) / sizeof((signames)[0]); n++) {
+		if (n == signames[n].num)
+			return signames[n].name;
+	}
+	return "";
+}
+
 static int sig_parse(const char *signame) {
 	int n;
 
@@ -1053,6 +1182,18 @@ static int sig_parse(const char *signame) {
 		}
 	}
 	return -1;
+}
+
+static int config_haltsignal(const char *key, const char *value,
+			     struct lxc_conf *lxc_conf)
+{
+	int sig_n = sig_parse(value);
+
+	if (sig_n < 0)
+		return -1;
+	lxc_conf->haltsignal = sig_n;
+
+	return 0;
 }
 
 static int config_stopsignal(const char *key, const char *value,
@@ -1516,7 +1657,7 @@ out:
 	return ret;
 }
 
-int lxc_config_readline(char *buffer, struct lxc_conf *conf)
+static int lxc_config_readline(char *buffer, struct lxc_conf *conf)
 {
 	return parse_line(buffer, conf);
 }
@@ -1724,6 +1865,22 @@ static int lxc_get_item_hooks(struct lxc_conf *c, char *retv, int inlen,
 		memset(retv, 0, inlen);
 
 	lxc_list_for_each(it, &c->hooks[found]) {
+		strprint(retv, inlen, "%s\n", (char *)it->elem);
+	}
+	return fulllen;
+}
+
+static int lxc_get_item_groups(struct lxc_conf *c, char *retv, int inlen)
+{
+	int len, fulllen = 0;
+	struct lxc_list *it;
+
+	if (!retv)
+		inlen = 0;
+	else
+		memset(retv, 0, inlen);
+
+	lxc_list_for_each(it, &c->groups) {
 		strprint(retv, inlen, "%s\n", (char *)it->elem);
 	}
 	return fulllen;
@@ -1952,6 +2109,14 @@ int lxc_get_config_item(struct lxc_conf *c, const char *key, char *retv,
 		return lxc_get_item_network(c, retv, inlen);
 	else if (strncmp(key, "lxc.network.", 12) == 0)
 		return lxc_get_item_nic(c, retv, inlen, key + 12);
+	else if (strcmp(key, "lxc.start.auto") == 0)
+		return lxc_get_conf_int(c, retv, inlen, c->start_auto);
+	else if (strcmp(key, "lxc.start.delay") == 0)
+		return lxc_get_conf_int(c, retv, inlen, c->start_delay);
+	else if (strcmp(key, "lxc.start.order") == 0)
+		return lxc_get_conf_int(c, retv, inlen, c->start_order);
+	else if (strcmp(key, "lxc.group") == 0)
+		return lxc_get_item_groups(c, retv, inlen);
 	else return -1;
 
 	if (!v)
@@ -1977,6 +2142,8 @@ int lxc_clear_config_item(struct lxc_conf *c, const char *key)
 		return lxc_clear_mount_entries(c);
 	else if (strncmp(key, "lxc.hook", 8) == 0)
 		return lxc_clear_hooks(c, key);
+	else if (strncmp(key, "lxc.group", 9) == 0)
+		return lxc_clear_groups(c);
 
 	return -1;
 }
@@ -2023,6 +2190,10 @@ void write_config(FILE *fout, struct lxc_conf *c)
 		fprintf(fout, "lxc.pts = %d\n", c->pts);
 	if (c->ttydir)
 		fprintf(fout, "lxc.devttydir = %s\n", c->ttydir);
+	if (c->haltsignal)
+		fprintf(fout, "lxc.haltsignal = SIG%s\n", sig_name(c->haltsignal));
+	if (c->stopsignal)
+		fprintf(fout, "lxc.stopsignal = SIG%s\n", sig_name(c->stopsignal));
 	#if HAVE_SYS_PERSONALITY_H
 	switch(c->personality) {
 	case PER_LINUX32: fprintf(fout, "lxc.arch = x86\n"); break;
@@ -2034,6 +2205,12 @@ void write_config(FILE *fout, struct lxc_conf *c)
 		fprintf(fout, "lxc.aa_profile = %s\n", c->lsm_aa_profile);
 	if (c->lsm_se_context)
 		fprintf(fout, "lxc.se_context = %s\n", c->lsm_se_context);
+	if (c->seccomp)
+		fprintf(fout, "lxc.seccomp = %s\n", c->seccomp);
+	if (c->kmsg == 0)
+		fprintf(fout, "lxc.kmsg = 0\n");
+	if (c->autodev > 0)
+		fprintf(fout, "lxc.autodev = 1\n");
 	if (c->loglevel != LXC_LOG_PRIORITY_NOTSET)
 		fprintf(fout, "lxc.loglevel = %s\n", lxc_log_priority_to_string(c->loglevel));
 	if (c->logfile)
@@ -2129,4 +2306,12 @@ void write_config(FILE *fout, struct lxc_conf *c)
 		fprintf(fout, "lxc.rootfs.mount = %s\n", c->rootfs.mount);
 	if (c->rootfs.pivot)
 		fprintf(fout, "lxc.pivotdir = %s\n", c->rootfs.pivot);
+	if (c->start_auto)
+		fprintf(fout, "lxc.start.auto = %d\n", c->start_auto);
+	if (c->start_delay)
+		fprintf(fout, "lxc.start.delay = %d\n", c->start_delay);
+	if (c->start_order)
+		fprintf(fout, "lxc.start.order = %d\n", c->start_order);
+	lxc_list_for_each(it, &c->groups)
+		fprintf(fout, "lxc.group = %s\n", (char *)it->elem);
 }

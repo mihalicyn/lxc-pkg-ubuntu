@@ -32,7 +32,7 @@ import warnings
 warnings.warn("The python-lxc API isn't yet stable "
               "and may change at any point in the future.", Warning, 2)
 
-default_config_path = _lxc.get_default_config_path()
+default_config_path = _lxc.get_global_config_item("lxc.lxcpath")
 version = _lxc.get_version()
 
 
@@ -454,7 +454,6 @@ LXC_ATTACH_REMOUNT_PROC_SYS = _lxc.LXC_ATTACH_REMOUNT_PROC_SYS
 LXC_ATTACH_SET_PERSONALITY = _lxc.LXC_ATTACH_SET_PERSONALITY
 
 # clone: clone flags
-LXC_CLONE_COPYHOOKS = _lxc.LXC_CLONE_COPYHOOKS
 LXC_CLONE_KEEPMACADDR = _lxc.LXC_CLONE_KEEPMACADDR
 LXC_CLONE_KEEPNAME = _lxc.LXC_CLONE_KEEPNAME
 LXC_CLONE_SNAPSHOT = _lxc.LXC_CLONE_SNAPSHOT

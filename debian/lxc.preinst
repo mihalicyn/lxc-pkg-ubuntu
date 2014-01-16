@@ -64,10 +64,45 @@ EOF
     fi
 }
 
+migrate_auto()
+{
+    echo "Migrating /etc/lxc/auto to lxc.auto.start config flag"
+    for container in /etc/lxc/auto/*; do
+        [ "$container" = "/etc/lxc/auto/*" ] && continue
+
+        if [ ! -L "$container" ]; then
+            echo "$container isn't a symlink, skipping."
+        fi
+
+        if [ -d "$container" ] && [ -e "$container/config" ]; then
+            echo " - Marking $container/config as auto-started"
+            echo "" >> $container/config
+            echo "# Added by lxc postinst, migration of autostart flag" >> $container/config
+            echo "lxc.start.auto = 1" >> $container/config
+        fi
+
+        if [ -f "$container" ]; then
+            echo " - Marking $container as auto-started"
+            echo "" >> $container
+            echo "# Added by lxc postinst, migration of autostart flag" >> $container
+            echo "lxc.start.auto = 1" >> $container
+        fi
+
+        rm $container
+    done
+
+    # Try to remove /etc/lxc/auto (but ignore failure if non-empty)
+    rmdir /etc/lxc/auto/ >/dev/null 2>&1 || true
+}
+
 case "${1}" in
     install|upgrade)
         if [ ! -f /etc/default/lxc-net ]; then
             configure_lxcbr0
+        fi
+
+        if [ -d /etc/lxc/auto ]; then
+            migrate_auto
         fi
         ;;
     abort-upgrade)

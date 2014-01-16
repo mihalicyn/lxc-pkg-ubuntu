@@ -70,7 +70,6 @@
 #include "namespace.h"
 #include "lxcseccomp.h"
 #include "caps.h"
-#include "lxclock.h"
 #include "lsm/lsm.h"
 
 lxc_log_define(lxc_start, lxc);
@@ -87,35 +86,31 @@ const struct ns_info ns_info[LXC_NS_MAX] = {
 static void close_ns(int ns_fd[LXC_NS_MAX]) {
 	int i;
 
-	process_lock();
 	for (i = 0; i < LXC_NS_MAX; i++) {
 		if (ns_fd[i] > -1) {
 			close(ns_fd[i]);
 			ns_fd[i] = -1;
 		}
 	}
-	process_unlock();
 }
 
 static int preserve_ns(int ns_fd[LXC_NS_MAX], int clone_flags) {
 	int i, saved_errno;
 	char path[MAXPATHLEN];
 
-	if (access("/proc/self/ns", X_OK)) {
-		ERROR("Does this kernel version support 'attach'?");
-		return -1;
-	}
-
 	for (i = 0; i < LXC_NS_MAX; i++)
 		ns_fd[i] = -1;
+
+	if (access("/proc/self/ns", X_OK)) {
+		WARN("Kernel does not support attach; preserve_ns ignored");
+		return 0;
+	}
 
 	for (i = 0; i < LXC_NS_MAX; i++) {
 		if ((clone_flags & ns_info[i].clone_flag) == 0)
 			continue;
 		snprintf(path, MAXPATHLEN, "/proc/self/ns/%s", ns_info[i].proc_name);
-		process_lock();
 		ns_fd[i] = open(path, O_RDONLY | O_CLOEXEC);
-		process_unlock();
 		if (ns_fd[i] < 0)
 			goto error;
 	}
@@ -159,9 +154,7 @@ int lxc_check_inherited(struct lxc_conf *conf, int fd_to_ignore)
 	DIR *dir;
 
 restart:
-	process_lock();
 	dir = opendir("/proc/self/fd");
-	process_unlock();
 	if (!dir) {
 		WARN("failed to open directory: %m");
 		return -1;
@@ -188,19 +181,15 @@ restart:
 			continue;
 
 		if (conf->close_all_fds) {
-			process_lock();
 			close(fd);
 			closedir(dir);
-			process_unlock();
 			INFO("closed inherited fd %d", fd);
 			goto restart;
 		}
 		WARN("inherited fd %d", fd);
 	}
 
-	process_lock();
 	closedir(dir); /* cannot fail */
-	process_unlock();
 	return 0;
 }
 
@@ -288,14 +277,14 @@ static int signal_handler(int fd, uint32_t events, void *data,
 	return 1;
 }
 
-int lxc_set_state(const char *name, struct lxc_handler *handler, lxc_state_t state)
+static int lxc_set_state(const char *name, struct lxc_handler *handler, lxc_state_t state)
 {
 	handler->state = state;
 	lxc_monitor_send_state(name, state, handler->lxcpath);
 	return 0;
 }
 
-int lxc_poll(const char *name, struct lxc_handler *handler)
+static int lxc_poll(const char *name, struct lxc_handler *handler)
 {
 	int sigfd = handler->sigfd;
 	int pid = handler->pid;
@@ -337,9 +326,7 @@ int lxc_poll(const char *name, struct lxc_handler *handler)
 out_mainloop_open:
 	lxc_mainloop_close(&descr);
 out_sigfd:
-	process_lock();
 	close(sigfd);
-	process_unlock();
 	return -1;
 }
 
@@ -440,9 +427,7 @@ out_delete_tty:
 out_aborting:
 	lxc_set_state(name, handler, ABORTING);
 out_close_maincmd_fd:
-	process_lock();
 	close(conf->maincmd_fd);
-	process_unlock();
 	conf->maincmd_fd = -1;
 out_free_name:
 	free(handler->name);
@@ -469,9 +454,7 @@ static void lxc_fini(const char *name, struct lxc_handler *handler)
 
 	lxc_console_delete(&handler->conf->console);
 	lxc_delete_tty(&handler->conf->tty_info);
-	process_lock();
 	close(handler->conf->maincmd_fd);
-	process_unlock();
 	handler->conf->maincmd_fd = -1;
 	free(handler->name);
 	if (handler->cgroup) {
@@ -481,7 +464,7 @@ static void lxc_fini(const char *name, struct lxc_handler *handler)
 	free(handler);
 }
 
-void lxc_abort(const char *name, struct lxc_handler *handler)
+static void lxc_abort(const char *name, struct lxc_handler *handler)
 {
 	int ret, status;
 
@@ -519,18 +502,14 @@ static int must_drop_cap_sys_boot(struct lxc_conf *conf)
         int status;
         pid_t pid;
 
-	process_lock();
 	f = fopen("/proc/sys/kernel/ctrl-alt-del", "r");
-	process_unlock();
 	if (!f) {
 		DEBUG("failed to open /proc/sys/kernel/ctrl-alt-del");
 		return 1;
 	}
 
 	ret = fscanf(f, "%d", &v);
-	process_lock();
 	fclose(f);
-	process_unlock();
 	if (ret != 1) {
 		DEBUG("Failed to read /proc/sys/kernel/ctrl-alt-del");
 		return 1;
@@ -587,9 +566,7 @@ static int do_start(void *data)
 
 	/* don't leak the pinfd to the container */
 	if (handler->pinfd >= 0) {
-		process_lock();
 		close(handler->pinfd);
-		process_unlock();
 	}
 
 	/* Tell the parent task it can begin to configure the
@@ -666,9 +643,7 @@ static int do_start(void *data)
 		goto out_warn_father;
 	}
 
-	process_lock();
 	close(handler->sigfd);
-	process_unlock();
 
 	/* after this call, we are in error because this
 	 * ops should not return as it execs */
@@ -681,7 +656,7 @@ out_warn_father:
 	return -1;
 }
 
-int save_phys_nics(struct lxc_conf *conf)
+static int save_phys_nics(struct lxc_conf *conf)
 {
 	struct lxc_list *iterator;
 
@@ -711,7 +686,7 @@ int save_phys_nics(struct lxc_conf *conf)
 	return 0;
 }
 
-int lxc_spawn(struct lxc_handler *handler)
+static int lxc_spawn(struct lxc_handler *handler)
 {
 	int failed_before_rename = 0;
 	const char *name = handler->name;
@@ -792,7 +767,7 @@ int lxc_spawn(struct lxc_handler *handler)
 	 * default value is available
 	 */
 	if (getuid() == 0)
-		cgroup_pattern = default_cgroup_pattern();
+		cgroup_pattern = lxc_global_config_value("lxc.cgroup.pattern");
 	if (!cgroup_pattern)
 		cgroup_pattern = "%n";
 
@@ -813,8 +788,10 @@ int lxc_spawn(struct lxc_handler *handler)
 	if (handler->pinfd == -1)
 		INFO("failed to pin the container's rootfs");
 
-	preserve_ns(saved_ns_fd, preserve_mask);
-	attach_ns(handler->conf->inherit_ns_fd);
+	if (preserve_ns(saved_ns_fd, preserve_mask) < 0)
+		goto out_delete_net;
+	if (attach_ns(handler->conf->inherit_ns_fd) < 0)
+		goto out_delete_net;
 
 	/* Create a process in a new set of namespaces */
 	handler->pid = lxc_clone(do_start, handler, handler->clone_flags);
@@ -823,7 +800,8 @@ int lxc_spawn(struct lxc_handler *handler)
 		goto out_delete_net;
 	}
 
-	attach_ns(saved_ns_fd);
+	if (attach_ns(saved_ns_fd))
+		WARN("failed to restore saved namespaces");
 
 	lxc_sync_fini_child(handler);
 
@@ -913,9 +891,7 @@ out_abort:
 	lxc_abort(name, handler);
 	lxc_sync_fini(handler);
 	if (handler->pinfd >= 0) {
-		process_lock();
 		close(handler->pinfd);
-		process_unlock();
 		handler->pinfd = -1;
 	}
 
@@ -987,9 +963,7 @@ int __lxc_start(const char *name, struct lxc_conf *conf,
 	lxc_rename_phys_nics_on_shutdown(handler->conf);
 
 	if (handler->pinfd >= 0) {
-		process_lock();
 		close(handler->pinfd);
-		process_unlock();
 		handler->pinfd = -1;
 	}
 

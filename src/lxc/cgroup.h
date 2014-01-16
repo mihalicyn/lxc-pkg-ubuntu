@@ -26,6 +26,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include "state.h"
+
 struct cgroup_hierarchy;
 struct cgroup_meta_data;
 struct cgroup_mount_point;
@@ -153,7 +155,7 @@ extern int lxc_cgroup_get(const char *filename, char *value, size_t len, const c
  * Returns path on success, NULL on error. The caller must free()
  * the returned path.
  */
-extern char *lxc_cgroup_path_get(const char *subsystem, const char *name,
+extern char *lxc_cgroup_path_get(const char *filename, const char *name,
                                  const char *lxcpath);
 
 struct lxc_list;
@@ -164,4 +166,8 @@ extern int lxc_setup_mount_cgroup(const char *root, struct cgroup_process_info *
 
 extern int lxc_cgroup_nrtasks_handler(struct lxc_handler *handler);
 
+extern int do_unfreeze(const char *nsgroup, int freeze, const char *name, const char *lxcpath);
+extern int freeze_unfreeze(const char *name, int freeze, const char *lxcpath);
+extern const char *lxc_state2str(lxc_state_t state);
+extern lxc_state_t freezer_state(const char *name, const char *lxcpath);
 #endif

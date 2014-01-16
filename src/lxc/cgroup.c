@@ -45,22 +45,15 @@
 #include "conf.h"
 #include "utils.h"
 #include "bdev.h"
-#include "lxclock.h"
-
-#include <lxc/log.h>
-#include <lxc/cgroup.h>
-#include <lxc/start.h>
+#include "log.h"
+#include "cgroup.h"
+#include "start.h"
+#include "state.h"
 
 #if IS_BIONIC
 #include <../include/lxcmntent.h>
 #else
 #include <mntent.h>
-#endif
-
-#ifndef HAVE_GETLINE
-#ifdef HAVE_FGETLN
-#include <../include/getline.h>
-#endif
 #endif
 
 lxc_log_define(lxc_cgroup, lxc);
@@ -70,9 +63,8 @@ static char **subsystems_from_mount_options(const char *mount_options, char **ke
 static void lxc_cgroup_mount_point_free(struct cgroup_mount_point *mp);
 static void lxc_cgroup_hierarchy_free(struct cgroup_hierarchy *h);
 static bool is_valid_cgroup(const char *name);
-static int create_or_remove_cgroup(bool remove, struct cgroup_mount_point *mp, const char *path);
 static int create_cgroup(struct cgroup_mount_point *mp, const char *path);
-static int remove_cgroup(struct cgroup_mount_point *mp, const char *path);
+static int remove_cgroup(struct cgroup_mount_point *mp, const char *path, bool recurse);
 static char *cgroup_to_absolute_path(struct cgroup_mount_point *mp, const char *path, const char *suffix);
 static struct cgroup_process_info *find_info_for_subsystem(struct cgroup_process_info *info, const char *subsystem);
 static int do_cgroup_get(const char *cgroup_path, const char *sub_filename, char *value, size_t len);
@@ -83,6 +75,75 @@ static int cgroup_recursive_task_count(const char *cgroup_path);
 static int count_lines(const char *fn);
 static int handle_cgroup_settings(struct cgroup_mount_point *mp, char *cgroup_path);
 
+static int cgroup_rmdir(char *dirname)
+{
+	struct dirent dirent, *direntp;
+	int saved_errno = 0;
+	DIR *dir;
+	int ret, failed=0;
+	char pathname[MAXPATHLEN];
+
+	dir = opendir(dirname);
+	if (!dir) {
+		ERROR("%s: failed to open %s", __func__, dirname);
+		return -1;
+	}
+
+	while (!readdir_r(dir, &dirent, &direntp)) {
+		struct stat mystat;
+		int rc;
+
+		if (!direntp)
+			break;
+
+		if (!strcmp(direntp->d_name, ".") ||
+		    !strcmp(direntp->d_name, ".."))
+			continue;
+
+		rc = snprintf(pathname, MAXPATHLEN, "%s/%s", dirname, direntp->d_name);
+		if (rc < 0 || rc >= MAXPATHLEN) {
+			ERROR("pathname too long");
+			failed=1;
+			if (!saved_errno)
+				saved_errno = -ENOMEM;
+			continue;
+		}
+		ret = lstat(pathname, &mystat);
+		if (ret) {
+			SYSERROR("%s: failed to stat %s", __func__, pathname);
+			failed=1;
+			if (!saved_errno)
+				saved_errno = errno;
+			continue;
+		}
+		if (S_ISDIR(mystat.st_mode)) {
+			if (cgroup_rmdir(pathname) < 0) {
+				if (!saved_errno)
+					saved_errno = errno;
+				failed=1;
+			}
+		}
+	}
+
+	if (rmdir(dirname) < 0) {
+		SYSERROR("%s: failed to delete %s", __func__, dirname);
+		if (!saved_errno)
+			saved_errno = errno;
+		failed=1;
+	}
+
+	ret = closedir(dir);
+	if (ret) {
+		SYSERROR("%s: failed to close directory %s", __func__, dirname);
+		if (!saved_errno)
+			saved_errno = errno;
+		failed=1;
+	}
+
+	errno = saved_errno;
+	return failed ? -1 : 0;
+}
+
 struct cgroup_meta_data *lxc_cgroup_load_meta()
 {
 	const char *cgroup_use = NULL;
@@ -91,7 +152,7 @@ struct cgroup_meta_data *lxc_cgroup_load_meta()
 	int saved_errno;
 
 	errno = 0;
-	cgroup_use = default_cgroup_use();
+	cgroup_use = lxc_global_config_value("lxc.cgroup.use");
 	if (!cgroup_use && errno != 0)
 		return NULL;
 	if (cgroup_use) {
@@ -118,9 +179,7 @@ static bool find_cgroup_subsystems(char ***kernel_subsystems)
 	size_t kernel_subsystems_capacity = 0;
 	int r;
 
-	process_lock();
 	proc_cgroups = fopen_cloexec("/proc/cgroups", "r");
-	process_unlock();
 	if (!proc_cgroups)
 		return false;
 
@@ -160,9 +219,7 @@ static bool find_cgroup_subsystems(char ***kernel_subsystems)
 	bret = true;
 
 out:
-	process_lock();
 	fclose(proc_cgroups);
-	process_unlock();
 	free(line);
 	return bret;
 }
@@ -182,13 +239,11 @@ static bool find_cgroup_hierarchies(struct cgroup_meta_data *meta_data,
 	bool bret = false;
 	size_t hierarchy_capacity = 0;
 
-	process_lock();
 	proc_self_cgroup = fopen_cloexec("/proc/self/cgroup", "r");
 	/* if for some reason (because of setns() and pid namespace for example),
 	 * /proc/self is not valid, we try /proc/1/cgroup... */
 	if (!proc_self_cgroup)
 		proc_self_cgroup = fopen_cloexec("/proc/1/cgroup", "r");
-	process_unlock();
 	if (!proc_self_cgroup)
 		return false;
 
@@ -267,9 +322,7 @@ static bool find_cgroup_hierarchies(struct cgroup_meta_data *meta_data,
 	bret = true;
 
 out:
-	process_lock();
 	fclose(proc_self_cgroup);
-	process_unlock();
 	free(line);
 	return bret;
 }
@@ -287,13 +340,11 @@ static bool find_hierarchy_mountpts( struct cgroup_meta_data *meta_data, char **
 	size_t token_capacity = 0;
 	int r;
 
-	process_lock();
 	proc_self_mountinfo = fopen_cloexec("/proc/self/mountinfo", "r");
 	/* if for some reason (because of setns() and pid namespace for example),
 	 * /proc/self is not valid, we try /proc/1/cgroup... */
 	if (!proc_self_mountinfo)
 		proc_self_mountinfo = fopen_cloexec("/proc/1/mountinfo", "r");
-	process_unlock();
 	if (!proc_self_mountinfo)
 		return false;
 
@@ -398,9 +449,7 @@ static bool find_hierarchy_mountpts( struct cgroup_meta_data *meta_data, char **
 	bret = true;
 
 out:
-	process_lock();
 	fclose(proc_self_mountinfo);
-	process_unlock();
 	free(tokens);
 	free(line);
 	return bret;
@@ -759,7 +808,7 @@ extern struct cgroup_process_info *lxc_cgroup_create(const char *name, const cha
 		 * In that case, remove the cgroup from all previous hierarchies
 		 */
 		for (j = 0, info_ptr = base_info; j < i && info_ptr; info_ptr = info_ptr->next, j++) {
-			r = remove_cgroup(info_ptr->designated_mount_point, info_ptr->created_paths[info_ptr->created_paths_count - 1]);
+			r = remove_cgroup(info_ptr->designated_mount_point, info_ptr->created_paths[info_ptr->created_paths_count - 1], false);
 			if (r < 0)
 				WARN("could not clean up cgroup we created when trying to create container");
 			free(info_ptr->created_paths[info_ptr->created_paths_count - 1]);
@@ -1053,8 +1102,7 @@ void lxc_cgroup_process_info_free_and_remove(struct cgroup_process_info *info)
 	if (!info)
 		return;
 	next = info->next;
-	for (pp = info->created_paths; pp && *pp; pp++);
-	for ((void)(pp && --pp); info->created_paths && pp >= info->created_paths; --pp) {
+	{
 		struct cgroup_mount_point *mp = info->designated_mount_point;
 		if (!mp)
 			mp = lxc_cgroup_find_mount_point(info->hierarchy, info->cgroup_path, true);
@@ -1063,7 +1111,10 @@ void lxc_cgroup_process_info_free_and_remove(struct cgroup_process_info *info)
 			 * '/lxc' cgroup in this container but another container
 			 * is still running (for example)
 			 */
-			(void)remove_cgroup(mp, *pp);
+			(void)remove_cgroup(mp, info->cgroup_path, true);
+	}
+	for (pp = info->created_paths; pp && *pp; pp++);
+	for ((void)(pp && --pp); info->created_paths && pp >= info->created_paths; --pp) {
 		free(*pp);
 	}
 	free(info->created_paths);
@@ -1463,7 +1514,9 @@ int lxc_cgroup_nrtasks_handler(struct lxc_handler *handler)
 	return ret;
 }
 
-struct cgroup_process_info *lxc_cgroup_process_info_getx(const char *proc_pid_cgroup_str, struct cgroup_meta_data *meta)
+static struct cgroup_process_info *
+lxc_cgroup_process_info_getx(const char *proc_pid_cgroup_str,
+			     struct cgroup_meta_data *meta)
 {
 	struct cgroup_process_info *result = NULL;
 	FILE *proc_pid_cgroup = NULL;
@@ -1473,9 +1526,7 @@ struct cgroup_process_info *lxc_cgroup_process_info_getx(const char *proc_pid_cg
 	struct cgroup_process_info **cptr = &result;
 	struct cgroup_process_info *entry = NULL;
 
-	process_lock();
 	proc_pid_cgroup = fopen_cloexec(proc_pid_cgroup_str, "r");
-	process_unlock();
 	if (!proc_pid_cgroup)
 		return NULL;
 
@@ -1545,18 +1596,14 @@ struct cgroup_process_info *lxc_cgroup_process_info_getx(const char *proc_pid_cg
 		entry = NULL;
 	}
 
-	process_lock();
 	fclose(proc_pid_cgroup);
-	process_unlock();
 	free(line);
 	return result;
 
 out_error:
 	saved_errno = errno;
-	process_lock();
 	if (proc_pid_cgroup)
 		fclose(proc_pid_cgroup);
-	process_unlock();
 	lxc_cgroup_process_info_free(result);
 	lxc_cgroup_process_info_free(entry);
 	free(line);
@@ -1564,7 +1611,8 @@ out_error:
 	return NULL;
 }
 
-char **subsystems_from_mount_options(const char *mount_options, char **kernel_list)
+static char **subsystems_from_mount_options(const char *mount_options,
+					    char **kernel_list)
 {
 	char *token, *str, *saveptr = NULL;
 	char **result = NULL;
@@ -1601,7 +1649,7 @@ out_free:
 	return NULL;
 }
 
-void lxc_cgroup_mount_point_free(struct cgroup_mount_point *mp)
+static void lxc_cgroup_mount_point_free(struct cgroup_mount_point *mp)
 {
 	if (!mp)
 		return;
@@ -1610,7 +1658,7 @@ void lxc_cgroup_mount_point_free(struct cgroup_mount_point *mp)
 	free(mp);
 }
 
-void lxc_cgroup_hierarchy_free(struct cgroup_hierarchy *h)
+static void lxc_cgroup_hierarchy_free(struct cgroup_hierarchy *h)
 {
 	if (!h)
 		return;
@@ -1619,17 +1667,22 @@ void lxc_cgroup_hierarchy_free(struct cgroup_hierarchy *h)
 	free(h);
 }
 
-bool is_valid_cgroup(const char *name)
+static bool is_valid_cgroup(const char *name)
 {
 	const char *p;
 	for (p = name; *p; p++) {
-		if (*p < 32 || *p == 127 || *p == '/')
+		/* Use the ASCII printable characters range(32 - 127)
+		 * is reasonable, we kick out 32(SPACE) because it'll
+		 * break legacy lxc-ls
+		 */
+		if (*p <= 32 || *p >= 127 || *p == '/')
 			return false;
 	}
 	return strcmp(name, ".") != 0 && strcmp(name, "..") != 0;
 }
 
-int create_or_remove_cgroup(bool do_remove, struct cgroup_mount_point *mp, const char *path)
+static int create_or_remove_cgroup(bool do_remove,
+		struct cgroup_mount_point *mp, const char *path, int recurse)
 {
 	int r, saved_errno = 0;
 	char *buf = cgroup_to_absolute_path(mp, path, NULL);
@@ -1637,26 +1690,32 @@ int create_or_remove_cgroup(bool do_remove, struct cgroup_mount_point *mp, const
 		return -1;
 
 	/* create or remove directory */
-	r = do_remove ?
-		rmdir(buf) :
-		mkdir(buf, 0777);
+	if (do_remove) {
+		if (recurse)
+			r = cgroup_rmdir(buf);
+		else
+			r = rmdir(buf);
+	} else
+		r = mkdir(buf, 0777);
 	saved_errno = errno;
 	free(buf);
 	errno = saved_errno;
 	return r;
 }
 
-int create_cgroup(struct cgroup_mount_point *mp, const char *path)
+static int create_cgroup(struct cgroup_mount_point *mp, const char *path)
 {
-	return create_or_remove_cgroup(false, mp, path);
+	return create_or_remove_cgroup(false, mp, path, false);
 }
 
-int remove_cgroup(struct cgroup_mount_point *mp, const char *path)
+static int remove_cgroup(struct cgroup_mount_point *mp,
+			 const char *path, bool recurse)
 {
-	return create_or_remove_cgroup(true, mp, path);
+	return create_or_remove_cgroup(true, mp, path, recurse);
 }
 
-char *cgroup_to_absolute_path(struct cgroup_mount_point *mp, const char *path, const char *suffix)
+static char *cgroup_to_absolute_path(struct cgroup_mount_point *mp,
+				     const char *path, const char *suffix)
 {
 	/* first we have to make sure we subtract the mount point's prefix */
 	char *prefix = mp->mount_prefix;
@@ -1700,7 +1759,8 @@ char *cgroup_to_absolute_path(struct cgroup_mount_point *mp, const char *path, c
 	return buf;
 }
 
-struct cgroup_process_info *find_info_for_subsystem(struct cgroup_process_info *info, const char *subsystem)
+static struct cgroup_process_info *
+find_info_for_subsystem(struct cgroup_process_info *info, const char *subsystem)
 {
 	struct cgroup_process_info *info_ptr;
 	for (info_ptr = info; info_ptr; info_ptr = info_ptr->next) {
@@ -1712,7 +1772,8 @@ struct cgroup_process_info *find_info_for_subsystem(struct cgroup_process_info *
 	return NULL;
 }
 
-int do_cgroup_get(const char *cgroup_path, const char *sub_filename, char *value, size_t len)
+static int do_cgroup_get(const char *cgroup_path, const char *sub_filename,
+			 char *value, size_t len)
 {
 	const char *parts[3] = {
 		cgroup_path,
@@ -1733,7 +1794,8 @@ int do_cgroup_get(const char *cgroup_path, const char *sub_filename, char *value
 	return ret;
 }
 
-int do_cgroup_set(const char *cgroup_path, const char *sub_filename, const char *value)
+static int do_cgroup_set(const char *cgroup_path, const char *sub_filename,
+			 const char *value)
 {
 	const char *parts[3] = {
 		cgroup_path,
@@ -1754,7 +1816,8 @@ int do_cgroup_set(const char *cgroup_path, const char *sub_filename, const char 
 	return ret;
 }
 
-int do_setup_cgroup(struct lxc_handler *h, struct lxc_list *cgroup_settings, bool do_devices)
+static int do_setup_cgroup(struct lxc_handler *h,
+			   struct lxc_list *cgroup_settings, bool do_devices)
 {
 	struct lxc_list *iterator;
 	struct lxc_cgroup *cg;
@@ -1789,7 +1852,8 @@ out:
 	return ret;
 }
 
-bool cgroup_devices_has_allow_or_deny(struct lxc_handler *h, char *v, bool for_allow)
+static bool cgroup_devices_has_allow_or_deny(struct lxc_handler *h,
+					     char *v, bool for_allow)
 {
 	char *path;
 	FILE *devices_list;
@@ -1817,9 +1881,7 @@ bool cgroup_devices_has_allow_or_deny(struct lxc_handler *h, char *v, bool for_a
 		return false;
 	}
 
-	process_lock();
 	devices_list = fopen_cloexec(path, "r");
-	process_unlock();
 	if (!devices_list) {
 		free(path);
 		return false;
@@ -1839,15 +1901,13 @@ bool cgroup_devices_has_allow_or_deny(struct lxc_handler *h, char *v, bool for_a
 	}
 
 out:
-	process_lock();
 	fclose(devices_list);
-	process_unlock();
 	free(line);
 	free(path);
 	return ret;
 }
 
-int cgroup_recursive_task_count(const char *cgroup_path)
+static int cgroup_recursive_task_count(const char *cgroup_path)
 {
 	DIR *d;
 	struct dirent *dent_buf;
@@ -1863,9 +1923,7 @@ int cgroup_recursive_task_count(const char *cgroup_path)
 	if (!dent_buf)
 		return -1;
 
-	process_lock();
 	d = opendir(cgroup_path);
-	process_unlock();
 	if (!d) {
 		free(dent_buf);
 		return 0;
@@ -1884,17 +1942,13 @@ int cgroup_recursive_task_count(const char *cgroup_path)
 			continue;
 		sub_path = lxc_string_join("/", parts, false);
 		if (!sub_path) {
-			process_lock();
 			closedir(d);
-			process_unlock();
 			free(dent_buf);
 			return -1;
 		}
 		r = stat(sub_path, &st);
 		if (r < 0) {
-			process_lock();
 			closedir(d);
-			process_unlock();
 			free(dent_buf);
 			free(sub_path);
 			return -1;
@@ -1910,24 +1964,20 @@ int cgroup_recursive_task_count(const char *cgroup_path)
 		}
 		free(sub_path);
 	}
-	process_lock();
 	closedir(d);
-	process_unlock();
 	free(dent_buf);
 
 	return n;
 }
 
-int count_lines(const char *fn)
+static int count_lines(const char *fn)
 {
 	FILE *f;
 	char *line = NULL;
 	size_t sz = 0;
 	int n = 0;
 
-	process_lock();
 	f = fopen_cloexec(fn, "r");
-	process_unlock();
 	if (!f)
 		return -1;
 
@@ -1935,15 +1985,15 @@ int count_lines(const char *fn)
 		n++;
 	}
 	free(line);
-	process_lock();
 	fclose(f);
-	process_unlock();
 	return n;
 }
 
-int handle_cgroup_settings(struct cgroup_mount_point *mp, char *cgroup_path)
+static int handle_cgroup_settings(struct cgroup_mount_point *mp,
+				  char *cgroup_path)
 {
 	int r, saved_errno = 0;
+	char buf[2];
 
 	/* If this is the memory cgroup, we want to enforce hierarchy.
 	 * But don't fail if for some reason we can't.
@@ -1951,9 +2001,12 @@ int handle_cgroup_settings(struct cgroup_mount_point *mp, char *cgroup_path)
 	if (lxc_string_in_array("memory", (const char **)mp->hierarchy->subsystems)) {
 		char *cc_path = cgroup_to_absolute_path(mp, cgroup_path, "/memory.use_hierarchy");
 		if (cc_path) {
-			r = lxc_write_to_file(cc_path, "1", 1, false);
-			if (r < 0)
-				SYSERROR("failed to set memory.use_hiararchy to 1; continuing");
+			r = lxc_read_from_file(cc_path, buf, 1);
+			if (r < 1 || buf[0] != '1') {
+				r = lxc_write_to_file(cc_path, "1", 1, false);
+				if (r < 0)
+					SYSERROR("failed to set memory.use_hiararchy to 1; continuing");
+			}
 			free(cc_path);
 		}
 	}
@@ -1966,6 +2019,11 @@ int handle_cgroup_settings(struct cgroup_mount_point *mp, char *cgroup_path)
 		char *cc_path = cgroup_to_absolute_path(mp, cgroup_path, "/cgroup.clone_children");
 		if (!cc_path)
 			return -1;
+		r = lxc_read_from_file(cc_path, buf, 1);
+		if (r == 1 && buf[0] == '1') {
+			free(cc_path);
+			return 0;
+		}
 		r = lxc_write_to_file(cc_path, "1", 1, false);
 		saved_errno = errno;
 		free(cc_path);
@@ -1974,3 +2032,136 @@ int handle_cgroup_settings(struct cgroup_mount_point *mp, char *cgroup_path)
 	}
 	return 0;
 }
+
+extern void lxc_monitor_send_state(const char *name, lxc_state_t state,
+			    const char *lxcpath);
+int do_unfreeze(const char *nsgroup, int freeze, const char *name, const char *lxcpath)
+{
+	char freezer[MAXPATHLEN], *f;
+	char tmpf[32];
+	int fd, ret;
+
+	ret = snprintf(freezer, MAXPATHLEN, "%s/freezer.state", nsgroup);
+	if (ret >= MAXPATHLEN) {
+		ERROR("freezer.state name too long");
+		return -1;
+	}
+
+	fd = open(freezer, O_RDWR);
+	if (fd < 0) {
+		SYSERROR("failed to open freezer at '%s'", nsgroup);
+		return -1;
+	}
+
+	if (freeze) {
+		f = "FROZEN";
+		ret = write(fd, f, strlen(f) + 1);
+	} else {
+		f = "THAWED";
+		ret = write(fd, f, strlen(f) + 1);
+
+		/* compatibility code with old freezer interface */
+		if (ret < 0) {
+			f = "RUNNING";
+			ret = write(fd, f, strlen(f) + 1) < 0;
+		}
+	}
+
+	if (ret < 0) {
+		SYSERROR("failed to write '%s' to '%s'", f, freezer);
+		goto out;
+	}
+
+	while (1) {
+		ret = lseek(fd, 0L, SEEK_SET);
+		if (ret < 0) {
+			SYSERROR("failed to lseek on file '%s'", freezer);
+			goto out;
+		}
+
+		ret = read(fd, tmpf, sizeof(tmpf));
+		if (ret < 0) {
+			SYSERROR("failed to read to '%s'", freezer);
+			goto out;
+		}
+
+		ret = strncmp(f, tmpf, strlen(f));
+		if (!ret)
+		{
+			if (name)
+				lxc_monitor_send_state(name, freeze ? FROZEN : THAWED, lxcpath);
+			break;		/* Success */
+		}
+
+		sleep(1);
+
+		ret = lseek(fd, 0L, SEEK_SET);
+		if (ret < 0) {
+			SYSERROR("failed to lseek on file '%s'", freezer);
+			goto out;
+		}
+
+		ret = write(fd, f, strlen(f) + 1);
+		if (ret < 0) {
+			SYSERROR("failed to write '%s' to '%s'", f, freezer);
+			goto out;
+		}
+	}
+
+out:
+	close(fd);
+	return ret;
+}
+
+int freeze_unfreeze(const char *name, int freeze, const char *lxcpath)
+{
+	char *cgabspath;
+	int ret;
+
+	cgabspath = lxc_cgroup_get_hierarchy_abs_path("freezer", name, lxcpath);
+	if (!cgabspath)
+		return -1;
+
+	ret = do_unfreeze(cgabspath, freeze, name, lxcpath);
+	free(cgabspath);
+	return ret;
+}
+
+lxc_state_t freezer_state(const char *name, const char *lxcpath)
+{
+	char *cgabspath = NULL;
+	char freezer[MAXPATHLEN];
+	char status[MAXPATHLEN];
+	FILE *file;
+	int ret;
+
+	cgabspath = lxc_cgroup_get_hierarchy_abs_path("freezer", name, lxcpath);
+	if (!cgabspath)
+		return -1;
+
+	ret = snprintf(freezer, MAXPATHLEN, "%s/freezer.state", cgabspath);
+	if (ret < 0 || ret >= MAXPATHLEN)
+		goto out;
+
+	file = fopen(freezer, "r");
+	if (!file) {
+		ret = -1;
+		goto out;
+	}
+
+	ret = fscanf(file, "%s", status);
+	fclose(file);
+
+	if (ret == EOF) {
+		SYSERROR("failed to read %s", freezer);
+		ret = -1;
+		goto out;
+	}
+
+	ret = lxc_str2state(status);
+
+out:
+	free(cgabspath);
+	return ret;
+}
+

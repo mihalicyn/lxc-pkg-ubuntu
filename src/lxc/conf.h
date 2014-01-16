@@ -31,9 +31,8 @@
 #include <sys/types.h>
 #include <stdbool.h>
 
-#include <lxc/list.h>
-
-#include <lxc/start.h> /* for lxc_handler */
+#include "list.h"
+#include "start.h" /* for lxc_handler */
 
 #if HAVE_SCMP_FILTER_CTX
 typedef void * scmp_filter_ctx;
@@ -164,8 +163,6 @@ struct id_map {
 	enum idtype idtype;
 	unsigned long hostid, nsid, range;
 };
-
-extern int lxc_free_idmap(struct lxc_list *idmap);
 
 /*
  * Defines a structure containing a pty information for
@@ -310,7 +307,8 @@ struct lxc_conf {
 #endif
 	int maincmd_fd;
 	int autodev;  // if 1, mount and fill a /dev at start
-	int stopsignal; // signal used to stop container
+	int haltsignal; // signal used to halt container
+	int stopsignal; // signal used to hard stop container
 	int kmsg;  // if 1, create /dev/kmsg symlink
 	char *rcfile;	// Copy of the top level rcfile we read
 
@@ -323,6 +321,11 @@ struct lxc_conf {
 	int loglevel;   // loglevel as specifed in config (if any)
 
 	int inherit_ns_fd[LXC_NS_MAX];
+
+	int start_auto;
+	int start_delay;
+	int start_order;
+	struct lxc_list groups;
 };
 
 int run_lxc_hooks(const char *name, char *hook, struct lxc_conf *conf,
@@ -356,6 +359,7 @@ extern int lxc_clear_cgroups(struct lxc_conf *c, const char *key);
 extern int lxc_clear_mount_entries(struct lxc_conf *c);
 extern int lxc_clear_hooks(struct lxc_conf *c, const char *key);
 extern int lxc_clear_idmaps(struct lxc_conf *c);
+extern int lxc_clear_groups(struct lxc_conf *c);
 
 /*
  * Configure the container from inside
@@ -369,7 +373,6 @@ extern int lxc_setup(const char *name, struct lxc_conf *lxc_conf,
 
 extern void lxc_rename_phys_nics_on_shutdown(struct lxc_conf *conf);
 
-extern uid_t get_mapped_rootid(struct lxc_conf *conf);
 extern int find_unmapped_nsuid(struct lxc_conf *conf);
 extern int mapped_hostid(int id, struct lxc_conf *conf);
 extern int chown_mapped_root(char *path, struct lxc_conf *conf);

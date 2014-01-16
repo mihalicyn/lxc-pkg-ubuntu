@@ -4,13 +4,17 @@
 m4_define([lxc_version_major], 1)
 m4_define([lxc_version_minor], 0)
 m4_define([lxc_version_micro], 0)
-m4_define([lxc_version_beta], [beta1])
+m4_define([lxc_version_beta], [beta2])
 
 m4_define([lxc_version_base], [lxc_version_major.lxc_version_minor.lxc_version_micro])
 m4_define([lxc_version],
 	  [ifelse(lxc_version_beta, [], [lxc_version_base], [lxc_version_base.lxc_version_beta])])
 
 AC_INIT([lxc], [lxc_version])
+
+# We need pkg-config
+PKG_PROG_PKG_CONFIG
+
 AC_SUBST(LXC_VERSION_BASE, lxc_version_base)
 AC_SUBST(LXC_VERSION_BETA, lxc_version_beta)
 
@@ -70,6 +74,55 @@ AC_MSG_RESULT([$with_distro])
 AM_CONDITIONAL([HAVE_DEBIAN], [test x"$with_distro" = "xdebian" -o x"$with_distro" = "xubuntu"])
 AM_CONDITIONAL([DISTRO_UBUNTU], [test "x$with_distro" = "xubuntu"])
 
+# Check for init system type
+AC_MSG_CHECKING([for init system type])
+AC_ARG_WITH([init-script],
+	    [AC_HELP_STRING([--with-init-script@<:@=TYPE@<:@,TYPE,...@:>@@:>@],
+			    [Type(s) of init script to install: sysv, systemd, upstart,
+			     distro @<:@default=distro@:>@])],[],[with_init_script=distro])
+case "$with_init_script" in
+	distro)
+		case $with_distro in
+			fedora)
+				init_script=systemd
+				;;
+			redhat|centos|oracle|oracleserver)
+				init_script=sysv
+				;;
+			debian)
+				init_script=sysv,upstart,systemd
+				;;
+			ubuntu)
+				init_script=upstart
+				;;
+			*)
+				echo -n "Linux distribution init system unknown, defaulting to sysv"
+				init_script=sysv
+				;;
+		esac
+		;;
+	*)
+		init_script=$with_init_script
+		;;
+esac
+
+# Check valid init systems were given, run in subshell so we don't mess up IFS
+(IFS="," ; for init_sys in $init_script;
+do
+	case "$init_sys" in
+		none|sysv|systemd|upstart)
+			;;
+		*)
+			exit 1
+			;;
+	esac
+done) || AC_MSG_ERROR([Unknown init system type in $init_script])
+
+AM_CONDITIONAL([INIT_SCRIPT_SYSV], [echo "$init_script" |grep -q "sysv"])
+AM_CONDITIONAL([INIT_SCRIPT_SYSTEMD], [echo "$init_script" |grep -q "systemd"])
+AM_CONDITIONAL([INIT_SCRIPT_UPSTART], [echo "$init_script" |grep -q "upstart"])
+AC_MSG_RESULT($init_script)
+
 # Allow disabling rpath
 AC_ARG_ENABLE([rpath],
 	[AC_HELP_STRING([--enable-rpath], [set rpath in executables [default=no]])],
@@ -83,7 +136,7 @@ AC_ARG_ENABLE([doc],
 
 if test "x$enable_doc" = "xyes" -o "x$enable_doc" = "xauto"; then
 	db2xman=""
-	dbparsers="docbook2x-man db2x_docbook2man docbook2man"
+	dbparsers="docbook2x-man db2x_docbook2man docbook2man docbook-to-man"
 
 	AC_MSG_CHECKING(for docbook2x-man)
 	for name in ${dbparsers}; do
@@ -148,7 +201,7 @@ if test "$enable_apparmor" = "auto" ; then
 fi
 AM_CONDITIONAL([ENABLE_APPARMOR], [test "x$enable_apparmor" = "xyes"])
 
-AC_CHECK_LIB([gnutls], [gnutls_hash_fast])
+AC_CHECK_LIB([gnutls], [gnutls_hash_fast], [enable_gnutls=yes], [enable_gnutls=no])
 
 AM_COND_IF([ENABLE_APPARMOR],
 	[AC_CHECK_HEADER([sys/apparmor.h],[],[AC_MSG_ERROR([You must install the AppArmor development package in order to compile lxc])])
@@ -180,9 +233,12 @@ fi
 AM_CONDITIONAL([ENABLE_SECCOMP], [test "x$enable_seccomp" = "xyes"])
 
 AM_COND_IF([ENABLE_SECCOMP],
-	[AC_CHECK_HEADER([seccomp.h],[],[AC_MSG_ERROR([You must install the seccomp development package in order to compile lxc])])
-	AC_CHECK_LIB([seccomp], [seccomp_init],[],[AC_MSG_ERROR([You must install the seccomp development package in order to compile lxc])])
-	AC_SUBST([SECCOMP_LIBS], [-lseccomp])])
+	[PKG_CHECK_MODULES([SECCOMP],[libseccomp],[],[
+		AC_CHECK_HEADER([seccomp.h],[],[AC_MSG_ERROR([You must install the seccomp development package in order to compile lxc])])
+		AC_CHECK_LIB([seccomp], [seccomp_init],[],[AC_MSG_ERROR([You must install the seccomp development package in order to compile lxc])])
+		AC_SUBST([SECCOMP_LIBS], [-lseccomp])
+		])
+	])
 
 # Linux capabilities
 AC_ARG_ENABLE([capabilities],
@@ -199,16 +255,16 @@ AM_COND_IF([ENABLE_CAP],
 	AC_SUBST([CAP_LIBS], [-lcap])])
 
 # HAVE_SCMP_FILTER_CTX=1 will tell us we have libseccomp api >= 1.0.0
+OLD_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS $SECCOMP_CFLAGS"
 AC_CHECK_TYPES([scmp_filter_ctx], [], [], [[#include <seccomp.h>]])
+CFLAGS="$OLD_CFLAGS"
 
 # Configuration examples
 AC_ARG_ENABLE([examples],
 	[AC_HELP_STRING([--enable-examples], [install examples [default=yes]])],
 	[], [enable_examples=yes])
 AM_CONDITIONAL([ENABLE_EXAMPLES], [test "x$enable_examples" = "xyes"])
-
-# We need pkg-config
-PKG_PROG_PKG_CONFIG
 
 # Python3 module and scripts
 AC_ARG_ENABLE([python],
@@ -217,6 +273,13 @@ AC_ARG_ENABLE([python],
 
 if test "x$enable_python" = "xauto"; then
 	PKG_CHECK_MODULES([PYTHONDEV], [python3 >= 3.2],[enable_python=yes],[enable_python=no])
+	if test "$CC" = "clang"; then
+		enable_python=no
+	fi
+fi
+
+if test "x$enable_python" = "xyes" && test "$CC" = "clang"; then
+	AC_MSG_ERROR([Python3 is incompatible with the clang compiler])
 fi
 
 AM_CONDITIONAL([ENABLE_PYTHON], [test "x$enable_python" = "xyes"])
@@ -432,6 +495,8 @@ AC_CHECK_HEADERS([sys/signalfd.h pty.h ifaddrs.h sys/capability.h sys/personalit
 AC_CHECK_FUNCS([setns pivot_root sethostname unshare rand_r confstr])
 
 # Check for some functions
+AC_CHECK_LIB(pthread, main)
+AC_CHECK_FUNCS(pthread_atfork)
 AC_CHECK_LIB(util, openpty)
 AC_CHECK_FUNCS([openpty hasmntopt setmntent endmntent])
 AC_CHECK_FUNCS([getline],
@@ -451,6 +516,9 @@ AC_SEARCH_LIBS(clock_gettime, [rt])
 AC_PROG_GCC_TRADITIONAL
 AC_PROG_SED
 
+# See if we support thread-local storage.
+LXC_CHECK_TLS
+
 if test "x$GCC" = "xyes"; then
 	CFLAGS="$CFLAGS -Wall -Werror"
 fi
@@ -464,16 +532,24 @@ AC_CONFIG_FILES([
 	config/Makefile
 	config/etc/Makefile
 	config/templates/Makefile
+	config/templates/debian.common.conf
+	config/templates/debian.userns.conf
+	config/templates/oracle.common.conf
+	config/templates/oracle.userns.conf
+	config/templates/plamo.common.conf
+	config/templates/plamo.userns.conf
 	config/templates/ubuntu-cloud.common.conf
 	config/templates/ubuntu-cloud.lucid.conf
 	config/templates/ubuntu-cloud.userns.conf
 	config/templates/ubuntu.common.conf
 	config/templates/ubuntu.lucid.conf
+	config/templates/ubuntu.userns.conf
 
 	doc/Makefile
 	doc/api/Makefile
 	doc/legacy/lxc-ls.sgml
 	doc/lxc-attach.sgml
+	doc/lxc-autostart.sgml
 	doc/lxc-cgroup.sgml
 	doc/lxc-checkconfig.sgml
 	doc/lxc-checkpoint.sgml
@@ -522,6 +598,7 @@ AC_CONFIG_FILES([
 	doc/ja/Makefile
 	doc/ja/legacy/lxc-ls.sgml
 	doc/ja/lxc-attach.sgml
+	doc/ja/lxc-autostart.sgml
 	doc/ja/lxc-cgroup.sgml
 	doc/ja/lxc-checkconfig.sgml
 	doc/ja/lxc-checkpoint.sgml
@@ -546,10 +623,12 @@ AC_CONFIG_FILES([
 	doc/ja/lxc-top.sgml
 	doc/ja/lxc-unfreeze.sgml
 	doc/ja/lxc-unshare.sgml
+	doc/ja/lxc-user-nic.sgml
 	doc/ja/lxc-version.sgml
 	doc/ja/lxc-wait.sgml
 
 	doc/ja/lxc.conf.sgml
+	doc/ja/lxc-usernet.sgml
 	doc/ja/lxc.sgml
 	doc/ja/common_options.sgml
 	doc/ja/see_also.sgml
@@ -557,21 +636,23 @@ AC_CONFIG_FILES([
 	hooks/Makefile
 
 	templates/Makefile
-	templates/lxc-cirros
-	templates/lxc-debian
-	templates/lxc-ubuntu
-	templates/lxc-ubuntu-cloud
-	templates/lxc-opensuse
+	templates/lxc-alpine
+	templates/lxc-altlinux
+	templates/lxc-archlinux
 	templates/lxc-busybox
 	templates/lxc-centos
+	templates/lxc-cirros
+	templates/lxc-debian
+	templates/lxc-download
 	templates/lxc-fedora
+	templates/lxc-gentoo
 	templates/lxc-openmandriva
+	templates/lxc-opensuse
 	templates/lxc-oracle
-	templates/lxc-altlinux
-	templates/lxc-sshd
-	templates/lxc-archlinux
-	templates/lxc-alpine
 	templates/lxc-plamo
+	templates/lxc-sshd
+	templates/lxc-ubuntu
+	templates/lxc-ubuntu-cloud
 
 	src/Makefile
 	src/lxc/Makefile
@@ -599,7 +680,9 @@ cat << EOF
 Environment:
  - compiler: $CC
  - distribution: $with_distro
+ - init script type(s): $init_script
  - rpath: $enable_rpath
+ - GnuTLS: $enable_gnutls
 
 Security features:
  - Apparmor: $enable_apparmor
@@ -623,3 +706,13 @@ Debugging:
 Paths:
  - Logs in configpath: $enable_configpath_log
 EOF
+
+if test "x$ac_cv_func_pthread_atfork" = "xno" ; then
+cat << EOF
+
+WARNING: Threading not supported on your platform
+
+	You are compiling LXC for bionic target which lacks certain threading related functionality used by LXC API (like pthread_atfork).
+	Please note that, because of the missing functionality, multithreaded usage of LXC API cause some problems.
+EOF
+fi

@@ -16,7 +16,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
-#include "../lxc/lxclock.h"
+#include "lxc/lxclock.h"
 #include <unistd.h>
 #include <signal.h>
 #include <stdio.h>
@@ -27,7 +27,7 @@
 #define mycontainername "lxctest.sem"
 #define TIMEOUT_SECS 3
 
-void test_two_locks(void)
+static void test_two_locks(void)
 {
 	struct lxc_lock *l;
 	pid_t pid;

@@ -38,15 +38,10 @@
 #include <sched.h>
 #include <pwd.h>
 #include <grp.h>
+
 #include "config.h"
 #include "namespace.h"
 #include "utils.h"
-
-#ifndef HAVE_GETLINE
-#ifdef HAVE_FGETLN
-#include <../include/getline.h>
-#endif
-#endif
 
 int unshare(int flags);
 
@@ -75,9 +70,8 @@ static void opentty(const char * tty) {
 
 	fd = open(tty, O_RDWR | O_NONBLOCK);
 	if (fd == -1) {
-		printf("FATAL: can't reopen tty: %s", strerror(errno));
-		sleep(1);
-		exit(1);
+		printf("WARN: could not reopen tty: %s", strerror(errno));
+		return;
 	}
 
 	flags = fcntl(fd, F_GETFL);
@@ -126,7 +120,7 @@ struct id_map {
 	struct id_map *next;
 };
 
-struct id_map default_map = {
+static struct id_map default_map = {
 	.which = 'b',
 	.host_id = 100000,
 	.ns_id = 0,
@@ -425,7 +419,7 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	buf[0] = 1;
+	buf[0] = '1';
 	if (map_child_uids(pid, active_map)) {
 		fprintf(stderr, "error mapping child\n");
 		ret = 0;

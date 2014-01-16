@@ -62,7 +62,7 @@
 
 lxc_log_define(lxc_attach, lxc);
 
-struct lxc_proc_context_info *lxc_proc_get_context_info(pid_t pid)
+static struct lxc_proc_context_info *lxc_proc_get_context_info(pid_t pid)
 {
 	struct lxc_proc_context_info *info = calloc(1, sizeof(*info));
 	FILE *proc_file;
@@ -79,9 +79,7 @@ struct lxc_proc_context_info *lxc_proc_get_context_info(pid_t pid)
 	/* read capabilities */
 	snprintf(proc_fn, MAXPATHLEN, "/proc/%d/status", pid);
 
-	process_lock();
 	proc_file = fopen(proc_fn, "r");
-	process_unlock();
 	if (!proc_file) {
 		SYSERROR("Could not open %s", proc_fn);
 		goto out_error;
@@ -98,9 +96,7 @@ struct lxc_proc_context_info *lxc_proc_get_context_info(pid_t pid)
 
 	if (line)
 		free(line);
-	process_lock();
 	fclose(proc_file);
-	process_unlock();
 
 	if (!found) {
 		SYSERROR("Could not read capability bounding set from %s", proc_fn);
@@ -111,18 +107,14 @@ struct lxc_proc_context_info *lxc_proc_get_context_info(pid_t pid)
 	/* read personality */
 	snprintf(proc_fn, MAXPATHLEN, "/proc/%d/personality", pid);
 
-	process_lock();
 	proc_file = fopen(proc_fn, "r");
-	process_unlock();
 	if (!proc_file) {
 		SYSERROR("Could not open %s", proc_fn);
 		goto out_error;
 	}
 
 	ret = fscanf(proc_file, "%lx", &info->personality);
-	process_lock();
 	fclose(proc_file);
-	process_unlock();
 
 	if (ret == EOF || ret == 0) {
 		SYSERROR("Could not read personality from %s", proc_fn);
@@ -145,7 +137,7 @@ static void lxc_proc_put_context_info(struct lxc_proc_context_info *ctx)
 	free(ctx);
 }
 
-int lxc_attach_to_ns(pid_t pid, int which)
+static int lxc_attach_to_ns(pid_t pid, int which)
 {
 	char path[MAXPATHLEN];
 	/* according to <http://article.gmane.org/gmane.linux.kernel.containers.lxc.devel/1429>,
@@ -178,19 +170,15 @@ int lxc_attach_to_ns(pid_t pid, int which)
 		}
 
 		snprintf(path, MAXPATHLEN, "/proc/%d/ns/%s", pid, ns[i]);
-		process_lock();
 		fd[i] = open(path, O_RDONLY | O_CLOEXEC);
-		process_unlock();
 		if (fd[i] < 0) {
 			saved_errno = errno;
 
 			/* close all already opened file descriptors before
 			 * we return an error, so we don't leak them
 			 */
-			process_lock();
 			for (j = 0; j < i; j++)
 				close(fd[j]);
-			process_unlock();
 
 			errno = saved_errno;
 			SYSERROR("failed to open '%s'", path);
@@ -210,15 +198,13 @@ int lxc_attach_to_ns(pid_t pid, int which)
 			return -1;
 		}
 
-		process_lock();
 		close(fd[i]);
-		process_unlock();
 	}
 
 	return 0;
 }
 
-int lxc_attach_remount_sys_proc()
+static int lxc_attach_remount_sys_proc(void)
 {
 	int ret;
 
@@ -261,7 +247,7 @@ int lxc_attach_remount_sys_proc()
 	return 0;
 }
 
-int lxc_attach_drop_privs(struct lxc_proc_context_info *ctx)
+static int lxc_attach_drop_privs(struct lxc_proc_context_info *ctx)
 {
 	int last_cap = lxc_caps_last_cap();
 	int cap;
@@ -279,7 +265,7 @@ int lxc_attach_drop_privs(struct lxc_proc_context_info *ctx)
 	return 0;
 }
 
-int lxc_attach_set_environment(enum lxc_attach_env_policy_t policy, char** extra_env, char** extra_keep)
+static int lxc_attach_set_environment(enum lxc_attach_env_policy_t policy, char** extra_env, char** extra_keep)
 {
 	if (policy == LXC_ATTACH_CLEAR_ENV) {
 		char **extra_keep_store = NULL;
@@ -387,7 +373,7 @@ int lxc_attach_set_environment(enum lxc_attach_env_policy_t policy, char** extra
 	return 0;
 }
 
-char *lxc_attach_getpwshell(uid_t uid)
+static char *lxc_attach_getpwshell(uid_t uid)
 {
 	/* local variables */
 	pid_t pid;
@@ -400,18 +386,14 @@ char *lxc_attach_getpwshell(uid_t uid)
 	 * getent program, and we need to capture its
 	 * output, so we use a pipe for that purpose
 	 */
-	process_lock();
 	ret = pipe(pipes);
-	process_unlock();
 	if (ret < 0)
 		return NULL;
 
 	pid = fork();
 	if (pid < 0) {
-		process_lock();
 		close(pipes[0]);
 		close(pipes[1]);
-		process_unlock();
 		return NULL;
 	}
 
@@ -423,13 +405,9 @@ char *lxc_attach_getpwshell(uid_t uid)
 		int found = 0;
 		int status;
 
-		process_lock();
 		close(pipes[1]);
-		process_unlock();
 
-		process_lock();
 		pipe_f = fdopen(pipes[0], "r");
-		process_unlock();
 		while (getline(&line, &line_bufsz, pipe_f) != -1) {
 			char *token;
 			char *saveptr = NULL;
@@ -486,9 +464,7 @@ char *lxc_attach_getpwshell(uid_t uid)
 		}
 
 		free(line);
-		process_lock();
 		fclose(pipe_f);
-		process_unlock();
 	again:
 		if (waitpid(pid, &status, 0) < 0) {
 			if (errno == EINTR)
@@ -521,7 +497,6 @@ char *lxc_attach_getpwshell(uid_t uid)
 			NULL
 		};
 
-		process_unlock(); // we're no longer sharing
 		close(pipes[0]);
 
 		/* we want to capture stdout */
@@ -552,7 +527,7 @@ char *lxc_attach_getpwshell(uid_t uid)
 	}
 }
 
-void lxc_attach_get_init_uidgid(uid_t* init_uid, gid_t* init_gid)
+static void lxc_attach_get_init_uidgid(uid_t* init_uid, gid_t* init_gid)
 {
 	FILE *proc_file;
 	char proc_fn[MAXPATHLEN];
@@ -683,9 +658,7 @@ int lxc_attach(const char* name, const char* lxcpath, lxc_attach_exec_t exec_fun
 	 *   close socket                                 close socket
 	 *                                                run program
 	 */
-	process_lock();
 	ret = socketpair(PF_LOCAL, SOCK_STREAM | SOCK_CLOEXEC, 0, ipc_sockets);
-	process_unlock();
 	if (ret < 0) {
 		SYSERROR("could not set up required IPC mechanism for attaching");
 		free(cwd);
@@ -721,9 +694,7 @@ int lxc_attach(const char* name, const char* lxcpath, lxc_attach_exec_t exec_fun
 		/* inital thread, we close the socket that is for the
 		 * subprocesses
 		 */
-		process_lock();
 		close(ipc_sockets[1]);
-		process_unlock();
 		free(cwd);
 
 		/* get pid from intermediate process */
@@ -795,9 +766,7 @@ int lxc_attach(const char* name, const char* lxcpath, lxc_attach_exec_t exec_fun
 
 		/* now shut down communication with child, we're done */
 		shutdown(ipc_sockets[0], SHUT_RDWR);
-		process_lock();
 		close(ipc_sockets[0]);
-		process_unlock();
 		lxc_proc_put_context_info(init_ctx);
 
 		/* we're done, the child process should now execute whatever
@@ -813,16 +782,13 @@ int lxc_attach(const char* name, const char* lxcpath, lxc_attach_exec_t exec_fun
 		 * otherwise the pid we're waiting for may never exit
 		 */
 		shutdown(ipc_sockets[0], SHUT_RDWR);
-		process_lock();
 		close(ipc_sockets[0]);
-		process_unlock();
 		if (to_cleanup_pid)
 			(void) wait_for_pid(to_cleanup_pid);
 		lxc_proc_put_context_info(init_ctx);
 		return -1;
 	}
 
-	process_unlock(); // we're no longer sharing
 	/* first subprocess begins here, we close the socket that is for the
 	 * initial thread
 	 */
@@ -889,7 +855,7 @@ int lxc_attach(const char* name, const char* lxcpath, lxc_attach_exec_t exec_fun
 	rexit(0);
 }
 
-int attach_child_main(void* data)
+static int attach_child_main(void* data)
 {
 	struct attach_clone_payload* payload = (struct attach_clone_payload*)data;
 	int ipc_socket = payload->ipc_socket;

@@ -8,9 +8,9 @@ Forwarded: not-needed
 
 Index: trusty-lxc/src/lxc/lxc-ls
 ===================================================================
---- trusty-lxc.orig/src/lxc/lxc-ls	2013-12-17 15:49:02.273489044 -0500
-+++ trusty-lxc/src/lxc/lxc-ls	2013-12-17 15:49:05.000000000 -0500
-@@ -148,6 +148,13 @@
+--- trusty-lxc.orig/src/lxc/lxc-ls	2014-01-15 19:30:12.859046277 -0500
++++ trusty-lxc/src/lxc/lxc-ls	2014-01-15 19:30:12.855046277 -0500
+@@ -151,6 +151,13 @@
  
  args = parser.parse_args()
  

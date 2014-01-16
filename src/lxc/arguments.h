@@ -25,6 +25,7 @@
 #define __arguments_h
 
 #include <getopt.h>
+#include <stdint.h>
 
 struct lxc_arguments;
 
@@ -65,16 +66,19 @@ struct lxc_arguments {
 	int ttynum;
 	char escape;
 
-	/* for lxc-wait and lxc-shutdown */
+	/* for lxc-wait */
 	char *states;
 	long timeout;
-	int nowait;
-	int reboot;
-	int hardstop;
+
+	/* for lxc-autostart */
 	int shutdown;
 
 	/* for lxc-stop */
+	int hardstop;
+	int nokill;
 	int nolock;
+	int nowait;
+	int reboot;
 
 	/* for lxc-destroy */
 	int force;
@@ -85,9 +89,14 @@ struct lxc_arguments {
 	/* lxc-create */
 	char *bdevtype, *configfile, *template;
 	char *fstype;
-	unsigned long fssize;
+	uint64_t fssize;
 	char *lvname, *vgname, *thinpool;
 	char *zfsroot, *lowerdir, *dir;
+
+	/* auto-start */
+	int all;
+	int list;
+	char *groups;
 
 	/* remaining arguments */
 	char *const *argv;

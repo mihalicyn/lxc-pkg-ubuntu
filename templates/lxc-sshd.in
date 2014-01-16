@@ -128,7 +128,7 @@ lxc.mount.entry = /bin bin none ro,bind 0 0
 lxc.mount.entry = /usr usr none ro,bind 0 0
 lxc.mount.entry = /sbin sbin none ro,bind 0 0
 lxc.mount.entry = tmpfs var/run/sshd tmpfs mode=0644 0 0
-lxc.mount.entry = @LXCTEMPLATEDIR@/lxc-sshd sbin/init none bind 0 0
+lxc.mount.entry = @LXCTEMPLATEDIR@/lxc-sshd sbin/init none ro,bind 0 0
 lxc.mount.entry = proc proc proc nodev,noexec,nosuid 0 0
 lxc.mount.entry = sysfs sys sysfs ro 0 0
 lxc.mount.entry = /etc/init.d etc/init.d none ro,bind 0 0
@@ -202,7 +202,7 @@ if [ "$(id -u)" != "0" ]; then
     exit 1
 fi
 
-if [ $0 == "/sbin/init" ]; then
+if [ $0 = "/sbin/init" ]; then
 
     PATH="$PATH:/bin:/sbin:/usr/sbin"
     check_for_cmd @LXCINITDIR@/lxc/lxc-init

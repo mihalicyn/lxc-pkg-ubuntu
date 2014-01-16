@@ -40,10 +40,11 @@
 #include <netinet/in.h>
 #include <net/if.h>
 
+#include <lxc/lxccontainer.h>
+
 #include "log.h"
 #include "caps.h"
 #include "lxc.h"
-#include <lxc/lxccontainer.h>
 #include "conf.h"
 #include "cgroup.h"
 #include "utils.h"
@@ -324,8 +325,8 @@ int main(int argc, char *argv[])
 		conf->inherit_ns_fd[i] = fd;
 	}
 
-	if (my_args.daemonize) {
-		c->want_daemonize(c, true);
+	if (!my_args.daemonize) {
+		c->want_daemonize(c, false);
 	}
 
 	if (pid_fp != NULL) {
@@ -334,6 +335,7 @@ int main(int argc, char *argv[])
 			goto out;
 		}
 		fclose(pid_fp);
+		pid_fp = NULL;
 	}
 
 	if (my_args.close_all_fds)

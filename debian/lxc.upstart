@@ -20,9 +20,8 @@ pre-start script
 
 	[ "x$LXC_AUTO" = "xtrue" ] || exit 0
 
-	ls /etc/lxc/auto/* > /dev/null 2>&1 || exit 0
-	for f in /etc/lxc/auto/*; do
-		c="$(basename $f .conf)"
-		start lxc-instance NAME=$c CONFIG=$f
+	lxc-autostart -L | while read line; do
+		set -- $line
+		(start lxc-instance NAME=$1 && sleep $2) || true
 	done
 end script

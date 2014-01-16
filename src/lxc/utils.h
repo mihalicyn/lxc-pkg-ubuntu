@@ -30,6 +30,7 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include "config.h"
 
 /* returns 1 on success, 0 if there were any failures */
@@ -40,17 +41,8 @@ extern int mkdir_p(const char *dir, mode_t mode);
 extern void remove_trailing_slashes(char *p);
 extern const char *get_rundir(void);
 
-/*
- * Return a buffer containing the default container path.
- * Caller must NOT free this buffer, since it may be static.
- */
 extern const char *lxc_global_config_value(const char *option_name);
-extern const char *default_lxc_path(void);
-extern const char *default_zfs_root(void);
-extern const char *default_lvm_vg(void);
-extern const char *default_lvm_thin_pool(void);
-extern const char *default_cgroup_use(void);
-extern const char *default_cgroup_pattern(void);
+
 /* Define getline() if missing from the C library */
 #ifndef HAVE_GETLINE
 #ifdef HAVE_FGETLN
@@ -172,7 +164,6 @@ struct lxc_popen_FILE {
  * via sigprocmask(2) (unblocks all signals) after fork(2) but prior to calling exec(3).
  * In short, popen(command, "re") does pipe() + fork()                 + exec()
  * while lxc_popen(command)       does pipe() + fork() + sigprocmask() + exec().
- * Must be called with process_lock() held.
  * Returns pointer to struct lxc_popen_FILE, that should be freed with lxc_pclose().
  * On error returns NULL.
  */
@@ -182,7 +173,6 @@ extern struct lxc_popen_FILE *lxc_popen(const char *command);
  * returned by lxc_popen().
  * Waits for associated process to terminate, returns its exit status and
  * frees resources, pointed to by struct lxc_popen_FILE *.
- * Must be called with process_lock() held.
  */
 extern int lxc_pclose(struct lxc_popen_FILE *fp);
 
@@ -265,9 +255,9 @@ typedef void *(*lxc_dup_fn)(void *);
 extern int lxc_grow_array(void ***array, size_t* capacity, size_t new_size, size_t capacity_increment);
 extern void lxc_free_array(void **array, lxc_free_fn element_free_fn);
 extern size_t lxc_array_len(void **array);
-extern void **lxc_dup_array(void **array, lxc_dup_fn element_dup_fn, lxc_free_fn element_free_fn);
 
 extern void **lxc_append_null_to_array(void **array, size_t count);
+//initialize rand with urandom
+extern int randseed(bool);
 
-extern void dump_stacktrace(void);
 #endif

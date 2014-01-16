@@ -71,7 +71,7 @@ static int create_ubuntu(void)
 		return -1;
 	}
 	if (pid == 0) {
-		ret = execlp("lxc-create", "lxc-create", "-t", "ubuntu", "-f", LXC_DEFAULT_CONFIG, "-n", MYNAME, NULL);
+		ret = execlp("lxc-create", "lxc-create", "-t", "ubuntu", "-n", MYNAME, NULL);
 		// Should not return
 		perror("execl");
 		exit(1);
@@ -168,6 +168,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "%d: failed to get extra ref to container\n", __LINE__);
 		exit(1);
 	}
+	c->want_daemonize(c, false);
 	pid_t pid = fork();
 	if (pid < 0) {
 		fprintf(stderr, "%d: fork failed\n", __LINE__);
