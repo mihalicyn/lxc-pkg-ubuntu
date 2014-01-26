@@ -1,3 +1,10 @@
+lxc (1.0.0~beta2-0ubuntu2) trusty; urgency=medium
+
+  * Build python3 extension for all supported python versions. LP: #127236.
+  * Build-conflict with lua5.2*, the packaging is not ready for it.
+
+ -- Matthias Klose <doko@ubuntu.com>  Sun, 26 Jan 2014 09:57:03 +0100
+
 lxc (1.0.0~beta2-0ubuntu1) trusty; urgency=medium
 
   * New upstream release (1.0.0~beta2).

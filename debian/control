@@ -15,7 +15,8 @@ Build-Depends: autotools-dev,
                libselinux1-dev,
                linux-libc-dev,
                pkg-config,
-               python3-dev (>= 3.2.3)
+               python3-all-dev (>= 3.2.3)
+Build-Conflicts: lua5.2, lua5.2-dev
 Standards-Version: 3.9.5
 Homepage: http://linuxcontainers.org
 X-Python3-Version: >= 3.2
@@ -126,7 +127,7 @@ Package: python3-lxc
 Architecture: linux-any
 Section: python
 Depends: liblxc0 (=${binary:Version}),
-         python3,
+         ${python3:Depends},
          ${misc:Depends},
          ${shlibs:Depends}
 Recommends: lxc-templates (>= 0.8.0~rc1-4ubuntu43)
