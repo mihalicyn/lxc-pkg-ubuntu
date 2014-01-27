@@ -80,8 +80,12 @@ build_triplet = @build@
 host_triplet = @host@
 subdir = config/templates
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
+	$(srcdir)/centos.common.conf.in \
+	$(srcdir)/centos.userns.conf.in \
 	$(srcdir)/debian.common.conf.in \
 	$(srcdir)/debian.userns.conf.in \
+	$(srcdir)/fedora.common.conf.in \
+	$(srcdir)/fedora.userns.conf.in \
 	$(srcdir)/oracle.common.conf.in \
 	$(srcdir)/oracle.userns.conf.in $(srcdir)/plamo.common.conf.in \
 	$(srcdir)/plamo.userns.conf.in \
@@ -97,9 +101,10 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/src/config.h
-CONFIG_CLEAN_FILES = debian.common.conf debian.userns.conf \
-	oracle.common.conf oracle.userns.conf plamo.common.conf \
-	plamo.userns.conf ubuntu-cloud.common.conf \
+CONFIG_CLEAN_FILES = centos.common.conf centos.userns.conf \
+	debian.common.conf debian.userns.conf fedora.common.conf \
+	fedora.userns.conf oracle.common.conf oracle.userns.conf \
+	plamo.common.conf plamo.userns.conf ubuntu-cloud.common.conf \
 	ubuntu-cloud.lucid.conf ubuntu-cloud.userns.conf \
 	ubuntu.common.conf ubuntu.lucid.conf ubuntu.userns.conf
 CONFIG_CLEAN_VPATH_FILES =
@@ -166,10 +171,14 @@ CAP_LIBS = @CAP_LIBS@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
+CGMANAGER_CFLAGS = @CGMANAGER_CFLAGS@
+CGMANAGER_LIBS = @CGMANAGER_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DATADIR = @DATADIR@
+DBUS_CFLAGS = @DBUS_CFLAGS@
+DBUS_LIBS = @DBUS_LIBS@
 DEFAULT_CGROUP_PATTERN = @DEFAULT_CGROUP_PATTERN@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -220,6 +229,10 @@ LXC_VERSION_MICRO = @LXC_VERSION_MICRO@
 LXC_VERSION_MINOR = @LXC_VERSION_MINOR@
 MAKEINFO = @MAKEINFO@
 MKDIR_P = @MKDIR_P@
+NIH_CFLAGS = @NIH_CFLAGS@
+NIH_DBUS_CFLAGS = @NIH_DBUS_CFLAGS@
+NIH_DBUS_LIBS = @NIH_DBUS_LIBS@
+NIH_LIBS = @NIH_LIBS@
 OBJEXT = @OBJEXT@
 PACKAGE = @PACKAGE@
 PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
@@ -307,8 +320,12 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 templatesconfigdir = @LXCTEMPLATECONFIG@
 templatesconfig_DATA = \
+	centos.common.conf \
+	centos.userns.conf \
 	debian.common.conf \
 	debian.userns.conf \
+	fedora.common.conf \
+	fedora.userns.conf \
 	oracle.common.conf \
 	oracle.userns.conf \
 	plamo.common.conf \
@@ -353,9 +370,17 @@ $(top_srcdir)/configure:  $(am__configure_deps)
 $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
+centos.common.conf: $(top_builddir)/config.status $(srcdir)/centos.common.conf.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+centos.userns.conf: $(top_builddir)/config.status $(srcdir)/centos.userns.conf.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 debian.common.conf: $(top_builddir)/config.status $(srcdir)/debian.common.conf.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 debian.userns.conf: $(top_builddir)/config.status $(srcdir)/debian.userns.conf.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+fedora.common.conf: $(top_builddir)/config.status $(srcdir)/fedora.common.conf.in
+	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
+fedora.userns.conf: $(top_builddir)/config.status $(srcdir)/fedora.userns.conf.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 oracle.common.conf: $(top_builddir)/config.status $(srcdir)/oracle.common.conf.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@

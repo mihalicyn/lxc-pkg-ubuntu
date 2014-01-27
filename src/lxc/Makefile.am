@@ -60,8 +60,6 @@ liblxc_so_SOURCES = \
 	monitor.c monitor.h \
 	console.c \
 	freezer.c \
-	checkpoint.c \
-	restart.c \
 	error.h error.c \
 	parse.c parse.h \
 	cgroup.c cgroup.h \
@@ -93,6 +91,10 @@ liblxc_so_SOURCES = \
 	\
 	$(LSM_SOURCES)
 
+if ENABLE_CGMANAGER
+liblxc_so_SOURCES += cgmanager.c
+endif
+
 if IS_BIONIC
 liblxc_so_SOURCES += \
 	../include/ifaddrs.c ../include/ifaddrs.h \
@@ -111,6 +113,7 @@ AM_CFLAGS=-I$(top_srcdir)/src \
 	-DLXCPATH=\"$(LXCPATH)\" \
 	-DLXC_GLOBAL_CONF=\"$(LXC_GLOBAL_CONF)\" \
 	-DLXCINITDIR=\"$(LXCINITDIR)\" \
+	-DLIBEXECDIR=\"$(LIBEXECDIR)\" \
 	-DLXCTEMPLATEDIR=\"$(LXCTEMPLATEDIR)\" \
 	-DLOGPATH=\"$(LOGPATH)\" \
 	-DLXC_DEFAULT_CONFIG=\"$(LXC_DEFAULT_CONFIG)\" \
@@ -120,6 +123,10 @@ AM_CFLAGS=-I$(top_srcdir)/src \
 
 if ENABLE_APPARMOR
 AM_CFLAGS += -DHAVE_APPARMOR
+endif
+
+if ENABLE_CGMANAGER
+AM_CFLAGS += -DHAVE_CGMANAGER
 endif
 
 if ENABLE_SELINUX
@@ -144,19 +151,17 @@ liblxc_so_LDFLAGS = \
 
 liblxc_so_LDADD = $(CAP_LIBS) $(APPARMOR_LIBS) $(SECCOMP_LIBS)
 
-bin_SCRIPTS = \
-	lxc-ps \
-	lxc-netstat \
-	lxc-checkconfig \
-	lxc-version
+#if ENABLE_CGMANAGER
+liblxc_so_LDADD += $(CGMANAGER_LIBS) $(DBUS_LIBS) $(NIH_LIBS) $(NIH_DBUS_LIBS)
+liblxc_so_CFLAGS += $(CGMANAGER_CFLAGS) $(DBUS_CFLAGS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
+#endif
+
+bin_SCRIPTS = lxc-checkconfig
 
 EXTRA_DIST = \
 	lxc-device \
-	lxc-devsetup \
 	lxc-ls \
-	lxc-top \
-	lxc.service \
-	lxc.sysvinit
+	lxc-top
 
 if ENABLE_PYTHON
 bin_SCRIPTS += lxc-device
@@ -173,68 +178,28 @@ endif
 bin_PROGRAMS = \
 	lxc-attach \
 	lxc-autostart \
-	lxc-unshare \
-	lxc-stop \
-	lxc-start \
+	lxc-cgroup \
 	lxc-clone \
-	lxc-execute \
-	lxc-monitor \
-	lxc-monitord \
-	lxc-wait \
+	lxc-config \
 	lxc-console \
+	lxc-create \
+	lxc-destroy \
+	lxc-execute \
 	lxc-freeze \
 	lxc-info \
-	lxc-cgroup \
-	lxc-unfreeze \
-	lxc-checkpoint \
-	lxc-restart \
-	lxc-kill \
-	lxc-config \
-	lxc-destroy \
-	lxc-create \
-	lxc-user-nic \
+	lxc-monitor \
 	lxc-snapshot \
-	lxc-usernsexec
+	lxc-start \
+	lxc-stop \
+	lxc-unfreeze \
+	lxc-unshare \
+	lxc-usernsexec \
+	lxc-wait
 
 pkglibexec_PROGRAMS = \
-	lxc-init
-
-if INIT_SCRIPT_SYSV
-install-init: lxc.sysvinit
-	$(MKDIR_P) $(DESTDIR)$(sysconfdir)/rc.d/init.d
-	$(INSTALL_SCRIPT) lxc.sysvinit $(DESTDIR)$(sysconfdir)/rc.d/init.d/lxc
-
-uninstall-init:
-	rm -f $(DESTDIR)$(sysconfdir)/rc.d/init.d/lxc
-	rmdir $(DESTDIR)$(sysconfdir)/rc.d/init.d || :
-else
-install-init:
-uninstall-init:
-endif
-
-if INIT_SCRIPT_SYSTEMD
-SYSTEMD_UNIT_DIR = /usr/lib/systemd/system
-install-systemd: lxc.service lxc-devsetup
-	$(MKDIR_P) $(DESTDIR)$(SYSTEMD_UNIT_DIR)
-	$(INSTALL_DATA) lxc.service $(DESTDIR)$(SYSTEMD_UNIT_DIR)/
-
-uninstall-systemd:
-	rm -f $(DESTDIR)$(SYSTEMD_UNIT_DIR)/lxc.service
-	rmdir $(DESTDIR)$(SYSTEMD_UNIT_DIR) || :
-pkglibexec_SCRIPTS = lxc-devsetup
-else
-install-systemd:
-uninstall-systemd:
-endif
-
-if INIT_SCRIPT_UPSTART
-# FIXME: install/uninstall upstart script here
-install-upstart:
-uninstall-upstart:
-else
-install-upstart:
-uninstall-upstart:
-endif
+	lxc-init \
+	lxc-monitord \
+	lxc-user-nic
 
 AM_LDFLAGS = -Wl,-E
 if ENABLE_RPATH
@@ -245,7 +210,11 @@ LDADD=liblxc.so @CAP_LIBS@ @APPARMOR_LIBS@ @SECCOMP_LIBS@
 lxc_attach_SOURCES = lxc_attach.c
 lxc_autostart_SOURCES = lxc_autostart.c
 lxc_cgroup_SOURCES = lxc_cgroup.c
-lxc_checkpoint_SOURCES = lxc_checkpoint.c
+#if ENABLE_CGMANAGER
+lxc_cgroup_SOURCES += cgmanager.c
+lxc_cgroup_LDADD = $(CGMANAGER_LIBS) $(DBUS_LIBS) $(NIH_LIBS) $(NIH_DBUS_LIBS) $(LDADD)
+lxc_cgroup_CFLAGS = $(CGMANAGER_CFLAGS) $(DBUS_CFLAGS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
+#endif
 lxc_config_SOURCES = lxc_config.c
 lxc_console_SOURCES = lxc_console.c
 lxc_destroy_SOURCES = lxc_destroy.c
@@ -255,22 +224,16 @@ lxc_info_SOURCES = lxc_info.c
 lxc_init_SOURCES = lxc_init.c
 lxc_monitor_SOURCES = lxc_monitor.c
 lxc_monitord_SOURCES = lxc_monitord.c
-lxc_restart_SOURCES = lxc_restart.c
 lxc_clone_SOURCES = lxc_clone.c
 lxc_start_SOURCES = lxc_start.c
 lxc_stop_SOURCES = lxc_stop.c
 lxc_unfreeze_SOURCES = lxc_unfreeze.c
 lxc_unshare_SOURCES = lxc_unshare.c
 lxc_wait_SOURCES = lxc_wait.c
-lxc_kill_SOURCES = lxc_kill.c
 lxc_create_SOURCES = lxc_create.c
 lxc_snapshot_SOURCES = lxc_snapshot.c
 lxc_usernsexec_SOURCES = lxc_usernsexec.c
 lxc_user_nic_SOURCES = lxc_user_nic.c network.c network.h
-
-install-data-local: install-init install-systemd install-upstart
-
-uninstall-local: uninstall-init uninstall-systemd uninstall-upstart
 
 install-exec-local: install-soPROGRAMS
 	mkdir -p $(DESTDIR)$(datadir)/lxc
@@ -279,7 +242,9 @@ install-exec-local: install-soPROGRAMS
 	cd $(DESTDIR)$(libdir); \
 	ln -sf liblxc.so.$(VERSION) liblxc.so.$(firstword $(subst ., ,$(VERSION))); \
 	ln -sf liblxc.so.$(firstword $(subst ., ,$(VERSION))) liblxc.so
-	chmod u+s $(DESTDIR)$(bindir)/lxc-user-nic
+
+install-exec-hook:
+	chmod u+s $(DESTDIR)$(libexecdir)/lxc/lxc-user-nic
 
 uninstall-local:
 	$(RM) $(DESTDIR)$(libdir)/liblxc.so*

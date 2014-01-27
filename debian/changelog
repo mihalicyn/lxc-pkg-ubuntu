@@ -1,3 +1,19 @@
+lxc (1.0.0~beta3-0ubuntu1) trusty; urgency=medium
+
+  * New upstream release (1.0.0~beta3).
+  * Drop Build-conflict and instead pass --disable-lua.
+  * Update autopkgtests to dynamically run all upstream tests.
+  * Create /etc/lxc/lxc-usernet if missing.
+  * Apparmor profiles and upstart jobs are now upstream (drop from packaging).
+  * Bash completetion is now upstream.
+  * Update lintian overrides.
+  * DEPRECATED: lxc-aa-custom-profile has been dropped, instead use the
+    examples in the default configuration file.
+  * DEPRECATED: lxc-list has been dropped. Use "lxc-ls -f" instead.
+  * DEPRECATED: lxc-halt has been dropped. Use "lxc-stop" instead.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 27 Jan 2014 14:40:48 +0000
+
 lxc (1.0.0~beta2-0ubuntu2) trusty; urgency=medium
 
   * Build python3 extension for all supported python versions. LP: #127236.

@@ -1,6 +1,3 @@
-
-debian/local/lxc-aa-custom-profile  /usr/bin
-debian/local/lxc.sh                 /etc/bash_completion.d
 etc
 usr/bin
 usr/lib/*/lxc/lxc-*

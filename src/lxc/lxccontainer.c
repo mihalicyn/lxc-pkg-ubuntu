@@ -62,6 +62,8 @@
 
 #define MAX_BUFFER 4096
 
+#define NOT_SUPPORTED_ERROR "the requested function %s is not currently supported with unprivileged containers"
+
 lxc_log_define(lxc_container, lxc);
 
 static bool file_exists(const char *f)
@@ -231,6 +233,7 @@ static void lxc_container_free(struct lxc_container *c)
 		free(c->config_path);
 		c->config_path = NULL;
 	}
+
 	free(c);
 }
 
@@ -533,6 +536,7 @@ static bool lxcapi_start(struct lxc_container *c, int useinit, char * const argv
 	int ret;
 	struct lxc_conf *conf;
 	bool daemonize = false;
+	FILE *pid_fp = NULL;
 	char *default_args[] = {
 		"/sbin/init",
 		'\0',
@@ -583,17 +587,19 @@ static bool lxcapi_start(struct lxc_container *c, int useinit, char * const argv
 	* while container is running...
 	*/
 	if (daemonize) {
-		if (!lxc_container_get(c))
-			return false;
 		lxc_monitord_spawn(c->config_path);
 
 		pid_t pid = fork();
-		if (pid < 0) {
-			lxc_container_put(c);
+		if (pid < 0)
 			return false;
-		}
-		if (pid != 0)
+
+		if (pid != 0) {
+			/* Set to NULL because we don't want father unlink
+			 * the PID file, child will do the free and unlink.
+			 */
+			c->pidfile = NULL;
 			return wait_on_daemonized_start(c, pid);
+		}
 
 		/* second fork to be reparented by init */
 		pid = fork();
@@ -622,6 +628,28 @@ static bool lxcapi_start(struct lxc_container *c, int useinit, char * const argv
 		}
 	}
 
+	/* We need to write PID file after daeminize, so we always
+	 * write the right PID.
+	 */
+	if (c->pidfile) {
+		pid_fp = fopen(c->pidfile, "w");
+		if (pid_fp == NULL) {
+			SYSERROR("Failed to create pidfile '%s' for '%s'",
+				 c->pidfile, c->name);
+			return false;
+		}
+
+		if (fprintf(pid_fp, "%d\n", getpid()) < 0) {
+			SYSERROR("Failed to write '%s'", c->pidfile);
+			fclose(pid_fp);
+			pid_fp = NULL;
+			return false;
+		}
+
+		fclose(pid_fp);
+		pid_fp = NULL;
+	}
+
 reboot:
 	conf->reboot = 0;
 	ret = lxc_start(c->name, argv, conf, c->config_path);
@@ -632,12 +660,16 @@ reboot:
 		goto reboot;
 	}
 
-	if (daemonize) {
-		lxc_container_put(c);
-		exit (ret == 0 ? true : false);
-	} else {
-		return (ret == 0 ? true : false);
+	if (c->pidfile) {
+		unlink(c->pidfile);
+		free(c->pidfile);
+		c->pidfile = NULL;
 	}
+
+	if (daemonize)
+		exit (ret == 0 ? true : false);
+	else
+		return (ret == 0 ? true : false);
 }
 
 /*
@@ -889,7 +921,7 @@ static bool create_run_template(struct lxc_container *c, char *tpath, bool quiet
 		 */
 		if (argv)
 			for (nargs = 0; argv[nargs]; nargs++) ;
-		nargs += 4;  // template, path, rootfs and name args
+		nargs += 4; // template, path, rootfs and name args
 
 		newargv = malloc(nargs * sizeof(*newargv));
 		if (!newargv)
@@ -972,7 +1004,7 @@ static bool create_run_template(struct lxc_container *c, char *tpath, bool quiet
 					exit(1);
 			}
 			int hostid_mapped = mapped_hostid(geteuid(), conf);
-			int extraargs = hostid_mapped >= 0 ?  1 : 3;
+			int extraargs = hostid_mapped >= 0 ? 1 : 3;
 			n2 = realloc(n2, (nargs + n2args + extraargs) * sizeof(char *));
 			if (!n2)
 				exit(1);
@@ -1366,48 +1398,55 @@ static bool lxcapi_clear_config_item(struct lxc_container *c, const char *key)
 	return ret == 0;
 }
 
-static inline void exit_from_ns(struct lxc_container *c, int *old_netns, int *new_netns) {
-	/* Switch back to original netns */
-	if (*old_netns >= 0 && setns(*old_netns, CLONE_NEWNET))
-		SYSERROR("failed to setns");
-	if (*new_netns >= 0)
-		close(*new_netns);
-	if (*old_netns >= 0)
-		close(*old_netns);
-}
-
-static inline bool enter_to_ns(struct lxc_container *c, int *old_netns, int *new_netns) {
-	int ret = 0;
+static inline bool enter_to_ns(struct lxc_container *c) {
+	int netns, userns, ret = 0, init_pid = 0;;
 	char new_netns_path[MAXPATHLEN];
+	char new_userns_path[MAXPATHLEN];
 
 	if (!c->is_running(c))
 		goto out;
 
-	/* Save reference to old netns */
-	*old_netns = open("/proc/self/ns/net", O_RDONLY);
-	if (*old_netns < 0) {
-		SYSERROR("failed to open /proc/self/ns/net");
-		goto out;
+	init_pid = c->init_pid(c);
+
+	/* Switch to new userns */
+	if (geteuid() && access("/proc/self/ns/user", F_OK) == 0) {
+		ret = snprintf(new_userns_path, MAXPATHLEN, "/proc/%d/ns/user", init_pid);
+		if (ret < 0 || ret >= MAXPATHLEN)
+			goto out;
+
+		userns = open(new_userns_path, O_RDONLY);
+		if (userns < 0) {
+			SYSERROR("failed to open %s", new_userns_path);
+			goto out;
+		}
+
+		if (setns(userns, CLONE_NEWUSER)) {
+			SYSERROR("failed to setns for CLONE_NEWUSER");
+			close(userns);
+			goto out;
+		}
+		close(userns);
 	}
 
 	/* Switch to new netns */
-	ret = snprintf(new_netns_path, MAXPATHLEN, "/proc/%d/ns/net", c->init_pid(c));
+	ret = snprintf(new_netns_path, MAXPATHLEN, "/proc/%d/ns/net", init_pid);
 	if (ret < 0 || ret >= MAXPATHLEN)
 		goto out;
 
-	*new_netns = open(new_netns_path, O_RDONLY);
-	if (*new_netns < 0) {
+	netns = open(new_netns_path, O_RDONLY);
+	if (netns < 0) {
 		SYSERROR("failed to open %s", new_netns_path);
 		goto out;
 	}
 
-	if (setns(*new_netns, CLONE_NEWNET)) {
-		SYSERROR("failed to setns");
+	if (setns(netns, CLONE_NEWNET)) {
+		SYSERROR("failed to setns for CLONE_NEWNET");
+		close(netns);
 		goto out;
 	}
+	close(netns);
 	return true;
 out:
-	exit_from_ns(c, old_netns, new_netns);
 	return false;
 }
 
@@ -1484,125 +1523,206 @@ static bool remove_from_array(char ***names, char *cname, int size)
 
 static char** lxcapi_get_interfaces(struct lxc_container *c)
 {
-	int i, count = 0;
-	struct ifaddrs *interfaceArray = NULL, *tempIfAddr = NULL;
+	pid_t pid;
+	int i, count = 0, pipefd[2];
 	char **interfaces = NULL;
-	int old_netns = -1, new_netns = -1;
+	char interface[IFNAMSIZ];
 
-	if (!enter_to_ns(c, &old_netns, &new_netns))
-		goto out;
-
-	/* Grab the list of interfaces */
-	if (getifaddrs(&interfaceArray)) {
-		SYSERROR("failed to get interfaces list");
-		goto out;
+	if(pipe(pipefd) < 0) {
+		SYSERROR("pipe failed");
+		return NULL;
 	}
 
-	/* Iterate through the interfaces */
-	for (tempIfAddr = interfaceArray; tempIfAddr != NULL; tempIfAddr = tempIfAddr->ifa_next) {
-		if (array_contains(&interfaces, tempIfAddr->ifa_name, count))
-			continue;
+	pid = fork();
+	if (pid < 0) {
+		SYSERROR("failed to fork task to get interfaces information\n");
+		close(pipefd[0]);
+		close(pipefd[1]);
+		return NULL;
+	}
 
-		if(!add_to_array(&interfaces, tempIfAddr->ifa_name, count))
-			goto err;
+	if (pid == 0) { // child
+		int ret = 1, nbytes;
+		struct ifaddrs *interfaceArray = NULL, *tempIfAddr = NULL;
+
+		/* close the read-end of the pipe */
+		close(pipefd[0]);
+
+		if (!enter_to_ns(c)) {
+			SYSERROR("failed to enter namespace");
+			goto out;
+		}
+
+		/* Grab the list of interfaces */
+		if (getifaddrs(&interfaceArray)) {
+			SYSERROR("failed to get interfaces list");
+			goto out;
+		}
+
+		/* Iterate through the interfaces */
+		for (tempIfAddr = interfaceArray; tempIfAddr != NULL; tempIfAddr = tempIfAddr->ifa_next) {
+			nbytes = write(pipefd[1], tempIfAddr->ifa_name, IFNAMSIZ);
+			if (nbytes < 0) {
+				ERROR("write failed");
+				goto out;
+			}
+			count++;
+		}
+		ret = 0;
+
+	out:
+		if (interfaceArray)
+			freeifaddrs(interfaceArray);
+
+		/* close the write-end of the pipe, thus sending EOF to the reader */
+		close(pipefd[1]);
+		exit(ret);
+	}
+
+	/* close the write-end of the pipe */
+	close(pipefd[1]);
+
+	while (read(pipefd[0], &interface, IFNAMSIZ) == IFNAMSIZ) {
+		if (array_contains(&interfaces, interface, count))
+				continue;
+
+		if(!add_to_array(&interfaces, interface, count))
+			ERROR("PARENT: add_to_array failed");
 		count++;
 	}
 
-out:
-	if (interfaceArray)
-		freeifaddrs(interfaceArray);
+	if (wait_for_pid(pid) != 0) {
+		for(i=0;i<count;i++)
+			free(interfaces[i]);
+		free(interfaces);
+		interfaces = NULL;
+	}
 
-	exit_from_ns(c, &old_netns, &new_netns);
+	/* close the read-end of the pipe */
+	close(pipefd[0]);
 
 	/* Append NULL to the array */
 	if(interfaces)
 		interfaces = (char **)lxc_append_null_to_array((void **)interfaces, count);
 
 	return interfaces;
-
-err:
-	for(i=0;i<count;i++)
-		free(interfaces[i]);
-	free(interfaces);
-	interfaces = NULL;
-	goto out;
 }
 
 static char** lxcapi_get_ips(struct lxc_container *c, const char* interface, const char* family, int scope)
 {
-	int i, count = 0;
-	struct ifaddrs *interfaceArray = NULL, *tempIfAddr = NULL;
-	char addressOutputBuffer[INET6_ADDRSTRLEN];
-	void *tempAddrPtr = NULL;
+	pid_t pid;
+	int i, count = 0, pipefd[2];
 	char **addresses = NULL;
-	char *address = NULL;
-	int old_netns = -1, new_netns = -1;
+	char address[INET6_ADDRSTRLEN];
 
-	if (!enter_to_ns(c, &old_netns, &new_netns))
-		goto out;
-
-	/* Grab the list of interfaces */
-	if (getifaddrs(&interfaceArray)) {
-		SYSERROR("failed to get interfaces list");
-		goto out;
+	if(pipe(pipefd) < 0) {
+		SYSERROR("pipe failed");
+		return NULL;
 	}
 
-	/* Iterate through the interfaces */
-	for (tempIfAddr = interfaceArray; tempIfAddr != NULL; tempIfAddr = tempIfAddr->ifa_next) {
-		if (tempIfAddr->ifa_addr == NULL)
-			continue;
+	pid = fork();
+	if (pid < 0) {
+		SYSERROR("failed to fork task to get container ips\n");
+		close(pipefd[0]);
+		close(pipefd[1]);
+		return NULL;
+	}
 
-		if(tempIfAddr->ifa_addr->sa_family == AF_INET) {
-			if (family && strcmp(family, "inet"))
-				continue;
-			tempAddrPtr = &((struct sockaddr_in *)tempIfAddr->ifa_addr)->sin_addr;
+	if (pid == 0) { // child
+		int ret = 1, nbytes;
+		struct ifaddrs *interfaceArray = NULL, *tempIfAddr = NULL;
+		char addressOutputBuffer[INET6_ADDRSTRLEN];
+		void *tempAddrPtr = NULL;
+		char *address = NULL;
+
+		/* close the read-end of the pipe */
+		close(pipefd[0]);
+
+		if (!enter_to_ns(c)) {
+			SYSERROR("failed to enter namespace");
+			goto out;
 		}
-		else {
-			if (family && strcmp(family, "inet6"))
-				continue;
 
-			if (((struct sockaddr_in6 *)tempIfAddr->ifa_addr)->sin6_scope_id != scope)
-				continue;
-
-			tempAddrPtr = &((struct sockaddr_in6 *)tempIfAddr->ifa_addr)->sin6_addr;
+		/* Grab the list of interfaces */
+		if (getifaddrs(&interfaceArray)) {
+			SYSERROR("failed to get interfaces list");
+			goto out;
 		}
 
-		if (interface && strcmp(interface, tempIfAddr->ifa_name))
-			continue;
-		else if (!interface && strcmp("lo", tempIfAddr->ifa_name) == 0)
-			continue;
+		/* Iterate through the interfaces */
+		for (tempIfAddr = interfaceArray; tempIfAddr != NULL; tempIfAddr = tempIfAddr->ifa_next) {
+			if (tempIfAddr->ifa_addr == NULL)
+				continue;
 
-		address = (char *)inet_ntop(tempIfAddr->ifa_addr->sa_family,
-					   tempAddrPtr,
-					   addressOutputBuffer,
-					   sizeof(addressOutputBuffer));
-		if (!address)
-			continue;
+			if(tempIfAddr->ifa_addr->sa_family == AF_INET) {
+				if (family && strcmp(family, "inet"))
+					continue;
+				tempAddrPtr = &((struct sockaddr_in *)tempIfAddr->ifa_addr)->sin_addr;
+			}
+			else {
+				if (family && strcmp(family, "inet6"))
+					continue;
 
+				if (((struct sockaddr_in6 *)tempIfAddr->ifa_addr)->sin6_scope_id != scope)
+					continue;
+
+				tempAddrPtr = &((struct sockaddr_in6 *)tempIfAddr->ifa_addr)->sin6_addr;
+			}
+
+			if (interface && strcmp(interface, tempIfAddr->ifa_name))
+				continue;
+			else if (!interface && strcmp("lo", tempIfAddr->ifa_name) == 0)
+				continue;
+
+			address = (char *)inet_ntop(tempIfAddr->ifa_addr->sa_family,
+						tempAddrPtr,
+						addressOutputBuffer,
+						sizeof(addressOutputBuffer));
+			if (!address)
+					continue;
+
+			nbytes = write(pipefd[1], address, INET6_ADDRSTRLEN);
+			if (nbytes < 0) {
+				ERROR("write failed");
+				goto out;
+			}
+			count++;
+		}
+		ret = 0;
+
+	out:
+		if(interfaceArray)
+			freeifaddrs(interfaceArray);
+
+		/* close the write-end of the pipe, thus sending EOF to the reader */
+		close(pipefd[1]);
+		exit(ret);
+	}
+
+	/* close the write-end of the pipe */
+	close(pipefd[1]);
+
+	while (read(pipefd[0], &address, INET6_ADDRSTRLEN) == INET6_ADDRSTRLEN) {
 		if(!add_to_array(&addresses, address, count))
-			goto err;
+			ERROR("PARENT: add_to_array failed");
 		count++;
 	}
 
-out:
-	if(interfaceArray)
-		freeifaddrs(interfaceArray);
+	if (wait_for_pid(pid) != 0) {
+		for(i=0;i<count;i++)
+			free(addresses[i]);
+		free(addresses);
+		addresses = NULL;
+	}
 
-	exit_from_ns(c, &old_netns, &new_netns);
+	/* close the read-end of the pipe */
+	close(pipefd[0]);
 
 	/* Append NULL to the array */
 	if(addresses)
 		addresses = (char **)lxc_append_null_to_array((void **)addresses, count);
 
 	return addresses;
-
-err:
-	for(i=0;i<count;i++)
-		free(addresses[i]);
-	free(addresses);
-	addresses = NULL;
-
-	goto out;
 }
 
 static int lxcapi_get_config_item(struct lxc_container *c, const char *key, char *retv, int inlen)
@@ -1633,7 +1753,7 @@ static int lxcapi_get_keys(struct lxc_container *c, const char *key, char *retv,
 		return -1;
 	int ret = -1;
 	if (strncmp(key, "lxc.network.", 12) == 0)
-		ret =  lxc_list_nicconfigs(c->lxc_conf, key, retv, inlen);
+		ret = lxc_list_nicconfigs(c->lxc_conf, key, retv, inlen);
 	container_mem_unlock(c);
 	return ret;
 }
@@ -1647,7 +1767,7 @@ static bool lxcapi_save_config(struct lxc_container *c, const char *alt_file)
 	if (!alt_file)
 		alt_file = c->configfile;
 	if (!alt_file)
-		return false;  // should we write to stdout if no file is specified?
+		return false; // should we write to stdout if no file is specified?
 
 	// If we haven't yet loaded a config, load the stock config
 	if (!c->lxc_conf) {
@@ -1818,7 +1938,7 @@ static int lxc_rmdir_onedev_wrapper(void *data)
 static bool lxcapi_destroy(struct lxc_container *c)
 {
 	struct bdev *r = NULL;
-	bool bret = false, am_unpriv;
+	bool bret = false;
 	int ret;
 
 	if (!c || !lxcapi_is_defined(c))
@@ -1833,14 +1953,12 @@ static bool lxcapi_destroy(struct lxc_container *c)
 		goto out;
 	}
 
-	am_unpriv = c->lxc_conf && geteuid() != 0 && !lxc_list_empty(&c->lxc_conf->id_map);
-
 	if (c->lxc_conf && has_snapshots(c)) {
 		ERROR("container %s has dependent snapshots", c->name);
 		goto out;
 	}
 
-	if (!am_unpriv && c->lxc_conf->rootfs.path && c->lxc_conf->rootfs.mount) {
+	if (!am_unpriv() && c->lxc_conf && c->lxc_conf->rootfs.path && c->lxc_conf->rootfs.mount) {
 		r = bdev_init(c->lxc_conf->rootfs.path, c->lxc_conf->rootfs.mount, NULL);
 		if (r) {
 			if (r->ops->destroy(r) < 0) {
@@ -1857,7 +1975,7 @@ static bool lxcapi_destroy(struct lxc_container *c)
 	const char *p1 = lxcapi_get_config_path(c);
 	char *path = alloca(strlen(p1) + strlen(c->name) + 2);
 	sprintf(path, "%s/%s", p1, c->name);
-	if (am_unpriv)
+	if (am_unpriv())
 		ret = userns_exec_1(c->lxc_conf, lxc_rmdir_onedev_wrapper, path);
 	else
 		ret = lxc_rmdir_onedev(path);
@@ -2076,7 +2194,7 @@ static int copy_file(const char *old, const char *new)
 		if (len == 0)
 			break;
 		ret = write(out, buf, len);
-		if (ret < len) {  // should we retry?
+		if (ret < len) { // should we retry?
 			SYSERROR("Error: write to new file %s was interrupted", new);
 			goto err;
 		}
@@ -2260,8 +2378,7 @@ static int copy_storage(struct lxc_container *c0, struct lxc_container *c,
 	struct bdev *bdev;
 	int need_rdep;
 
-	bdev = bdev_copy(c0->lxc_conf->rootfs.path, c0->name, c->name,
-			c0->config_path, c->config_path, newtype, flags,
+	bdev = bdev_copy(c0, c->name, c->config_path, newtype, flags,
 			bdevdata, newsize, &need_rdep);
 	if (!bdev) {
 		ERROR("Error copying storage");
@@ -2287,36 +2404,49 @@ static int copy_storage(struct lxc_container *c0, struct lxc_container *c,
 	return 0;
 }
 
-static int clone_update_rootfs(struct lxc_container *c0,
-			       struct lxc_container *c, int flags,
-			       char **hookargs)
+struct clone_update_data {
+	struct lxc_container *c0;
+	struct lxc_container *c1;
+	int flags;
+	char **hookargs;
+};
+
+static int clone_update_rootfs(struct clone_update_data *data)
 {
+	struct lxc_container *c0 = data->c0;
+	struct lxc_container *c = data->c1;
+	int flags = data->flags;
+	char **hookargs = data->hookargs;
 	int ret = -1;
 	char path[MAXPATHLEN];
 	struct bdev *bdev;
 	FILE *fout;
-	pid_t pid;
 	struct lxc_conf *conf = c->lxc_conf;
 
 	/* update hostname in rootfs */
 	/* we're going to mount, so run in a clean namespace to simplify cleanup */
 
-	pid = fork();
-	if (pid < 0)
+	if (setgid(0) < 0) {
+		ERROR("Failed to setgid to 0");
 		return -1;
-	if (pid > 0)
-		return wait_for_pid(pid);
+	}
+	if (setuid(0) < 0) {
+		ERROR("Failed to setuid to 0");
+		return -1;
+	}
 
+	if (unshare(CLONE_NEWNS) < 0)
+		return -1;
 	bdev = bdev_init(c->lxc_conf->rootfs.path, c->lxc_conf->rootfs.mount, NULL);
 	if (!bdev)
-		exit(1);
+		return -1;
 	if (strcmp(bdev->type, "dir") != 0) {
 		if (unshare(CLONE_NEWNS) < 0) {
 			ERROR("error unsharing mounts");
-			exit(1);
+			return -1;
 		}
 		if (bdev->ops->mount(bdev) < 0)
-			exit(1);
+			return -1;
 	} else { // TODO come up with a better way
 		if (bdev->dest)
 			free(bdev->dest);
@@ -2343,26 +2473,34 @@ static int clone_update_rootfs(struct lxc_container *c0,
 
 		if (run_lxc_hooks(c->name, "clone", conf, c->get_config_path(c), hookargs)) {
 			ERROR("Error executing clone hook for %s", c->name);
-			exit(1);
+			return -1;
 		}
 	}
 
 	if (!(flags & LXC_CLONE_KEEPNAME)) {
 		ret = snprintf(path, MAXPATHLEN, "%s/etc/hostname", bdev->dest);
 		if (ret < 0 || ret >= MAXPATHLEN)
-			exit(1);
+			return -1;
 		if (!file_exists(path))
-			exit(0);
+			return 0;
 		if (!(fout = fopen(path, "w"))) {
 			SYSERROR("unable to open %s: ignoring\n", path);
-			exit(0);
+			return 0;
 		}
-		if (fprintf(fout, "%s", c->name) < 0)
-			exit(1);
+		if (fprintf(fout, "%s", c->name) < 0) {
+			fclose(fout);
+			return -1;
+		}
 		if (fclose(fout) < 0)
-			exit(1);
+			return -1;
 	}
-	exit(0);
+	return 0;
+}
+
+static int clone_update_rootfs_wrapper(void *data)
+{
+	struct clone_update_data *arg = (struct clone_update_data *) data;
+	return clone_update_rootfs(arg);
 }
 
 /*
@@ -2401,7 +2539,9 @@ static struct lxc_container *lxcapi_clone(struct lxc_container *c, const char *n
 	char newpath[MAXPATHLEN];
 	int ret, storage_copied = 0;
 	const char *n, *l;
+	struct clone_update_data data;
 	FILE *fout;
+	pid_t pid;
 
 	if (!c || !c->is_defined(c))
 		return NULL;
@@ -2418,7 +2558,7 @@ static struct lxc_container *lxcapi_clone(struct lxc_container *c, const char *n
 	n = newname ? newname : c->name;
 	l = lxcpath ? lxcpath : c->get_config_path(c);
 	ret = snprintf(newpath, MAXPATHLEN, "%s/%s/config", l, n);
-	if (ret < 0  || ret >= MAXPATHLEN) {
+	if (ret < 0 || ret >= MAXPATHLEN) {
 		SYSERROR("clone: failed making config pathname");
 		goto out;
 	}
@@ -2446,6 +2586,13 @@ static struct lxc_container *lxcapi_clone(struct lxc_container *c, const char *n
 	if (mkdir(newpath, 0755) < 0) {
 		SYSERROR("error creating %s", newpath);
 		goto out;
+	}
+
+	if (am_unpriv()) {
+		if (chown_mapped_root(newpath, c->lxc_conf) < 0) {
+			ERROR("Error chowning %s to container root\n", newpath);
+			goto out;
+		}
 	}
 
 	c2 = lxc_container_new(n, l);
@@ -2488,12 +2635,31 @@ static struct lxc_container *lxcapi_clone(struct lxc_container *c, const char *n
 	if (!c2->save_config(c2, NULL))
 		goto out;
 
-	if (clone_update_rootfs(c, c2, flags, hookargs) < 0)
+	if ((pid = fork()) < 0) {
+		SYSERROR("fork");
 		goto out;
+	}
+	if (pid > 0) {
+		ret = wait_for_pid(pid);
+		if (ret)
+			goto out;
+		container_mem_unlock(c);
+		return c2;
+	}
+	data.c0 = c;
+	data.c1 = c2;
+	data.flags = flags;
+	data.hookargs = hookargs;
+	if (am_unpriv())
+		ret = userns_exec_1(c->lxc_conf, clone_update_rootfs_wrapper,
+				&data);
+	else
+		ret = clone_update_rootfs(&data);
+	if (ret < 0)
+		exit(1);
 
-	// TODO: update c's lxc.snapshot = count
 	container_mem_unlock(c);
-	return c2;
+	exit(0);
 
 out:
 	container_mem_unlock(c);
@@ -2724,6 +2890,7 @@ static int lxcapi_snapshot_list(struct lxc_container *c, struct lxc_snapshot **r
 
 	if (!c || !lxcapi_is_defined(c))
 		return -1;
+
 	// snappath is ${lxcpath}snaps/${lxcname}/
 	dirlen = snprintf(snappath, MAXPATHLEN, "%ssnaps/%s", c->config_path, c->name);
 	if (dirlen < 0 || dirlen >= MAXPATHLEN) {
@@ -2943,7 +3110,7 @@ static bool add_remove_device_node(struct lxc_container *c, const char *src_path
 		/* create the device node */
 		if (mknod(path, st.st_mode, st.st_rdev) < 0) {
 			ERROR("mknod failed");
-            goto out;
+			goto out;
 		}
 
 		/* add device node to device list */
@@ -2967,11 +3134,19 @@ out:
 
 static bool lxcapi_add_device_node(struct lxc_container *c, const char *src_path, const char *dest_path)
 {
+	if (am_unpriv()) {
+		ERROR(NOT_SUPPORTED_ERROR, __FUNCTION__);
+		return false;
+	}
 	return add_remove_device_node(c, src_path, dest_path, true);
 }
 
 static bool lxcapi_remove_device_node(struct lxc_container *c, const char *src_path, const char *dest_path)
 {
+	if (am_unpriv()) {
+		ERROR(NOT_SUPPORTED_ERROR, __FUNCTION__);
+		return false;
+	}
 	return add_remove_device_node(c, src_path, dest_path, false);
 }
 
@@ -3053,6 +3228,7 @@ struct lxc_container *lxc_container_new(const char *name, const char *configpath
 		lxcapi_clear_config(c);
 	}
 	c->daemonize = true;
+	c->pidfile = NULL;
 
 	// assign the member functions
 	c->is_defined = lxcapi_is_defined;

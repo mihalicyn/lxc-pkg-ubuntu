@@ -646,7 +646,7 @@ int pin_rootfs(const char *rootfs)
 	return fd;
 }
 
-static int lxc_mount_auto_mounts(struct lxc_conf *conf, int flags, struct cgroup_process_info *cgroup_info)
+static int lxc_mount_auto_mounts(struct lxc_conf *conf, int flags, struct lxc_cgroup_info *cgroup_info)
 {
 	int r;
 	size_t i;
@@ -2170,9 +2170,9 @@ static int setup_caps(struct lxc_list *caps)
 		DEBUG("drop capability '%s' (%d)", drop_entry, capid);
 
 		if (prctl(PR_CAPBSET_DROP, capid, 0, 0, 0)) {
-                       SYSERROR("failed to remove %s capability", drop_entry);
-                       return -1;
-                }
+			SYSERROR("failed to remove %s capability", drop_entry);
+			return -1;
+		}
 
 	}
 
@@ -2240,9 +2240,9 @@ static int dropcaps_except(struct lxc_list *caps)
 		if (caplist[i])
 			continue;
 		if (prctl(PR_CAPBSET_DROP, i, 0, 0, 0)) {
-                       SYSERROR("failed to remove capability %d", i);
-                       return -1;
-                }
+			SYSERROR("failed to remove capability %d", i);
+			return -1;
+		}
 	}
 
 	DEBUG("capabilities have been setup");
@@ -2979,6 +2979,8 @@ void lxc_delete_network(struct lxc_handler *handler)
 	}
 }
 
+#define LXC_USERNIC_PATH LIBEXECDIR "/lxc/lxc-user-nic"
+
 static int unpriv_assign_nic(struct lxc_netdev *netdev, pid_t pid)
 {
 	pid_t child;
@@ -2998,11 +3000,12 @@ static int unpriv_assign_nic(struct lxc_netdev *netdev, pid_t pid)
 		return wait_for_pid(child);
 
 	// Call lxc-user-nic pid type bridge
+
 	char pidstr[20];
-	char *args[] = { "lxc-user-nic", pidstr, "veth", netdev->link, netdev->name, NULL };
+	char *args[] = {LXC_USERNIC_PATH, pidstr, "veth", netdev->link, netdev->name, NULL };
 	snprintf(pidstr, 19, "%lu", (unsigned long) pid);
 	pidstr[19] = '\0';
-	execvp("lxc-user-nic", args);
+	execvp(args[0], args);
 	SYSERROR("execvp lxc-user-nic");
 	exit(1);
 }
@@ -3128,10 +3131,11 @@ int lxc_map_ids(struct lxc_list *idmap, pid_t pid)
 }
 
 /*
- * return the host uid to which the container root is mapped, or -1 on
- * error
+ * return the host uid to which the container root is mapped in *val.
+ * Return true if id was found, false otherwise.
  */
-static uid_t get_mapped_rootid(struct lxc_conf *conf)
+bool get_mapped_rootid(struct lxc_conf *conf, enum idtype idtype,
+			unsigned long *val)
 {
 	struct lxc_list *it;
 	struct id_map *map;
@@ -3142,9 +3146,10 @@ static uid_t get_mapped_rootid(struct lxc_conf *conf)
 			continue;
 		if (map->nsid != 0)
 			continue;
-		return (uid_t) map->hostid;
+		*val = map->hostid;
+		return true;
 	}
-	return (uid_t)-1;
+	return false;
 }
 
 int mapped_hostid(int id, struct lxc_conf *conf)
@@ -3261,7 +3266,7 @@ int lxc_create_tty(const char *name, struct lxc_conf *conf)
 		DEBUG("allocated pty '%s' (%d/%d)",
 		      pty_info->name, pty_info->master, pty_info->slave);
 
-                /* Prevent leaking the file descriptors to the container */
+		/* Prevent leaking the file descriptors to the container */
 		fcntl(pty_info->master, F_SETFD, FD_CLOEXEC);
 		fcntl(pty_info->slave, F_SETFD, FD_CLOEXEC);
 
@@ -3301,11 +3306,14 @@ int chown_mapped_root(char *path, struct lxc_conf *conf)
 {
 	uid_t rootid;
 	pid_t pid;
+	unsigned long val;
 
-	if ((rootid = get_mapped_rootid(conf)) <= 0) {
+	if (!get_mapped_rootid(conf, ID_TYPE_UID, &val)) {
 		ERROR("No mapping for container root");
 		return -1;
 	}
+	rootid = (uid_t) val;
+
 	if (geteuid() == 0) {
 		if (chown(path, rootid, -1) < 0) {
 			ERROR("Error chowning %s", path);
@@ -3458,8 +3466,14 @@ static int check_autodev( const char *rootfs, void *data )
 	return 0;
 }
 
-int lxc_setup(const char *name, struct lxc_conf *lxc_conf, const char *lxcpath, struct cgroup_process_info *cgroup_info, void *data)
+int lxc_setup(struct lxc_handler *handler)
 {
+	const char *name = handler->name;
+	struct lxc_conf *lxc_conf = handler->conf;
+	const char *lxcpath = handler->lxcpath;
+	void *data = handler->data;
+	struct lxc_cgroup_info *cgroup_info = handler->cgroup_info;
+
 	if (lxc_conf->inherit_ns_fd[LXC_NS_UTS] == -1) {
 		if (setup_utsname(lxc_conf->utsname)) {
 			ERROR("failed to setup the utsname for '%s'", name);
@@ -3695,51 +3709,51 @@ int lxc_clear_nic(struct lxc_conf *c, const char *key)
 
 	if (!p1) {
 		lxc_remove_nic(it);
-	} else if (strcmp(p1, "ipv4") == 0) {
+	} else if (strcmp(p1, ".ipv4") == 0) {
 		struct lxc_list *it2,*next;
 		lxc_list_for_each_safe(it2, &netdev->ipv4, next) {
 			lxc_list_del(it2);
 			free(it2->elem);
 			free(it2);
 		}
-	} else if (strcmp(p1, "ipv6") == 0) {
+	} else if (strcmp(p1, ".ipv6") == 0) {
 		struct lxc_list *it2,*next;
 		lxc_list_for_each_safe(it2, &netdev->ipv6, next) {
 			lxc_list_del(it2);
 			free(it2->elem);
 			free(it2);
 		}
-	} else if (strcmp(p1, "link") == 0) {
+	} else if (strcmp(p1, ".link") == 0) {
 		if (netdev->link) {
 			free(netdev->link);
 			netdev->link = NULL;
 		}
-	} else if (strcmp(p1, "name") == 0) {
+	} else if (strcmp(p1, ".name") == 0) {
 		if (netdev->name) {
 			free(netdev->name);
 			netdev->name = NULL;
 		}
-	} else if (strcmp(p1, "script.up") == 0) {
+	} else if (strcmp(p1, ".script.up") == 0) {
 		if (netdev->upscript) {
 			free(netdev->upscript);
 			netdev->upscript = NULL;
 		}
-	} else if (strcmp(p1, "hwaddr") == 0) {
+	} else if (strcmp(p1, ".hwaddr") == 0) {
 		if (netdev->hwaddr) {
 			free(netdev->hwaddr);
 			netdev->hwaddr = NULL;
 		}
-	} else if (strcmp(p1, "mtu") == 0) {
+	} else if (strcmp(p1, ".mtu") == 0) {
 		if (netdev->mtu) {
 			free(netdev->mtu);
 			netdev->mtu = NULL;
 		}
-	} else if (strcmp(p1, "ipv4_gateway") == 0) {
+	} else if (strcmp(p1, ".ipv4_gateway") == 0) {
 		if (netdev->ipv4_gateway) {
 			free(netdev->ipv4_gateway);
 			netdev->ipv4_gateway = NULL;
 		}
-	} else if (strcmp(p1, "ipv6_gateway") == 0) {
+	} else if (strcmp(p1, ".ipv6_gateway") == 0) {
 		if (netdev->ipv6_gateway) {
 			free(netdev->ipv6_gateway);
 			netdev->ipv6_gateway = NULL;
@@ -3955,29 +3969,31 @@ static struct lxc_list *idmap_add_id(struct lxc_conf *conf, uid_t uid)
 	struct lxc_list *new = NULL, *tmp, *it, *next;
 	struct id_map *entry;
 
+	new = malloc(sizeof(*new));
+	if (!new) {
+		ERROR("Out of memory building id map");
+		return NULL;
+	}
+	lxc_list_init(new);
+
 	if (hostid_mapped < 0) {
 		hostid_mapped = find_unmapped_nsuid(conf);
-		if (hostid_mapped < 0) {
-			ERROR("Could not find free uid to map");
-			return NULL;
-		}
-		new = malloc(sizeof(*new));
-		if (!new) {
-			ERROR("Out of memory building id map");
-			return NULL;
-		}
+		if (hostid_mapped < 0)
+			goto err;
+		tmp = malloc(sizeof(*tmp));
+		if (!tmp)
+			goto err;
 		entry = malloc(sizeof(*entry));
 		if (!entry) {
-			free(new);
-			ERROR("Out of memory building idmap entry");
-			return NULL;
+			free(tmp);
+			goto err;
 		}
-		new->elem = entry;
+		tmp->elem = entry;
 		entry->idtype = ID_TYPE_UID;
 		entry->nsid = hostid_mapped;
 		entry->hostid = (unsigned long)uid;
 		entry->range = 1;
-		lxc_list_init(new);
+		lxc_list_add_tail(new, tmp);
 	}
 	lxc_list_for_each_safe(it, &conf->id_map, next) {
 		tmp = malloc(sizeof(*tmp));
@@ -3991,11 +4007,7 @@ static struct lxc_list *idmap_add_id(struct lxc_conf *conf, uid_t uid)
 		memset(entry, 0, sizeof(*entry));
 		memcpy(entry, it->elem, sizeof(*entry));
 		tmp->elem = entry;
-		if (!new) {
-			new = tmp;
-			lxc_list_init(new);
-		} else
-			lxc_list_add_tail(new, tmp);
+		lxc_list_add_tail(new, tmp);
 	}
 
 	return new;

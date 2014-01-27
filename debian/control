@@ -16,7 +16,6 @@ Build-Depends: autotools-dev,
                linux-libc-dev,
                pkg-config,
                python3-all-dev (>= 3.2.3)
-Build-Conflicts: lua5.2, lua5.2-dev
 Standards-Version: 3.9.5
 Homepage: http://linuxcontainers.org
 X-Python3-Version: >= 3.2
@@ -34,6 +33,7 @@ Depends: adduser,
          python3,
          python3-lxc,
          rsync,
+         uidmap,
          ${misc:Depends},
          ${shlibs:Depends}
 Recommends: cgroup-lite | cgroup-bin,

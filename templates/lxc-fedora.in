@@ -27,8 +27,6 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 #Configurations
-arch=$(uname -m)
-cache_base=@LOCALSTATEDIR@/cache/lxc/fedora/$arch
 default_path=@LXCPATH@
 
 # Some combinations of the tunning knobs below do not exactly make sense.
@@ -112,18 +110,6 @@ then
         is_fedora=true
     fi
 fi
-
-# Map a few architectures to their generic Fedora repository archs.
-# The two ARM archs are a bit of a guesstimate for the v5 and v6
-# archs.  V6 should have hardware floating point (Rasberry Pi).
-# The "arm" arch is safer (no hardware floating point).  So
-# there may be cases where we "get it wrong" for some v6 other
-# than RPi.
-case "$arch" in
-i686) arch=i386 ;;
-armv3l|armv4l|armv5l) arch=arm ;;
-armv6l|armv7l|armv8l) arch=armhfp ;;
-esac
 
 configure_fedora()
 {
@@ -259,6 +245,22 @@ EOF
     mknod -m 600 ${dev_path}/initctl p
     mknod -m 666 ${dev_path}/ptmx c 5 2
 
+    # setup console and tty[1-4] for login. note that /dev/console and
+    # /dev/tty[1-4] will be symlinks to the ptys /dev/lxc/console and
+    # /dev/lxc/tty[1-4] so that package updates can overwrite the symlinks.
+    # lxc will maintain these links and bind mount ptys over /dev/lxc/*
+    # since lxc.devttydir is specified in the config.
+
+    # allow root login on console, tty[1-4], and pts/0 for libvirt
+    echo "# LXC (Linux Containers)" >>${rootfs_path}/etc/securetty
+    echo "lxc/console"  >>${rootfs_path}/etc/securetty
+    echo "lxc/tty1"     >>${rootfs_path}/etc/securetty
+    echo "lxc/tty2"     >>${rootfs_path}/etc/securetty
+    echo "lxc/tty3"     >>${rootfs_path}/etc/securetty
+    echo "lxc/tty4"     >>${rootfs_path}/etc/securetty
+    echo "# For libvirt/Virtual Machine Monitor" >>${rootfs_path}/etc/securetty
+    echo "pts/0"        >>${rootfs_path}/etc/securetty
+
     if [ ${root_display_password} = "yes" ]
     then
         echo "Setting root password to '$root_password'"
@@ -324,6 +326,7 @@ configure_fedora_systemd()
     rm -f ${rootfs_path}/etc/systemd/system/default.target
     touch ${rootfs_path}/etc/fstab
     chroot ${rootfs_path} ln -s /dev/null /etc/systemd/system/udev.service
+    chroot ${rootfs_path} ln -s /dev/null /etc/systemd/system/systemd-journald.service
     chroot ${rootfs_path} ln -s /lib/systemd/system/multi-user.target /etc/systemd/system/default.target
     #dependency on a device unit fails it specially that we disabled udev
     # sed -i 's/After=dev-%i.device/After=/' ${rootfs_path}/lib/systemd/system/getty\@.service
@@ -377,9 +380,9 @@ configure_fedora_systemd()
 #
 #       Stage 2 becomes our bootstrap file system which can be cached
 #       and then used to build other arbitrary vesions of Fedora of a
-#       given architecture.  Not that this only has to run once for
+#       given architecture.  Note that this only has to run once for
 #       Fedora on a given architecture since rpm and yum can build other
-#       versions.  We'll arbitrarily pick Fedora 19 to build this.  This
+#       versions.  We'll arbitrarily pick Fedora 20 to build this.  This
 #       will need to change as time goes on.
 
 # Programmers Note...  A future fall back may be to download the netinst
@@ -530,10 +533,10 @@ Have a beer or a cup of coffee.  This will take a bit (~300MB).
 "
         sleep 3 # let him read it...
 
-        # Right now, we are using Fedora 19 for the inial bootstrap.
+        # Right now, we are using Fedora 20 for the inial bootstrap.
         # We could make this the "current" Fedora rev (F > 15).
 
-        rsync -av mirrors.kernel.org::fedora/releases/19/Fedora/$arch/os/LiveOS .
+        rsync -av mirrors.kernel.org::fedora/releases/20/Fedora/$basearch/os/LiveOS .
 
         if [[ 0 == $? ]]
         then
@@ -610,8 +613,8 @@ This will take a couple of minutes.  Patience..."
     # of this LiveOS image we're camped out on.  This is the beginning
     # of the butt ugly hack.  Look close or you may missing it...
 
-    rsync -av mirrors.kernel.org::fedora/releases/19/Fedora/$arch/os/Packages/r/rpm-[0-9]* \
-        mirrors.kernel.org::fedora/releases/19/Fedora/$arch/os/Packages/y/yum-[0-9]* .
+    rsync -av mirrors.kernel.org::fedora/releases/20/Fedora/$basearch/os/Packages/r/rpm-[0-9]* \
+        mirrors.kernel.org::fedora/releases/20/Fedora/$basearch/os/Packages/y/yum-[0-9]* .
 
     # And here it is...
     # The --nodeps is STUPID but F15 had a bogus dependency on RawHide?!?!
@@ -643,10 +646,14 @@ This will take a couple of minutes.  Patience..."
     echo "Stage 1 creation complete.  Building stage 2 Installation Bootstrap"
 
     mount -o bind ../bootstrap run/install
-    rsync -av mirrors.kernel.org::fedora/releases/19/Fedora/$arch/os/Packages/f/fedora-release-19* .
+    rsync -av mirrors.kernel.org::fedora/releases/20/Fedora/$basearch/os/Packages/f/fedora-release-20* .
 
     # The --nodeps is STUPID but F15 had a bogus dependency on RawHide?!?!
     chroot . rpm --root /run/install --nodeps -ivh fedora-release-*
+
+    # yum will take $basearch from host, so force the arch we want
+    sed -i "s|\$basearch|$basearch|" ./etc/yum.repos.d/*
+
     chroot . yum -y --nogpgcheck --installroot /run/install install python rpm yum
 
     umount run/install
@@ -662,6 +669,9 @@ This will take a couple of minutes.  Patience..."
     mount -t proc proc proc
     # Always make sure /etc/resolv.conf is up to date in the target!
     cp /etc/resolv.conf etc/
+
+    # yum will take $basearch from host, so force the arch we want
+    sed -i "s|\$basearch|$basearch|" ./etc/yum.repos.d/*
 
     chroot . yum -y update
 
@@ -757,7 +767,7 @@ download_fedora()
     BOOTSTRAP_CHROOT=
 
     PKG_LIST="yum initscripts passwd rsyslog vim-minimal openssh-server openssh-clients dhclient chkconfig rootfiles policycoreutils fedora-release"
-    MIRRORLIST_URL="http://mirrors.fedoraproject.org/mirrorlist?repo=fedora-$release&arch=$arch"
+    MIRRORLIST_URL="http://mirrors.fedoraproject.org/mirrorlist?repo=fedora-$release&arch=$basearch"
 
     if [[ ${release} -lt 17 ]]
     then
@@ -833,6 +843,10 @@ download_fedora()
     ${BOOTSTRAP_CHROOT}rpm --root ${BOOTSTRAP_INSTALL_ROOT} --initdb
     # The --nodeps is STUPID but F15 had a bogus dependency on RawHide?!?!
     ${BOOTSTRAP_CHROOT}rpm --root ${BOOTSTRAP_INSTALL_ROOT} --nodeps -ivh ${BOOTSTRAP_INSTALL_ROOT}/${RELEASE_RPM}
+
+    # yum will take $basearch from host, so force the arch we want
+    sed -i "s|\$basearch|$basearch|" ${BOOTSTRAP_INSTALL_ROOT}/etc/yum.repos.d/*
+
     ${BOOTSTRAP_CHROOT}yum --installroot ${BOOTSTRAP_INSTALL_ROOT} -y --nogpgcheck install ${PKG_LIST}
 
     RC=$?
@@ -911,7 +925,7 @@ copy_fedora()
 
     # make a local copy of the minifedora
     echo -n "Copying rootfs to $rootfs_path ..."
-    #cp -a $cache/rootfs-$arch $rootfs_path || return 1
+    #cp -a $cache/rootfs-$basearch $rootfs_path || return 1
     # i prefer rsync (no reason really)
     mkdir -p $rootfs_path
     rsync -Ha $cache/rootfs/ $rootfs_path/
@@ -934,7 +948,7 @@ install_fedora()
 {
     mkdir -p @LOCALSTATEDIR@/lock/subsys/
     (
-        flock -x 200
+        flock -x 9
         if [ $? -ne 0 ]; then
             echo "Cache repository is busy."
             return 1
@@ -965,7 +979,7 @@ install_fedora()
         fi
 
         return 0
-    ) 200>@LOCALSTATEDIR@/lock/subsys/lxc-fedora
+    ) 9>@LOCALSTATEDIR@/lock/subsys/lxc-fedora
 
     return $?
 }
@@ -974,8 +988,7 @@ install_fedora()
 # 5 random bytes...
 create_hwaddr()
 {
-    echo $(dd if=/dev/urandom bs=8 count=1 2>/dev/null | md5sum |
-        sed -e 's/\(..\)\(..\)\(..\)\(..\)\(..\).*/fe:\1:\2:\3:\4:\5/')
+    openssl rand -hex 5 | sed -e 's/\(..\)/:\1/g; s/^/fe/'
 }
 
 copy_configuration()
@@ -1017,12 +1030,16 @@ lxc.rootfs = $rootfs_path
 
     rm -f $config_path/config.def
 
+    if [ -e "@LXCTEMPLATECONFIG@/fedora.common.conf" ]; then
+        echo "
+# Include common configuration
+lxc.include = @LXCTEMPLATECONFIG@/fedora.common.conf
+" >> $config_path/config
+    fi
+
+    # Append things which require expansion here...
     cat <<EOF >> $config_path/config
 lxc.utsname = $utsname
-lxc.tty = 4
-lxc.pts = 1024
-lxc.mount = $config_path/fstab
-lxc.cap.drop = sys_module mac_admin mac_override sys_time
 
 lxc.autodev = $auto_dev
 
@@ -1041,26 +1058,6 @@ lxc.autodev = $auto_dev
 #        Note: This may potentially collide with other containers of same name!
 #lxc.network.veth.pair = v-$name-e0
 
-#cgroups
-lxc.cgroup.devices.deny = a
-# /dev/null and zero
-lxc.cgroup.devices.allow = c 1:3 rwm
-lxc.cgroup.devices.allow = c 1:5 rwm
-# consoles
-lxc.cgroup.devices.allow = c 5:1 rwm
-lxc.cgroup.devices.allow = c 5:0 rwm
-# /dev/{,u}random
-lxc.cgroup.devices.allow = c 1:9 rwm
-lxc.cgroup.devices.allow = c 1:8 rwm
-lxc.cgroup.devices.allow = c 136:* rwm
-lxc.cgroup.devices.allow = c 5:2 rwm
-# rtc
-lxc.cgroup.devices.allow = c 254:0 rm
-EOF
-
-    cat <<EOF > $config_path/fstab
-proc            proc         proc    nodev,noexec,nosuid 0 0
-sysfs           sys          sysfs defaults  0 0
 EOF
 
     if [ $? -ne 0 ]; then
@@ -1080,7 +1077,7 @@ clean()
 
     # lock, so we won't purge while someone is creating a repository
     (
-        flock -x 200
+        flock -x 9
         if [ $? != 0 ]; then
             echo "Cache repository is busy."
             exit 1
@@ -1089,7 +1086,7 @@ clean()
         echo -n "Purging the download cache for Fedora-$release..."
         rm --preserve-root --one-file-system -rf $cache && echo "Done." || exit 1
         exit 0
-    ) 200>@LOCALSTATEDIR@/lock/subsys/lxc-fedora
+    ) 9>@LOCALSTATEDIR@/lock/subsys/lxc-fedora
 }
 
 usage()
@@ -1097,7 +1094,7 @@ usage()
     cat <<EOF
 usage:
     $1 -n|--name=<container_name>
-        [-p|--path=<path>] [-c|--clean] [-R|--release=<Fedora_release>] [--fqdn=<network name of container>] [-A|--arch=<arch of the container>]
+        [-p|--path=<path>] [-c|--clean] [-R|--release=<Fedora_release>] [--fqdn=<network name of container>] [-a|--arch=<arch of the container>]
         [-h|--help]
 Mandatory args:
   -n,--name         container name, used to as an identifier for that container from now on
@@ -1107,19 +1104,20 @@ Optional args:
   -c,--clean        clean the cache
   -R,--release      Fedora release for the new container. if the host is Fedora, then it will default to the host's release.
      --fqdn         fully qualified domain name (FQDN) for DNS and system naming
-  -A,--arch         NOT USED YET. Define what arch the container will be [i686,x86_64]
+  -a,--arch         Define what arch the container will be [i686,x86_64]
   -h,--help         print this help
 EOF
     return 0
 }
 
-options=$(getopt -o hp:n:cR: -l help,path:,rootfs:,name:,clean,release:,fqdn: -- "$@")
+options=$(getopt -o a:hp:n:cR: -l help,path:,rootfs:,name:,clean,release:,arch:,fqdn: -- "$@")
 if [ $? -ne 0 ]; then
     usage $(basename $0)
     exit 1
 fi
-eval set -- "$options"
 
+arch=$(arch)
+eval set -- "$options"
 while true
 do
     case "$1" in
@@ -1129,6 +1127,7 @@ do
         -n|--name)      name=$2; shift 2;;
         -c|--clean)     clean=$2; shift 2;;
         -R|--release)   release=$2; shift 2;;
+        -a|--arch)      newarch=$2; shift 2;;
         --fqdn)         utsname=$2; shift 2;;
         --)             shift 1; break ;;
         *)              break ;;
@@ -1139,6 +1138,52 @@ if [ ! -z "$clean" -a -z "$path" ]; then
     clean || exit 1
     exit 0
 fi
+
+
+basearch=${arch}
+# Map a few architectures to their generic Fedora repository archs.
+# The two ARM archs are a bit of a guesstimate for the v5 and v6
+# archs.  V6 should have hardware floating point (Rasberry Pi).
+# The "arm" arch is safer (no hardware floating point).  So
+# there may be cases where we "get it wrong" for some v6 other
+# than RPi.
+case "$arch" in
+i686) basearch=i386 ;;
+armv3l|armv4l|armv5l) basearch=arm ;;
+armv6l|armv7l|armv8l) basearch=armhfp ;;
+*) ;;
+esac
+
+# Somebody wants to specify an arch.  This is very limited case.
+#       i386/i586/i686 on i386/x86_64
+#           - or -
+#       x86_64 on x86_64
+if [ "${newarch}" != "" -a "${newarch}" != "${arch}" ]
+then
+    case "${newarch}" in
+        i386|i586|i686)
+            if [ "${basearch}" = "i386" -o "${basearch}" = "x86_64" ]
+            then
+                # Make the arch a generic x86 32 bit...
+            arch=${newarch}
+                basearch=i386
+            else
+                basearch=bad
+            fi
+            ;;
+        *)
+            basearch=bad
+            ;;
+    esac
+
+    if [ "${basearch}" = "bad" ]
+    then
+        echo "You cannot build a ${newarch} Fedora container on a ${arch} host.  Sorry!"
+        exit 1
+    fi
+fi
+
+cache_base=@LOCALSTATEDIR@/cache/lxc/fedora/$basearch
 
 # Let's do something better for the initial root password.
 # It's not perfect but it will defeat common scanning brute force
@@ -1206,8 +1251,8 @@ if [ -z "$release" ]; then
     if [ "$is_fedora" -a "$fedora_host_ver" ]; then
         release=$fedora_host_ver
     else
-        echo "This is not a fedora host and release missing, defaulting to 19. use -R|--release to specify release"
-        release=19
+        echo "This is not a fedora host and release missing, defaulting to 20 use -R|--release to specify release"
+        release=20
     fi
 fi
 
@@ -1229,10 +1274,11 @@ if [ -z "$rootfs_path" ]; then
     rootfs_path=$path/rootfs
     # check for 'lxc.rootfs' passed in through default config by lxc-create
     if grep -q '^lxc.rootfs' $path/config 2>/dev/null ; then
-        rootfs_path=$(awk -F= '/^lxc.rootfs =/{ print $2 }' $path/config)
+        rootfs_path=$(sed -e '/^lxc.rootfs\s*=/!d' -e 's/\s*#.*//' \
+            -e 's/^lxc.rootfs\s*=\s*//' -e q $path/config)
     fi
 fi
-config_path=$default_path/$name
+config_path=$path
 cache=$cache_base/$release
 
 revert()
@@ -1241,7 +1287,6 @@ revert()
     lxc-destroy -n $name
     # maybe was interrupted before copy config
     rm -rf $path
-    rm -rf $default_path/$name
     echo "exiting..."
     exit 1
 }

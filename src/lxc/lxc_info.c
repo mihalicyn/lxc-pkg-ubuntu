@@ -301,23 +301,25 @@ static int print_info(const char *name, const char *lxcpath)
 		print_info_msg_str("State:", c->state(c));
 	}
 
-	if (pid) {
-		pid_t initpid;
+	if (c->is_running(c)) {
+		if (pid) {
+			pid_t initpid;
 
-		initpid = c->init_pid(c);
-		if (initpid >= 0)
-			print_info_msg_int("PID:", initpid);
-	}
+			initpid = c->init_pid(c);
+			if (initpid >= 0)
+				print_info_msg_int("PID:", initpid);
+		}
 
-	if (ips) {
-		char **addresses = c->get_ips(c, NULL, NULL, 0);
-		if (addresses) {
-			char *address;
-			i = 0;
-			while (addresses[i]) {
-				address = addresses[i];
-				print_info_msg_str("IP:", address);
-				i++;
+		if (ips) {
+			char **addresses = c->get_ips(c, NULL, NULL, 0);
+			if (addresses) {
+				char *address;
+				i = 0;
+				while (addresses[i]) {
+					address = addresses[i];
+					print_info_msg_str("IP:", address);
+					i++;
+				}
 			}
 		}
 	}
@@ -330,7 +332,7 @@ static int print_info(const char *name, const char *lxcpath)
 	for(i = 0; i < keys; i++) {
 		int len = c->get_config_item(c, key[i], NULL, 0);
 
-		if (len >= 0) {
+		if (len > 0) {
 			char *val = (char*) malloc(sizeof(char)*len + 1);
 
 			if (c->get_config_item(c, key[i], val, len + 1) != len) {
@@ -339,8 +341,10 @@ static int print_info(const char *name, const char *lxcpath)
 				printf("%s = %s\n", key[i], val);
 			}
 			free(val);
+		} else if (len == 0) {
+			printf("%s =\n", key[i]);
 		} else {
-			fprintf(stderr, "%s unset or invalid\n", key[i]);
+			fprintf(stderr, "%s invalid\n", key[i]);
 		}
 	}
 

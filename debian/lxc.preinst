@@ -104,6 +104,11 @@ case "${1}" in
         if [ -d /etc/lxc/auto ]; then
             migrate_auto
         fi
+
+        if [ ! -f /etc/lxc/lxc-usernet ]; then
+            mkdir -p /etc/lxc/
+            echo "# USERNAME TYPE BRIDGE COUNT" > /etc/lxc/lxc-usernet
+        fi
         ;;
     abort-upgrade)
         ;;

@@ -4,7 +4,7 @@
 m4_define([lxc_version_major], 1)
 m4_define([lxc_version_minor], 0)
 m4_define([lxc_version_micro], 0)
-m4_define([lxc_version_beta], [beta2])
+m4_define([lxc_version_beta], [beta3])
 
 m4_define([lxc_version_base], [lxc_version_major.lxc_version_minor.lxc_version_micro])
 m4_define([lxc_version],
@@ -78,7 +78,7 @@ AM_CONDITIONAL([DISTRO_UBUNTU], [test "x$with_distro" = "xubuntu"])
 AC_MSG_CHECKING([for init system type])
 AC_ARG_WITH([init-script],
 	    [AC_HELP_STRING([--with-init-script@<:@=TYPE@<:@,TYPE,...@:>@@:>@],
-			    [Type(s) of init script to install: sysv, systemd, upstart,
+			    [Type(s) of init script to install: sysvinit, systemd, upstart,
 			     distro @<:@default=distro@:>@])],[],[with_init_script=distro])
 case "$with_init_script" in
 	distro)
@@ -87,17 +87,17 @@ case "$with_init_script" in
 				init_script=systemd
 				;;
 			redhat|centos|oracle|oracleserver)
-				init_script=sysv
+				init_script=sysvinit
 				;;
 			debian)
-				init_script=sysv,upstart,systemd
+				init_script=upstart,systemd
 				;;
 			ubuntu)
 				init_script=upstart
 				;;
 			*)
-				echo -n "Linux distribution init system unknown, defaulting to sysv"
-				init_script=sysv
+				echo -n "Linux distribution init system unknown."
+				init_script=
 				;;
 		esac
 		;;
@@ -110,7 +110,7 @@ esac
 (IFS="," ; for init_sys in $init_script;
 do
 	case "$init_sys" in
-		none|sysv|systemd|upstart)
+		none|sysvinit|systemd|upstart)
 			;;
 		*)
 			exit 1
@@ -118,7 +118,7 @@ do
 	esac
 done) || AC_MSG_ERROR([Unknown init system type in $init_script])
 
-AM_CONDITIONAL([INIT_SCRIPT_SYSV], [echo "$init_script" |grep -q "sysv"])
+AM_CONDITIONAL([INIT_SCRIPT_SYSV], [echo "$init_script" |grep -q "sysvinit"])
 AM_CONDITIONAL([INIT_SCRIPT_SYSTEMD], [echo "$init_script" |grep -q "systemd"])
 AM_CONDITIONAL([INIT_SCRIPT_UPSTART], [echo "$init_script" |grep -q "upstart"])
 AC_MSG_RESULT($init_script)
@@ -238,6 +238,23 @@ AM_COND_IF([ENABLE_SECCOMP],
 		AC_CHECK_LIB([seccomp], [seccomp_init],[],[AC_MSG_ERROR([You must install the seccomp development package in order to compile lxc])])
 		AC_SUBST([SECCOMP_LIBS], [-lseccomp])
 		])
+	])
+
+# cgmanager
+AC_ARG_ENABLE([cgmanager],
+	[AC_HELP_STRING([--enable-cgmanager], [enable cgmanager support [default=auto]])],
+	[], [enable_cgmanager=auto])
+
+if test "x$enable_cgmanager" = "xauto" ; then
+	AC_CHECK_LIB([cgmanager],[cgmanager_create],[enable_cgmanager=yes],[enable_cgmanager=no])
+fi
+AM_CONDITIONAL([ENABLE_CGMANAGER], [test "x$enable_cgmanager" = "xyes"])
+
+AM_COND_IF([ENABLE_CGMANAGER],
+	[PKG_CHECK_MODULES([CGMANAGER], [libcgmanager])
+	PKG_CHECK_MODULES([NIH], [libnih >= 1.0.2])
+	PKG_CHECK_MODULES([NIH_DBUS], [libnih-dbus >= 1.0.0])
+	PKG_CHECK_MODULES([DBUS], [dbus-1 >= 1.2.16])
 	])
 
 # Linux capabilities
@@ -367,6 +384,12 @@ AM_COND_IF([ENABLE_LUA],
 	PKG_CHECK_VAR([LUA_INSTALL_LMOD], [$LUAPKGCONFIG], [INSTALL_LMOD],,
 		[LUA_INSTALL_LMOD=$datadir/lua/$LUA_VERSION])
 	])
+
+# Optional bash integration
+AC_ARG_ENABLE([bash],
+	[AC_HELP_STRING([--enable-bash], [build bash integration [default=yes]])],
+	[], [enable_bash=yes])
+AM_CONDITIONAL([ENABLE_BASH], [test "x$enable_bash" = "xyes"])
 
 # Optional test binaries
 AC_ARG_ENABLE([tests],
@@ -530,10 +553,21 @@ AC_CONFIG_FILES([
 	lxc.spec
 
 	config/Makefile
+	config/apparmor/Makefile
+	config/bash/Makefile
+	config/bash/lxc
+	config/init/Makefile
+	config/init/sysvinit/Makefile
+	config/init/systemd/Makefile
+	config/init/upstart/Makefile
 	config/etc/Makefile
 	config/templates/Makefile
+	config/templates/centos.common.conf
+	config/templates/centos.userns.conf
 	config/templates/debian.common.conf
 	config/templates/debian.userns.conf
+	config/templates/fedora.common.conf
+	config/templates/fedora.userns.conf
 	config/templates/oracle.common.conf
 	config/templates/oracle.userns.conf
 	config/templates/plamo.common.conf
@@ -552,8 +586,8 @@ AC_CONFIG_FILES([
 	doc/lxc-autostart.sgml
 	doc/lxc-cgroup.sgml
 	doc/lxc-checkconfig.sgml
-	doc/lxc-checkpoint.sgml
 	doc/lxc-clone.sgml
+	doc/lxc-config.sgml
 	doc/lxc-console.sgml
 	doc/lxc-create.sgml
 	doc/lxc-destroy.sgml
@@ -561,12 +595,8 @@ AC_CONFIG_FILES([
 	doc/lxc-execute.sgml
 	doc/lxc-freeze.sgml
 	doc/lxc-info.sgml
-	doc/lxc-kill.sgml
 	doc/lxc-ls.sgml
 	doc/lxc-monitor.sgml
-	doc/lxc-netstat.sgml
-	doc/lxc-ps.sgml
-	doc/lxc-restart.sgml
 	doc/lxc-snapshot.sgml
 	doc/lxc-start-ephemeral.sgml
 	doc/lxc-start.sgml
@@ -575,10 +605,12 @@ AC_CONFIG_FILES([
 	doc/lxc-unfreeze.sgml
 	doc/lxc-unshare.sgml
 	doc/lxc-user-nic.sgml
-	doc/lxc-version.sgml
+	doc/lxc-usernsexec.sgml
 	doc/lxc-wait.sgml
 
 	doc/lxc.conf.sgml
+	doc/lxc.container.conf.sgml
+	doc/lxc.system.conf.sgml
 	doc/lxc-usernet.sgml
 	doc/lxc.sgml
 	doc/common_options.sgml
@@ -601,8 +633,8 @@ AC_CONFIG_FILES([
 	doc/ja/lxc-autostart.sgml
 	doc/ja/lxc-cgroup.sgml
 	doc/ja/lxc-checkconfig.sgml
-	doc/ja/lxc-checkpoint.sgml
 	doc/ja/lxc-clone.sgml
+	doc/ja/lxc-config.sgml
 	doc/ja/lxc-console.sgml
 	doc/ja/lxc-create.sgml
 	doc/ja/lxc-destroy.sgml
@@ -610,12 +642,8 @@ AC_CONFIG_FILES([
 	doc/ja/lxc-execute.sgml
 	doc/ja/lxc-freeze.sgml
 	doc/ja/lxc-info.sgml
-	doc/ja/lxc-kill.sgml
 	doc/ja/lxc-ls.sgml
 	doc/ja/lxc-monitor.sgml
-	doc/ja/lxc-netstat.sgml
-	doc/ja/lxc-ps.sgml
-	doc/ja/lxc-restart.sgml
 	doc/ja/lxc-snapshot.sgml
 	doc/ja/lxc-start-ephemeral.sgml
 	doc/ja/lxc-start.sgml
@@ -624,10 +652,12 @@ AC_CONFIG_FILES([
 	doc/ja/lxc-unfreeze.sgml
 	doc/ja/lxc-unshare.sgml
 	doc/ja/lxc-user-nic.sgml
-	doc/ja/lxc-version.sgml
+	doc/ja/lxc-usernsexec.sgml
 	doc/ja/lxc-wait.sgml
 
 	doc/ja/lxc.conf.sgml
+	doc/ja/lxc.container.conf.sgml
+	doc/ja/lxc.system.conf.sgml
 	doc/ja/lxc-usernet.sgml
 	doc/ja/lxc.sgml
 	doc/ja/common_options.sgml
@@ -656,10 +686,7 @@ AC_CONFIG_FILES([
 
 	src/Makefile
 	src/lxc/Makefile
-	src/lxc/lxc-ps
-	src/lxc/lxc-netstat
 	src/lxc/lxc-checkconfig
-	src/lxc/lxc-version
 	src/lxc/lxc-start-ephemeral
 	src/lxc/legacy/lxc-ls
 	src/lxc/lxc.functions
@@ -669,6 +696,7 @@ AC_CONFIG_FILES([
 	src/lua-lxc/Makefile
 
 	src/tests/Makefile
+	src/tests/lxc-test-usernic
 ])
 AC_CONFIG_COMMANDS([default],[[]],[[]])
 AC_OUTPUT
@@ -683,12 +711,14 @@ Environment:
  - init script type(s): $init_script
  - rpath: $enable_rpath
  - GnuTLS: $enable_gnutls
+ - Bash integration: $enable_bash
 
 Security features:
  - Apparmor: $enable_apparmor
  - Linux capabilities: $enable_capabilities
  - seccomp: $enable_seccomp
  - SELinux: $enable_selinux
+ - cgmanager: $enable_cgmanager
 
 Bindings:
  - lua: $enable_lua

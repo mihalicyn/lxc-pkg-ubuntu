@@ -56,6 +56,8 @@ static inline int setns(int fd, int nstype)
 {
 #ifdef __NR_setns
 	return syscall(__NR_setns, fd, nstype);
+#elif defined(__NR_set_ns)
+	return syscall(__NR_set_ns, fd, nstype);
 #else
 	errno = ENOSYS;
 	return -1;
@@ -260,4 +262,7 @@ extern void **lxc_append_null_to_array(void **array, size_t count);
 //initialize rand with urandom
 extern int randseed(bool);
 
+inline static bool am_unpriv(void) {
+	return geteuid() != 0;
+}
 #endif

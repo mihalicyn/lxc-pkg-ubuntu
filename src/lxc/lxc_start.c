@@ -211,7 +211,6 @@ int main(int argc, char *argv[])
 		"/sbin/init",
 		'\0',
 	};
-	FILE *pid_fp = NULL;
 	struct lxc_container *c;
 
 	lxc_list_init(&defines);
@@ -302,10 +301,8 @@ int main(int argc, char *argv[])
 	}
 
 	if (my_args.pidfile != NULL) {
-		pid_fp = fopen(my_args.pidfile, "w");
-		if (pid_fp == NULL) {
-			SYSERROR("failed to create pidfile '%s' for '%s'",
-				 my_args.pidfile, my_args.name);
+		if (ensure_path(&c->pidfile, my_args.pidfile) < 0) {
+			ERROR("failed to ensure pidfile '%s'", my_args.pidfile);
 			goto out;
 		}
 	}
@@ -329,27 +326,12 @@ int main(int argc, char *argv[])
 		c->want_daemonize(c, false);
 	}
 
-	if (pid_fp != NULL) {
-		if (fprintf(pid_fp, "%d\n", getpid()) < 0) {
-			SYSERROR("failed to write '%s'", my_args.pidfile);
-			goto out;
-		}
-		fclose(pid_fp);
-		pid_fp = NULL;
-	}
-
 	if (my_args.close_all_fds)
 		c->want_close_all_fds(c, true);
 
 	err = c->start(c, 0, args) ? 0 : -1;
-
-	if (my_args.pidfile)
-		unlink(my_args.pidfile);
-
 out:
 	lxc_container_put(c);
-	if (pid_fp)
-		fclose(pid_fp);
 	return err;
 }
 

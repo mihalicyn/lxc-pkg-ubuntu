@@ -843,6 +843,10 @@ Container_get_config_item(Container *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
+    if (len == 0) {
+        return PyUnicode_FromString("");
+    }
+
     char* value = (char*) malloc(sizeof(char)*len + 1);
     if (value == NULL)
         return PyErr_NoMemory();
@@ -1031,6 +1035,23 @@ static PyObject *
 Container_reboot(Container *self, PyObject *args, PyObject *kwds)
 {
     if (self->container->reboot(self->container)) {
+        Py_RETURN_TRUE;
+    }
+
+    Py_RETURN_FALSE;
+}
+
+static PyObject *
+Container_rename(Container *self, PyObject *args, PyObject *kwds)
+{
+    char *new_name = NULL;
+    static char *kwlist[] = {"new_name", NULL};
+
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "s|", kwlist,
+                                      &new_name))
+        return NULL;
+
+    if (self->container->rename(self->container, new_name)) {
         Py_RETURN_TRUE;
     }
 
@@ -1529,6 +1550,12 @@ static PyMethodDef Container_methods[] = {
      "\n"
      "Ask the container to reboot."
     },
+    {"rename", (PyCFunction)Container_rename,
+     METH_VARARGS|METH_KEYWORDS,
+     "rename(new_name) -> boolean\n"
+     "\n"
+     "Rename the container."
+    },
     {"remove_device_node", (PyCFunction)Container_remove_device_node,
      METH_VARARGS|METH_KEYWORDS,
      "remove_device_node(src_path, dest_path) -> boolean\n"
@@ -1740,8 +1767,10 @@ PyInit__lxc(void)
     PYLXC_EXPORT_CONST(LXC_ATTACH_SET_PERSONALITY);
 
     /* clone: clone flags */
+    PYLXC_EXPORT_CONST(LXC_CLONE_KEEPBDEVTYPE);
     PYLXC_EXPORT_CONST(LXC_CLONE_KEEPMACADDR);
     PYLXC_EXPORT_CONST(LXC_CLONE_KEEPNAME);
+    PYLXC_EXPORT_CONST(LXC_CLONE_MAYBE_SNAPSHOT);
     PYLXC_EXPORT_CONST(LXC_CLONE_SNAPSHOT);
 
     /* create: create flags */

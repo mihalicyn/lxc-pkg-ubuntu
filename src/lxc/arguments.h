@@ -57,11 +57,6 @@ struct lxc_arguments {
 	/* for lxc-start */
 	const char *share_ns[32]; // size must be greater than LXC_NS_MAX
 
-	/* for lxc-checkpoint/restart */
-	const char *statefile;
-	int statefd;
-	int flags;
-
 	/* for lxc-console */
 	int ttynum;
 	char escape;
@@ -110,6 +105,7 @@ struct lxc_arguments {
 	{"name", required_argument, 0, 'n'}, \
 	{"help", no_argument, 0, 'h'}, \
 	{"usage", no_argument,	0, OPT_USAGE}, \
+	{"version", no_argument,	0, OPT_VERSION}, \
 	{"quiet", no_argument,	0, 'q'}, \
 	{"logfile", required_argument, 0, 'o'}, \
 	{"logpriority", required_argument, 0, 'l'}, \
@@ -118,6 +114,7 @@ struct lxc_arguments {
 
 /* option keys for long only options */
 #define	OPT_USAGE 0x1000
+#define	OPT_VERSION OPT_USAGE-1
 
 extern int lxc_arguments_parse(struct lxc_arguments *args,
 			       int argc, char *const argv[]);

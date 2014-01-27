@@ -31,7 +31,7 @@
 BuildRequires: systemd-units
 %else
 %global with_systemd 0
-%define init_script sysv
+%define init_script sysvinit
 %endif
 
 # RPM needs alpha/beta/rc in Release: not Version: to ensure smooth
@@ -54,7 +54,7 @@ Group: Applications/System
 License: LGPLv2+
 BuildRoot: %{_tmppath}/%{name}-%{version}-build
 Requires: openssl rsync
-BuildRequires: libcap libcap-devel docbook2X
+BuildRequires: libcap libcap-devel docbook2X graphviz
 
 %if %{with_python}
 Requires: python3
@@ -89,7 +89,7 @@ development of the Linux containers.
 %package	lua
 Summary:	Lua bindings for %{name}
 Group:		System Environment/Libraries
-Requires:	lua-filesystem
+Requires:	lua-filesystem lua-alt-getopt
 BuildRequires:	lua-devel
 %description	lua
 The %{name}-lua package contains %{name} bindings for lua.
@@ -124,7 +124,6 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root)
 %{_bindir}/*
-%attr(4111,root,root) %{_bindir}/lxc-user-nic
 %{_mandir}/man1/lxc*
 %{_mandir}/man5/lxc*
 %{_mandir}/man7/lxc*
@@ -133,6 +132,7 @@ rm -rf %{buildroot}
 %{_mandir}/ja/man7/lxc*
 %{_datadir}/doc/*
 %{_datadir}/lxc/*
+%{_sysconfdir}/bash_completion.d
 %config(noreplace) %{_sysconfdir}/lxc/*
 
 %if %{with_systemd}
@@ -149,7 +149,9 @@ rm -rf %{buildroot}
 %{_libdir}/python*
 %endif
 %{_localstatedir}/*
+%{_libexecdir}/%{name}
 %attr(4555,root,root) %{_libexecdir}/%{name}/lxc-init
+%attr(4111,root,root) %{_libexecdir}/%{name}/lxc-user-nic
 %if %{with_systemd}
 %attr(555,root,root) %{_libexecdir}/%{name}/lxc-devsetup
 %endif
