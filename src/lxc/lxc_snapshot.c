@@ -16,6 +16,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
+#include "config.h"
 
 #include <stdio.h>
 #include <libgen.h>
@@ -32,7 +33,7 @@
 #include "arguments.h"
 #include "utils.h"
 
-lxc_log_define(lxc_snapshot, lxc);
+lxc_log_define(lxc_snapshot_ui, lxc);
 
 static char *newname;
 static char *snapshot;
@@ -186,6 +187,7 @@ int main(int argc, char *argv[])
 	if (lxc_log_init(my_args.name, my_args.log_file, my_args.log_priority,
 			 my_args.progname, my_args.quiet, my_args.lxcpath[0]))
 		exit(1);
+	lxc_log_options_no_override();
 
 	if (geteuid()) {
 		if (access(my_args.lxcpath[0], O_RDWR) < 0) {

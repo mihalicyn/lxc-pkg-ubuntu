@@ -27,6 +27,19 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 #
 
+# Detect use under userns (unsupported)
+for arg in "$@"; do
+    [ "$arg" == "--" ] && break
+    if [ "$arg" == "--mapped-uid" -o "$arg" == "--mapped-gid" ]; then
+        echo "This template can't be used for unprivileged containers." 1>&2
+        echo "You may want to try the \"download\" template instead." 1>&2
+        exit 1
+    fi
+done
+
+# Make sure the usual locations are in PATH
+export PATH=$PATH:/usr/sbin:/usr/bin:/sbin:/bin
+
 # use virbr0 that is setup by default by libvirtd
 lxc_network_type=veth
 lxc_network_link=virbr0
@@ -382,7 +395,7 @@ container_config_create()
     # generate a hwaddr for the container with a high mac address
     # see http://sourceforge.net/tracker/?func=detail&aid=3411497&group_id=163076&atid=826303
     local hwaddr="fe:`dd if=/dev/urandom bs=8 count=1 2>/dev/null |od -t x8 | \
-                      head -1 |awk '{print $2}' | cut -c1-10 |\
+                      head -n 1 |awk '{print $2}' | cut -c1-10 |\
                       sed 's/\(..\)/\1:/g; s/.$//'`"
     cat <<EOF >> $cfg_dir/config || die "unable to create $cfg_dir/config"
 # Container configuration for Oracle Linux $container_release_major.$container_release_minor

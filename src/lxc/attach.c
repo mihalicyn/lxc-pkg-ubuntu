@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <grp.h>
 #include <sys/param.h>
 #include <sys/prctl.h>
 #include <sys/mount.h>
@@ -698,32 +699,8 @@ int lxc_attach(const char* name, const char* lxcpath, lxc_attach_exec_t exec_fun
 
 		/* attach to cgroup, if requested */
 		if (options->attach_flags & LXC_ATTACH_MOVE_TO_CGROUP) {
-			struct cgroup_meta_data *meta_data;
-			struct cgroup_process_info *container_info;
-
-			meta_data = lxc_cgroup_load_meta();
-			if (!meta_data) {
-				ERROR("could not move attached process %ld to cgroup of container", (long)pid);
+			if (!cgroup_attach(name, lxcpath, pid))
 				goto cleanup_error;
-			}
-
-			container_info = lxc_cgroup_get_container_info(name, lxcpath, meta_data);
-			lxc_cgroup_put_meta(meta_data);
-			if (!container_info) {
-				ERROR("could not move attached process %ld to cgroup of container", (long)pid);
-				goto cleanup_error;
-			}
-
-			/*
-			 * TODO - switch over to using a cgroup_operation.  We can't use
-			 * cgroup_enter() as that takes a handler.
-			 */
-			ret = lxc_cgroupfs_enter(container_info, pid, false);
-			lxc_cgroup_process_info_free(container_info);
-			if (ret < 0) {
-				ERROR("could not move attached process %ld to cgroup of container", (long)pid);
-				goto cleanup_error;
-			}
 		}
 
 		/* Let the child process know to go ahead */
@@ -967,10 +944,12 @@ static int attach_child_main(void* data)
 		new_gid = options->gid;
 
 	/* try to set the uid/gid combination */
-	if ((new_gid != 0 || options->namespaces & CLONE_NEWUSER) && setgid(new_gid)) {
-		SYSERROR("switching to container gid");
-		shutdown(ipc_socket, SHUT_RDWR);
-		rexit(-1);
+	if ((new_gid != 0 || options->namespaces & CLONE_NEWUSER)) {
+		if (setgid(new_gid) || setgroups(0, NULL)) {
+			SYSERROR("switching to container gid");
+			shutdown(ipc_socket, SHUT_RDWR);
+			rexit(-1);
+		}
 	}
 	if ((new_uid != 0 || options->namespaces & CLONE_NEWUSER) && setuid(new_uid)) {
 		SYSERROR("switching to container uid");

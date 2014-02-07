@@ -24,7 +24,6 @@
 #include "config.h"
 
 #include <stdio.h>
-#undef _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -33,6 +32,8 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <termios.h>
+#include <grp.h>
+#include <poll.h>
 #include <sys/param.h>
 #include <sys/file.h>
 #include <sys/mount.h>
@@ -43,7 +44,6 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/un.h>
-#include <sys/poll.h>
 #include <sys/syscall.h>
 
 #if HAVE_SYS_CAPABILITY_H
@@ -584,6 +584,10 @@ static int do_start(void *data)
 		}
 		if (setuid(0)) {
 			SYSERROR("setuid");
+			goto out_warn_father;
+		}
+		if (setgroups(0, NULL)) {
+			SYSERROR("setgroups");
 			goto out_warn_father;
 		}
 	}

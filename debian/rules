@@ -16,7 +16,7 @@ override_dh_auto_configure:
 	dh_auto_configure -- --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
 		--libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
 		--with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc \
-		--enable-python $(shell DEB_CFLAGS_MAINT_APPEND="$$(python3-config --includes)" dpkg-buildflags --export=configure) \
+		--enable-python $(shell dpkg-buildflags --export=configure) \
 		--enable-doc --disable-rpath --enable-apparmor --enable-selinux \
 		--disable-lua --enable-tests --with-distro=ubuntu
 

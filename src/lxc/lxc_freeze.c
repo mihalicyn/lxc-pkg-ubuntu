@@ -33,7 +33,7 @@
 
 #include "arguments.h"
 
-lxc_log_define(lxc_freeze_ui, lxc_cgroup);
+lxc_log_define(lxc_freeze_ui, lxc);
 
 static const struct option my_longopts[] = {
 	LXC_COMMON_OPTIONS
@@ -66,6 +66,7 @@ int main(int argc, char *argv[])
 	if (lxc_log_init(my_args.name, my_args.log_file, my_args.log_priority,
 			 my_args.progname, my_args.quiet, my_args.lxcpath[0]))
 		exit(1);
+	lxc_log_options_no_override();
 
 	c = lxc_container_new(my_args.name, my_args.lxcpath[0]);
 	if (!c) {

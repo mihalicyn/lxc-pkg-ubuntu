@@ -33,7 +33,7 @@
 #include "arguments.h"
 #include "utils.h"
 
-lxc_log_define(lxc_create, lxc);
+lxc_log_define(lxc_create_ui, lxc);
 
 static uint64_t get_fssize(char *s)
 {
@@ -201,6 +201,7 @@ int main(int argc, char *argv[])
 	if (lxc_log_init(my_args.name, my_args.log_file, my_args.log_priority,
 			 my_args.progname, my_args.quiet, my_args.lxcpath[0]))
 		exit(1);
+	lxc_log_options_no_override();
 
 	memset(&spec, 0, sizeof(spec));
 	if (!my_args.bdevtype)

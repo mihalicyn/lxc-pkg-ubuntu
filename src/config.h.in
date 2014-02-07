@@ -124,6 +124,9 @@
 /* Define to 1 if you have the `unshare' function. */
 #undef HAVE_UNSHARE
 
+/* Define to 1 if you have the `utmpxname' function. */
+#undef HAVE_UTMPXNAME
+
 /* Define to 1 if you have the <utmpx.h> header file. */
 #undef HAVE_UTMPX_H
 

@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <string.h>
+#include <strings.h>
 #include <stdbool.h>
 
 #ifndef O_CLOEXEC
@@ -297,4 +298,5 @@ extern const char *lxc_log_get_file(void);
 extern int lxc_log_get_level(void);
 extern bool lxc_log_has_valid_level(void);
 extern const char *lxc_log_get_prefix(void);
+extern void lxc_log_options_no_override();
 #endif

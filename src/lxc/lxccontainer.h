@@ -362,12 +362,10 @@ struct lxc_container {
 	 * SIGPWR.
 	 *
 	 * \param c Container.
-	 * \param timeout Seconds to wait before forcing a hard stop
-	 *  (value must be >0).
+	 * \param timeout Seconds to wait before returning false.
+	 *  (-1 to wait forever, 0 to avoid waiting).
 	 *
-	 * \return \c true if configuration was loaded successfully, else \c false.
-	 *
-	 * \note A \p timeout of \c 0 means do not wait.
+	 * \return \c true if the container was shutdown successfully, else \c false.
 	 */
 	bool (*shutdown)(struct lxc_container *c, int timeout);
 
@@ -409,6 +407,19 @@ struct lxc_container {
 	 *  to \p retv will be truncated.
 	 */
 	int (*get_config_item)(struct lxc_container *c, const char *key, char *retv, int inlen);
+
+
+	/*!
+	 * \brief Retrieve the value of a config item from running container.
+	 *
+	 * \param c Container.
+	 * \param key Name of option to get.
+	 *
+	 * \return the item or NULL on error.
+	 *
+	 * \note Returned string must be freed by the caller.
+	 */
+	char* (*get_running_config_item)(struct lxc_container *c, const char *key);
 
 	/*!
 	 * \brief Retrieve a list of config item keys given a key

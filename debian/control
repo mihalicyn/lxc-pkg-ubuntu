@@ -33,13 +33,13 @@ Depends: adduser,
          python3,
          python3-lxc,
          rsync,
-         uidmap,
          ${misc:Depends},
          ${shlibs:Depends}
 Recommends: cgroup-lite | cgroup-bin,
             libcap2-bin,
             lxc-templates (>= 0.8.0~rc1-4ubuntu43),
-            openssl
+            openssl,
+            uidmap
 Suggests: btrfs-tools, lvm2, lxctl
 Description: Linux Containers userspace tools
  Containers are insulated areas inside a system, which have their own namespace
@@ -127,8 +127,8 @@ Package: python3-lxc
 Architecture: linux-any
 Section: python
 Depends: liblxc0 (=${binary:Version}),
-         ${python3:Depends},
          ${misc:Depends},
+         ${python3:Depends},
          ${shlibs:Depends}
 Recommends: lxc-templates (>= 0.8.0~rc1-4ubuntu43)
 Description: Linux Containers userspace tools (Python 3.x bindings)

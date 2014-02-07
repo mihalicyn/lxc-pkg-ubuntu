@@ -34,6 +34,7 @@
 #include <arpa/inet.h>
 #include <libgen.h>
 #include <stdint.h>
+#include <grp.h>
 
 #include <lxc/lxccontainer.h>
 #include <lxc/version.h>
@@ -976,6 +977,7 @@ static bool create_run_template(struct lxc_container *c, char *tpath, bool quiet
 		if (geteuid() != 0 && !lxc_list_empty(&conf->id_map)) {
 			int n2args = 1;
 			char txtuid[20];
+			char txtgid[20];
 			char **n2 = malloc(n2args * sizeof(*n2));
 			struct lxc_list *it;
 			struct id_map *map;
@@ -1003,13 +1005,13 @@ static bool create_run_template(struct lxc_container *c, char *tpath, bool quiet
 				if (ret < 0 || ret >= 200)
 					exit(1);
 			}
-			int hostid_mapped = mapped_hostid(geteuid(), conf);
+			int hostid_mapped = mapped_hostid(geteuid(), conf, ID_TYPE_UID);
 			int extraargs = hostid_mapped >= 0 ? 1 : 3;
 			n2 = realloc(n2, (nargs + n2args + extraargs) * sizeof(char *));
 			if (!n2)
 				exit(1);
 			if (hostid_mapped < 0) {
-				hostid_mapped = find_unmapped_nsuid(conf);
+				hostid_mapped = find_unmapped_nsuid(conf, ID_TYPE_UID);
 				n2[n2args++] = "-m";
 				if (hostid_mapped < 0) {
 					ERROR("Could not find free uid to map");
@@ -1027,22 +1029,49 @@ static bool create_run_template(struct lxc_container *c, char *tpath, bool quiet
 					exit(1);
 				}
 			}
+			int hostgid_mapped = mapped_hostid(getegid(), conf, ID_TYPE_GID);
+			extraargs = hostgid_mapped >= 0 ? 1 : 3;
+			n2 = realloc(n2, (nargs + n2args + extraargs) * sizeof(char *));
+			if (!n2)
+				exit(1);
+			if (hostgid_mapped < 0) {
+				hostgid_mapped = find_unmapped_nsuid(conf, ID_TYPE_GID);
+				n2[n2args++] = "-m";
+				if (hostgid_mapped < 0) {
+					ERROR("Could not find free uid to map");
+					exit(1);
+				}
+				n2[n2args++] = malloc(200);
+				if (!n2[n2args-1]) {
+					SYSERROR("out of memory");
+					exit(1);
+				}
+				ret = snprintf(n2[n2args-1], 200, "g:%d:%d:1",
+					hostgid_mapped, getegid());
+				if (ret < 0 || ret >= 200) {
+					ERROR("string too long");
+					exit(1);
+				}
+			}
 			n2[n2args++] = "--";
 			for (i = 0; i < nargs; i++)
 				n2[i + n2args] = newargv[i];
 			n2args += nargs;
 			// Finally add "--mapped-uid $uid" to tell template what to chown
 			// cached images to
-			n2args += 2;
+			n2args += 4;
 			n2 = realloc(n2, n2args * sizeof(char *));
 			if (!n2) {
 				SYSERROR("out of memory");
 				exit(1);
 			}
 			// note n2[n2args-1] is NULL
-			n2[n2args-3] = "--mapped-uid";
+			n2[n2args-5] = "--mapped-uid";
 			snprintf(txtuid, 20, "%d", hostid_mapped);
-			n2[n2args-2] = txtuid;
+			n2[n2args-4] = txtuid;
+			n2[n2args-3] = "--mapped-gid";
+			snprintf(txtgid, 20, "%d", hostgid_mapped);
+			n2[n2args-2] = txtgid;
 			n2[n2args-1] = NULL;
 			free(newargv);
 			newargv = n2;
@@ -1338,8 +1367,6 @@ static bool lxcapi_shutdown(struct lxc_container *c, int timeout)
 	if (!c)
 		return false;
 
-	if (!timeout)
-		timeout = -1;
 	if (!c->is_running(c))
 		return true;
 	pid = c->init_pid(c);
@@ -1349,10 +1376,6 @@ static bool lxcapi_shutdown(struct lxc_container *c, int timeout)
 		haltsignal = c->lxc_conf->haltsignal;
 	kill(pid, haltsignal);
 	retv = c->wait(c, "STOPPED", timeout);
-	if (!retv && timeout > 0) {
-		c->stop(c);
-		retv = c->wait(c, "STOPPED", 0); // 0 means don't wait
-	}
 	return retv;
 }
 
@@ -1734,6 +1757,19 @@ static int lxcapi_get_config_item(struct lxc_container *c, const char *key, char
 	if (container_mem_lock(c))
 		return -1;
 	ret = lxc_get_config_item(c->lxc_conf, key, retv, inlen);
+	container_mem_unlock(c);
+	return ret;
+}
+
+static char* lxcapi_get_running_config_item(struct lxc_container *c, const char *key)
+{
+	char *ret;
+
+	if (!c || !c->lxc_conf)
+		return NULL;
+	if (container_mem_lock(c))
+		return NULL;
+	ret = lxc_cmd_get_config_item(c->name, key, c->get_config_path(c));
 	container_mem_unlock(c);
 	return ret;
 }
@@ -2434,6 +2470,8 @@ static int clone_update_rootfs(struct clone_update_data *data)
 		ERROR("Failed to setuid to 0");
 		return -1;
 	}
+	if (setgroups(0, NULL) < 0)
+		WARN("Failed to clear groups");
 
 	if (unshare(CLONE_NEWNS) < 0)
 		return -1;
@@ -3219,8 +3257,8 @@ struct lxc_container *lxc_container_new(const char *name, const char *configpath
 		goto err;
 	}
 
-	if (file_exists(c->configfile))
-		lxcapi_load_config(c, NULL);
+	if (file_exists(c->configfile) && !lxcapi_load_config(c, NULL))
+		goto err;
 
 	if (ongoing_create(c) == 2) {
 		ERROR("Error: %s creation was not completed", c->name);
@@ -3259,6 +3297,7 @@ struct lxc_container *lxc_container_new(const char *name, const char *configpath
 	c->clear_config = lxcapi_clear_config;
 	c->clear_config_item = lxcapi_clear_config_item;
 	c->get_config_item = lxcapi_get_config_item;
+	c->get_running_config_item = lxcapi_get_running_config_item;
 	c->get_cgroup_item = lxcapi_get_cgroup_item;
 	c->set_cgroup_item = lxcapi_set_cgroup_item;
 	c->get_config_path = lxcapi_get_config_path;

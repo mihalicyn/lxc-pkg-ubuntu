@@ -20,9 +20,9 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#define _GNU_SOURCE
+#include "config.h"
+
 #include <stdio.h>
-#undef _GNU_SOURCE
 #include <libgen.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -48,7 +48,6 @@
 #include "conf.h"
 #include "cgroup.h"
 #include "utils.h"
-#include "config.h"
 #include "confile.h"
 #include "arguments.h"
 
@@ -56,7 +55,7 @@
 #define OPT_SHARE_IPC OPT_USAGE+2
 #define OPT_SHARE_UTS OPT_USAGE+3
 
-lxc_log_define(lxc_start_ui, lxc_start);
+lxc_log_define(lxc_start_ui, lxc);
 
 static struct lxc_list defines;
 
@@ -229,6 +228,7 @@ int main(int argc, char *argv[])
 	if (lxc_log_init(my_args.name, my_args.log_file, my_args.log_priority,
 			 my_args.progname, my_args.quiet, my_args.lxcpath[0]))
 		return err;
+	lxc_log_options_no_override();
 
 	const char *lxcpath = my_args.lxcpath[0];
 

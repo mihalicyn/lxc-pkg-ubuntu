@@ -20,9 +20,9 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#define _GNU_SOURCE
+#include "config.h"
+
 #include <stdio.h>
-#undef _GNU_SOURCE
 #include <stdlib.h>
 #include <stdarg.h>
 #include <errno.h>
@@ -60,11 +60,9 @@
 #include "network.h"
 #include "error.h"
 #include "parse.h"
-#include "config.h"
 #include "utils.h"
 #include "conf.h"
 #include "log.h"
-#include "lxc.h"	/* for lxc_cgroup_set() */
 #include "caps.h"       /* for lxc_caps_last_cap() */
 #include "bdev.h"
 #include "cgroup.h"
@@ -425,9 +423,11 @@ static int find_fstype_cb(char* buffer, void *data)
 	struct cbarg {
 		const char *rootfs;
 		const char *target;
-		int mntopt;
+		const char *options;
 	} *cbarg = data;
 
+	unsigned long mntflags;
+	char *mntdata;
 	char *fstype;
 
 	/* we don't try 'nodev' entries */
@@ -441,10 +441,17 @@ static int find_fstype_cb(char* buffer, void *data)
 	DEBUG("trying to mount '%s'->'%s' with fstype '%s'",
 	      cbarg->rootfs, cbarg->target, fstype);
 
-	if (mount(cbarg->rootfs, cbarg->target, fstype, cbarg->mntopt, NULL)) {
+	if (parse_mntopts(cbarg->options, &mntflags, &mntdata) < 0) {
+		free(mntdata);
+		return -1;
+	}
+
+	if (mount(cbarg->rootfs, cbarg->target, fstype, mntflags, mntdata)) {
 		DEBUG("mount failed with error: %s", strerror(errno));
+		free(mntdata);
 		return 0;
 	}
+	free(mntdata);
 
 	INFO("mounted '%s' on '%s', with fstype '%s'",
 	     cbarg->rootfs, cbarg->target, fstype);
@@ -452,18 +459,19 @@ static int find_fstype_cb(char* buffer, void *data)
 	return 1;
 }
 
-static int mount_unknow_fs(const char *rootfs, const char *target, int mntopt)
+static int mount_unknown_fs(const char *rootfs, const char *target,
+			                const char *options)
 {
 	int i;
 
 	struct cbarg {
 		const char *rootfs;
 		const char *target;
-		int mntopt;
+		const char *options;
 	} cbarg = {
 		.rootfs = rootfs,
 		.target = target,
-		.mntopt = mntopt,
+		.options = options,
 	};
 
 	/*
@@ -497,9 +505,22 @@ static int mount_unknow_fs(const char *rootfs, const char *target, int mntopt)
 	return -1;
 }
 
-static int mount_rootfs_dir(const char *rootfs, const char *target)
+static int mount_rootfs_dir(const char *rootfs, const char *target,
+			                const char *options)
 {
-	return mount(rootfs, target, "none", MS_BIND | MS_REC, NULL);
+	unsigned long mntflags;
+	char *mntdata;
+	int ret;
+
+	if (parse_mntopts(options, &mntflags, &mntdata) < 0) {
+		free(mntdata);
+		return -1;
+	}
+
+	ret = mount(rootfs, target, "none", MS_BIND | MS_REC | mntflags, mntdata);
+	free(mntdata);
+
+	return ret;
 }
 
 static int setup_lodev(const char *rootfs, int fd, struct loop_info64 *loinfo)
@@ -534,7 +555,8 @@ out:
 	return ret;
 }
 
-static int mount_rootfs_file(const char *rootfs, const char *target)
+static int mount_rootfs_file(const char *rootfs, const char *target,
+				             const char *options)
 {
 	struct dirent dirent, *direntp;
 	struct loop_info64 loinfo;
@@ -586,7 +608,7 @@ static int mount_rootfs_file(const char *rootfs, const char *target)
 
 		ret = setup_lodev(rootfs, fd, &loinfo);
 		if (!ret)
-			ret = mount_unknow_fs(path, target, 0);
+			ret = mount_unknown_fs(path, target, options);
 		close(fd);
 
 		break;
@@ -598,9 +620,10 @@ static int mount_rootfs_file(const char *rootfs, const char *target)
 	return ret;
 }
 
-static int mount_rootfs_block(const char *rootfs, const char *target)
+static int mount_rootfs_block(const char *rootfs, const char *target,
+			                  const char *options)
 {
-	return mount_unknow_fs(rootfs, target, 0);
+	return mount_unknown_fs(rootfs, target, options);
 }
 
 /*
@@ -646,7 +669,7 @@ int pin_rootfs(const char *rootfs)
 	return fd;
 }
 
-static int lxc_mount_auto_mounts(struct lxc_conf *conf, int flags, struct lxc_cgroup_info *cgroup_info)
+static int lxc_mount_auto_mounts(struct lxc_conf *conf, int flags, struct lxc_handler *handler)
 {
 	int r;
 	size_t i;
@@ -720,8 +743,8 @@ static int lxc_mount_auto_mounts(struct lxc_conf *conf, int flags, struct lxc_cg
 	}
 
 	if (flags & LXC_AUTO_CGROUP_MASK) {
-		r = lxc_setup_mount_cgroup(conf->rootfs.mount, cgroup_info, flags & LXC_AUTO_CGROUP_MASK);
-		if (r < 0) {
+		if (!cgroup_mount(conf->rootfs.mount, handler,
+				  flags & LXC_AUTO_CGROUP_MASK)) {
 			SYSERROR("error mounting /sys/fs/cgroup");
 			return -1;
 		}
@@ -730,13 +753,13 @@ static int lxc_mount_auto_mounts(struct lxc_conf *conf, int flags, struct lxc_cg
 	return 0;
 }
 
-static int mount_rootfs(const char *rootfs, const char *target)
+static int mount_rootfs(const char *rootfs, const char *target, const char *options)
 {
 	char absrootfs[MAXPATHLEN];
 	struct stat s;
 	int i;
 
-	typedef int (*rootfs_cb)(const char *, const char *);
+	typedef int (*rootfs_cb)(const char *, const char *, const char *);
 
 	struct rootfs_type {
 		int type;
@@ -767,7 +790,7 @@ static int mount_rootfs(const char *rootfs, const char *target)
 		if (!__S_ISTYPE(s.st_mode, rtfs_type[i].type))
 			continue;
 
-		return rtfs_type[i].cb(absrootfs, target);
+		return rtfs_type[i].cb(absrootfs, target, options);
 	}
 
 	ERROR("unsupported rootfs type for '%s'", absrootfs);
@@ -1322,7 +1345,7 @@ static int mount_autodev(const char *name, char *root, const char *lxcpath)
 		/* Only mount a tmpfs on here if we don't already a mount */
 		if ( ! mount_check_fs( host_path, NULL ) ) {
 			DEBUG("Mounting tmpfs to %s", host_path );
-			ret = mount("none", path, "tmpfs", 0, "size=100000");
+			ret = mount("none", path, "tmpfs", 0, "size=100000,mode=755");
 		} else {
 			/* This allows someone to manually set up a mount */
 			DEBUG("Bind mounting %s to %s", host_path, path );
@@ -1472,7 +1495,7 @@ static int chroot_into_slave(struct lxc_conf *conf)
 		SYSERROR("failed to make %s slave", destpath);
 		return -1;
 	}
-	if (mount("none", destpath, "tmpfs", 0, "size=10000")) {
+	if (mount("none", destpath, "tmpfs", 0, "size=10000,mode=755")) {
 		SYSERROR("Failed to mount tmpfs / at %s", destpath);
 		return -1;
 	}
@@ -1531,7 +1554,7 @@ static int setup_rootfs(struct lxc_conf *conf)
 	}
 
 	// First try mounting rootfs using a bdev
-	struct bdev *bdev = bdev_init(rootfs->path, rootfs->mount, NULL);
+	struct bdev *bdev = bdev_init(rootfs->path, rootfs->mount, rootfs->options);
 	if (bdev && bdev->ops->mount(bdev) == 0) {
 		bdev_put(bdev);
 		DEBUG("mounted '%s' on '%s'", rootfs->path, rootfs->mount);
@@ -1539,7 +1562,7 @@ static int setup_rootfs(struct lxc_conf *conf)
 	}
 	if (bdev)
 		bdev_put(bdev);
-	if (mount_rootfs(rootfs->path, rootfs->mount)) {
+	if (mount_rootfs(rootfs->path, rootfs->mount, rootfs->options)) {
 		ERROR("failed to mount rootfs");
 		return -1;
 	}
@@ -1792,7 +1815,7 @@ static void parse_mntopt(char *opt, unsigned long *flags, char **data)
 	strcat(*data, opt);
 }
 
-static int parse_mntopts(const char *mntopts, unsigned long *mntflags,
+int parse_mntopts(const char *mntopts, unsigned long *mntflags,
 			 char **mntdata)
 {
 	char *s, *data;
@@ -1866,11 +1889,6 @@ static inline int mount_entry_on_systemfs(const struct mntent *mntent)
 	FILE *pathfile = NULL;
 	char* pathdirname = NULL;
 
-	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
-		ERROR("failed to parse mount option '%s'", mntent->mnt_opts);
-		return -1;
-	}
-
 	if (hasmntopt(mntent, "create=dir")) {
 		if (!mkdir_p(mntent->mnt_dir, 0755)) {
 			WARN("Failed to create mount target '%s'", mntent->mnt_dir);
@@ -1889,6 +1907,11 @@ static inline int mount_entry_on_systemfs(const struct mntent *mntent)
 		}
 		else
 			fclose(pathfile);
+	}
+
+	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
+		free(mntdata);
+		return -1;
 	}
 
 	ret = mount_entry(mntent->mnt_fsname, mntent->mnt_dir,
@@ -1915,11 +1938,6 @@ static int mount_entry_on_absolute_rootfs(const struct mntent *mntent,
 	const char *lxcpath;
 	FILE *pathfile = NULL;
 	char *pathdirname = NULL;
-
-	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
-		ERROR("failed to parse mount option '%s'", mntent->mnt_opts);
-		return -1;
-	}
 
 	lxcpath = lxc_global_config_value("lxc.lxcpath");
 	if (!lxcpath) {
@@ -1977,15 +1995,21 @@ skipabs:
 			fclose(pathfile);
 	}
 
+	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
+		free(mntdata);
+		return -1;
+	}
+
 	ret = mount_entry(mntent->mnt_fsname, path, mntent->mnt_type,
 			  mntflags, mntdata);
+
+	free(mntdata);
 
 	if (hasmntopt(mntent, "optional") != NULL)
 		ret = 0;
 
 out:
 	free(pathdirname);
-	free(mntdata);
 	return ret;
 }
 
@@ -1998,11 +2022,6 @@ static int mount_entry_on_relative_rootfs(const struct mntent *mntent,
 	int ret;
 	FILE *pathfile = NULL;
 	char *pathdirname = NULL;
-
-	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
-		ERROR("failed to parse mount option '%s'", mntent->mnt_opts);
-		return -1;
-	}
 
 	/* relative to root mount point */
 	ret = snprintf(path, sizeof(path), "%s/%s", rootfs, mntent->mnt_dir);
@@ -2029,6 +2048,11 @@ static int mount_entry_on_relative_rootfs(const struct mntent *mntent,
 		}
 		else
 			fclose(pathfile);
+	}
+
+	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
+		free(mntdata);
+		return -1;
 	}
 
 	ret = mount_entry(mntent->mnt_fsname, path, mntent->mnt_type,
@@ -3090,7 +3114,7 @@ int lxc_map_ids(struct lxc_list *idmap, pid_t pid)
 		}
 		pos = buf;
 		if (!am_root)
-			pos += sprintf(buf, "new%cidmap %d ",
+			pos += sprintf(buf, "new%cidmap %d",
 				type == ID_TYPE_UID ? 'u' : 'g',
 				pid);
 
@@ -3102,24 +3126,27 @@ int lxc_map_ids(struct lxc_list *idmap, pid_t pid)
 
 			had_entry = 1;
 			left = 4096 - (pos - buf);
-			fill = snprintf(pos, left, " %lu %lu %lu", map->nsid,
-					map->hostid, map->range);
+			fill = snprintf(pos, left, "%s%lu %lu %lu%s",
+					am_root ? "" : " ",
+					map->nsid, map->hostid, map->range,
+					am_root ? "\n" : "");
 			if (fill <= 0 || fill >= left)
 				SYSERROR("snprintf failed, too many mappings");
 			pos += fill;
 		}
 		if (!had_entry)
 			continue;
-		left = 4096 - (pos - buf);
-		fill = snprintf(pos, left, "\n");
-		if (fill <= 0 || fill >= left)
-			SYSERROR("snprintf failed, too many mappings");
-		pos += fill;
 
-		if (am_root)
+		if (am_root) {
 			ret = write_id_mapping(type, pid, buf, pos-buf);
-		else
+		} else {
+			left = 4096 - (pos - buf);
+			fill = snprintf(pos, left, "\n");
+			if (fill <= 0 || fill >= left)
+				SYSERROR("snprintf failed, too many mappings");
+			pos += fill;
 			ret = system(buf);
+		}
 
 		if (ret)
 			break;
@@ -3152,13 +3179,13 @@ bool get_mapped_rootid(struct lxc_conf *conf, enum idtype idtype,
 	return false;
 }
 
-int mapped_hostid(int id, struct lxc_conf *conf)
+int mapped_hostid(unsigned id, struct lxc_conf *conf, enum idtype idtype)
 {
 	struct lxc_list *it;
 	struct id_map *map;
 	lxc_list_for_each(it, &conf->id_map) {
 		map = it->elem;
-		if (map->idtype != ID_TYPE_UID)
+		if (map->idtype != idtype)
 			continue;
 		if (id >= map->hostid && id < map->hostid + map->range)
 			return (id - map->hostid) + map->nsid;
@@ -3166,15 +3193,15 @@ int mapped_hostid(int id, struct lxc_conf *conf)
 	return -1;
 }
 
-int find_unmapped_nsuid(struct lxc_conf *conf)
+int find_unmapped_nsuid(struct lxc_conf *conf, enum idtype idtype)
 {
 	struct lxc_list *it;
 	struct id_map *map;
-	uid_t freeid = 0;
+	unsigned int freeid = 0;
 again:
 	lxc_list_for_each(it, &conf->id_map) {
 		map = it->elem;
-		if (map->idtype != ID_TYPE_UID)
+		if (map->idtype != idtype)
 			continue;
 		if (freeid >= map->nsid && freeid < map->nsid + map->range) {
 			freeid = map->nsid + map->range;
@@ -3472,7 +3499,6 @@ int lxc_setup(struct lxc_handler *handler)
 	struct lxc_conf *lxc_conf = handler->conf;
 	const char *lxcpath = handler->lxcpath;
 	void *data = handler->data;
-	struct lxc_cgroup_info *cgroup_info = handler->cgroup_info;
 
 	if (lxc_conf->inherit_ns_fd[LXC_NS_UTS] == -1) {
 		if (setup_utsname(lxc_conf->utsname)) {
@@ -3510,7 +3536,7 @@ int lxc_setup(struct lxc_handler *handler)
 	/* do automatic mounts (mainly /proc and /sys), but exclude
 	 * those that need to wait until other stuff has finished
 	 */
-	if (lxc_mount_auto_mounts(lxc_conf, lxc_conf->auto_mounts & ~LXC_AUTO_CGROUP_MASK, cgroup_info) < 0) {
+	if (lxc_mount_auto_mounts(lxc_conf, lxc_conf->auto_mounts & ~LXC_AUTO_CGROUP_MASK, handler) < 0) {
 		ERROR("failed to setup the automatic mounts for '%s'", name);
 		return -1;
 	}
@@ -3529,7 +3555,7 @@ int lxc_setup(struct lxc_handler *handler)
 	 * before, /sys could not have been mounted
 	 * (is either mounted automatically or via fstab entries)
 	 */
-	if (lxc_mount_auto_mounts(lxc_conf, lxc_conf->auto_mounts & LXC_AUTO_CGROUP_MASK, cgroup_info) < 0) {
+	if (lxc_mount_auto_mounts(lxc_conf, lxc_conf->auto_mounts & LXC_AUTO_CGROUP_MASK, handler) < 0) {
 		ERROR("failed to setup the automatic mounts for '%s'", name);
 		return -1;
 	}
@@ -3907,6 +3933,8 @@ void lxc_conf_free(struct lxc_conf *conf)
 		free(conf->console.path);
 	if (conf->rootfs.mount)
 		free(conf->rootfs.mount);
+	if (conf->rootfs.options)
+		free(conf->rootfs.options);
 	if (conf->rootfs.path)
 		free(conf->rootfs.path);
 	if (conf->rootfs.pivot)
@@ -3965,7 +3993,7 @@ static int run_userns_fn(void *data)
  */
 static struct lxc_list *idmap_add_id(struct lxc_conf *conf, uid_t uid)
 {
-	int hostid_mapped = mapped_hostid(uid, conf);
+	int hostid_mapped = mapped_hostid(uid, conf, ID_TYPE_UID);
 	struct lxc_list *new = NULL, *tmp, *it, *next;
 	struct id_map *entry;
 
@@ -3977,7 +4005,7 @@ static struct lxc_list *idmap_add_id(struct lxc_conf *conf, uid_t uid)
 	lxc_list_init(new);
 
 	if (hostid_mapped < 0) {
-		hostid_mapped = find_unmapped_nsuid(conf);
+		hostid_mapped = find_unmapped_nsuid(conf, ID_TYPE_UID);
 		if (hostid_mapped < 0)
 			goto err;
 		tmp = malloc(sizeof(*tmp));
@@ -4055,7 +4083,7 @@ int userns_exec_1(struct lxc_conf *conf, int (*fn)(void *), void *data)
 	ret = lxc_map_ids(idmap, pid);
 	lxc_free_idmap(idmap);
 	free(idmap);
-	if (ret < 0) {
+	if (ret) {
 		ERROR("Error setting up child mappings");
 		goto err;
 	}

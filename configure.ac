@@ -4,7 +4,7 @@
 m4_define([lxc_version_major], 1)
 m4_define([lxc_version_minor], 0)
 m4_define([lxc_version_micro], 0)
-m4_define([lxc_version_beta], [beta3])
+m4_define([lxc_version_beta], [beta4])
 
 m4_define([lxc_version_base], [lxc_version_major.lxc_version_minor.lxc_version_micro])
 m4_define([lxc_version],
@@ -246,7 +246,7 @@ AC_ARG_ENABLE([cgmanager],
 	[], [enable_cgmanager=auto])
 
 if test "x$enable_cgmanager" = "xauto" ; then
-	AC_CHECK_LIB([cgmanager],[cgmanager_create],[enable_cgmanager=yes],[enable_cgmanager=no])
+	AC_CHECK_LIB([cgmanager],[cgmanager_create],[enable_cgmanager=yes],[enable_cgmanager=no],[-lnih -lnih-dbus])
 fi
 AM_CONDITIONAL([ENABLE_CGMANAGER], [test "x$enable_cgmanager" = "xyes"])
 
@@ -521,7 +521,7 @@ AC_CHECK_FUNCS([setns pivot_root sethostname unshare rand_r confstr])
 AC_CHECK_LIB(pthread, main)
 AC_CHECK_FUNCS(pthread_atfork)
 AC_CHECK_LIB(util, openpty)
-AC_CHECK_FUNCS([openpty hasmntopt setmntent endmntent])
+AC_CHECK_FUNCS([openpty hasmntopt setmntent endmntent utmpxname])
 AC_CHECK_FUNCS([getline],
 	AM_CONDITIONAL(HAVE_GETLINE, true)
 	AC_DEFINE(HAVE_GETLINE,1,[Have getline]),
@@ -568,6 +568,9 @@ AC_CONFIG_FILES([
 	config/templates/debian.userns.conf
 	config/templates/fedora.common.conf
 	config/templates/fedora.userns.conf
+	config/templates/gentoo.common.conf
+	config/templates/gentoo.moresecure.conf
+	config/templates/gentoo.userns.conf
 	config/templates/oracle.common.conf
 	config/templates/oracle.userns.conf
 	config/templates/plamo.common.conf
