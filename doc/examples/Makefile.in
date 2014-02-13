@@ -240,6 +240,7 @@ PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
 PYTHON_PLATFORM = @PYTHON_PLATFORM@
 PYTHON_PREFIX = @PYTHON_PREFIX@
 PYTHON_VERSION = @PYTHON_VERSION@
+RUNTIME_PATH = @RUNTIME_PATH@
 SECCOMP_CFLAGS = @SECCOMP_CFLAGS@
 SECCOMP_LIBS = @SECCOMP_LIBS@
 SED = @SED@
@@ -313,7 +314,10 @@ top_srcdir = @top_srcdir@
 @ENABLE_EXAMPLES_TRUE@	lxc-empty-netns.conf \
 @ENABLE_EXAMPLES_TRUE@	lxc-phys.conf \
 @ENABLE_EXAMPLES_TRUE@	lxc-veth.conf \
-@ENABLE_EXAMPLES_TRUE@	lxc-complex.conf
+@ENABLE_EXAMPLES_TRUE@	lxc-complex.conf \
+@ENABLE_EXAMPLES_TRUE@	seccomp-v1.conf \
+@ENABLE_EXAMPLES_TRUE@	seccomp-v2-blacklist.conf \
+@ENABLE_EXAMPLES_TRUE@	seccomp-v2.conf
 
 noinst_DATA = \
 	lxc-macvlan.conf.in \
@@ -322,7 +326,15 @@ noinst_DATA = \
 	lxc-no-netns.conf.in \
 	lxc-phys.conf.in \
 	lxc-veth.conf.in \
-	lxc-complex.conf.in
+	lxc-complex.conf.in \
+	seccomp-v1.conf \
+	seccomp-v2-blacklist.conf \
+	seccomp-v2.conf
+
+EXTRA_DIST = \
+	seccomp-v1.conf \
+	seccomp-v2-blacklist.conf \
+	seccomp-v2.conf
 
 all: all-am
 

@@ -205,6 +205,7 @@ PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
 PYTHON_PLATFORM = @PYTHON_PLATFORM@
 PYTHON_PREFIX = @PYTHON_PREFIX@
 PYTHON_VERSION = @PYTHON_VERSION@
+RUNTIME_PATH = @RUNTIME_PATH@
 SECCOMP_CFLAGS = @SECCOMP_CFLAGS@
 SECCOMP_LIBS = @SECCOMP_LIBS@
 SED = @SED@
@@ -377,8 +378,8 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
-@ENABLE_BASH_FALSE@uninstall-local:
 @ENABLE_BASH_FALSE@install-data-local:
+@ENABLE_BASH_FALSE@uninstall-local:
 clean: clean-am
 
 clean-am: clean-generic mostlyclean-am

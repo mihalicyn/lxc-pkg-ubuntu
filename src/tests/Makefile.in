@@ -101,7 +101,7 @@ host_triplet = @host@
 @ENABLE_TESTS_TRUE@	lxc-test-list$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-attach$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-device-add-remove$(EXEEXT)
-@DISTRO_UBUNTU_TRUE@@ENABLE_TESTS_TRUE@am__append_3 = lxc-test-ubuntu lxc-test-unpriv
+@DISTRO_UBUNTU_TRUE@@ENABLE_TESTS_TRUE@am__append_3 = lxc-test-usernic lxc-test-ubuntu lxc-test-unpriv
 subdir = src/tests
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(srcdir)/lxc-test-usernic.in $(top_srcdir)/config/depcomp
@@ -443,6 +443,7 @@ PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
 PYTHON_PLATFORM = @PYTHON_PLATFORM@
 PYTHON_PREFIX = @PYTHON_PREFIX@
 PYTHON_VERSION = @PYTHON_VERSION@
+RUNTIME_PATH = @RUNTIME_PATH@
 SECCOMP_CFLAGS = @SECCOMP_CFLAGS@
 SECCOMP_LIBS = @SECCOMP_LIBS@
 SED = @SED@
@@ -535,30 +536,32 @@ top_srcdir = @top_srcdir@
 @ENABLE_TESTS_TRUE@	-DLXC_GLOBAL_CONF=\"$(LXC_GLOBAL_CONF)\" \
 @ENABLE_TESTS_TRUE@	-DLXCINITDIR=\"$(LXCINITDIR)\" \
 @ENABLE_TESTS_TRUE@	-DLXC_DEFAULT_CONFIG=\"$(LXC_DEFAULT_CONFIG)\" \
+@ENABLE_TESTS_TRUE@	-DRUNTIME_PATH=\"$(RUNTIME_PATH)\" \
 @ENABLE_TESTS_TRUE@	$(am__append_1) $(am__append_2)
-@ENABLE_TESTS_TRUE@bin_SCRIPTS = lxc-test-usernic $(am__append_3)
+@ENABLE_TESTS_TRUE@bin_SCRIPTS = lxc-test-autostart $(am__append_3)
 EXTRA_DIST = \
 	cgpath.c \
+	clonetest.c \
+	concurrent.c \
+	console.c \
 	containertests.c \
 	createtest.c \
 	destroytest.c \
+	device_add_remove.c \
 	get_item.c \
 	getkeys.c \
+	list.c \
 	locktests.c \
 	lxcpath.c \
-	saveconfig.c \
-	shutdowntest.c \
-	clonetest.c \
-	startone.c \
-	console.c \
-	lxc-test-usernic \
-	snapshot.c \
-	concurrent.c \
-	may_control.c \
+	lxc-test-autostart \
 	lxc-test-ubuntu \
 	lxc-test-unpriv \
-	device_add_remove.c \
-	list.c
+	lxc-test-usernic \
+	may_control.c \
+	saveconfig.c \
+	shutdowntest.c \
+	snapshot.c \
+	startone.c
 
 all: all-am
 

@@ -10,8 +10,15 @@
    you don't. */
 #undef HAVE_DECL_PR_CAPBSET_DROP
 
+/* Define to 1 if you have the declaration of
+   `seccomp_syscall_resolve_name_arch', and to 0 if you don't. */
+#undef HAVE_DECL_SECCOMP_SYSCALL_RESOLVE_NAME_ARCH
+
 /* Define to 1 if you have the `endmntent' function. */
 #undef HAVE_ENDMNTENT
+
+/* Define to 1 if you have the `faccessat' function. */
+#undef HAVE_FACCESSAT
 
 /* Define to 1 if you have the `fgetln' function. */
 #undef HAVE_FGETLN

@@ -83,6 +83,31 @@ const struct ns_info ns_info[LXC_NS_MAX] = {
 	[LXC_NS_NET] = {"net", CLONE_NEWNET}
 };
 
+static void print_top_failing_dir(const char *path)
+{
+	size_t len = strlen(path);
+	char *copy = alloca(len+1), *p, *e, saved;
+	strcpy(copy, path);
+
+	p = copy;
+	e = copy + len;
+	while (p < e) {
+		while (p < e && *p == '/') p++;
+		while (p < e && *p != '/') p++;
+		if (p >= e)
+			return;
+		saved = *p;
+		*p = '\0';
+		if (access(copy, X_OK)) {
+			SYSERROR("could not access %s.  Please grant it 'x' " \
+			      "access, or add an ACL for the container root.",
+			      copy);
+			return;
+		}
+		*p = saved;
+	}
+}
+
 static void close_ns(int ns_fd[LXC_NS_MAX]) {
 	int i;
 
@@ -317,7 +342,7 @@ static int lxc_poll(const char *name, struct lxc_handler *handler)
 			goto out_mainloop_open;
 		}
 		#else
-			DEBUG("not starting utmp handler as cap_sys_boot cannot be dropped without capabilities support\n");
+			DEBUG("not starting utmp handler as cap_sys_boot cannot be dropped without capabilities support");
 		#endif
 	}
 
@@ -518,19 +543,19 @@ static int must_drop_cap_sys_boot(struct lxc_conf *conf)
 		flags |= CLONE_NEWUSER;
 
 #ifdef __ia64__
-        pid = __clone2(container_reboot_supported, stack, stack_size, flags,  &cmd);
+	pid = __clone2(container_reboot_supported, stack, stack_size, flags,  &cmd);
 #else
-        stack += stack_size;
-        pid = clone(container_reboot_supported, stack, flags, &cmd);
+	stack += stack_size;
+	pid = clone(container_reboot_supported, stack, flags, &cmd);
 #endif
-        if (pid < 0) {
-                SYSERROR("failed to clone\n");
-                return -1;
-        }
-        if (wait(&status) < 0) {
-                SYSERROR("unexpected wait error: %m\n");
-                return -1;
-        }
+	if (pid < 0) {
+		SYSERROR("failed to clone");
+		return -1;
+	}
+	if (wait(&status) < 0) {
+		SYSERROR("unexpected wait error: %m");
+		return -1;
+	}
 
 	if (WEXITSTATUS(status) != 1)
 		return 1;
@@ -592,13 +617,18 @@ static int do_start(void *data)
 		}
 	}
 
+	if (access(handler->lxcpath, R_OK)) {
+		print_top_failing_dir(handler->lxcpath);
+		goto out_warn_father;
+	}
+
 	#if HAVE_SYS_CAPABILITY_H
 	if (handler->conf->need_utmp_watch) {
 		if (prctl(PR_CAPBSET_DROP, CAP_SYS_BOOT, 0, 0, 0)) {
 			SYSERROR("failed to remove CAP_SYS_BOOT capability");
 			goto out_warn_father;
 		}
-		DEBUG("Dropped cap_sys_boot\n");
+		DEBUG("Dropped cap_sys_boot");
 	}
 	#endif
 
@@ -678,7 +708,7 @@ static int save_phys_nics(struct lxc_conf *conf)
 			SYSERROR("failed to allocate memory");
 			return -1;
 		}
-		INFO("stored saved_nic #%d idx %d name %s\n", conf->num_savednics,
+		INFO("stored saved_nic #%d idx %d name %s", conf->num_savednics,
 			conf->saved_nics[conf->num_savednics].ifindex,
 			conf->saved_nics[conf->num_savednics].orig_name);
 		conf->num_savednics++;
@@ -900,12 +930,12 @@ int __lxc_start(const char *name, struct lxc_conf *conf,
 
 	if (must_drop_cap_sys_boot(handler->conf)) {
 		#if HAVE_SYS_CAPABILITY_H
-		DEBUG("Dropping cap_sys_boot\n");
+		DEBUG("Dropping cap_sys_boot");
 		#else
-		DEBUG("Can't drop cap_sys_boot as capabilities aren't supported\n");
+		DEBUG("Can't drop cap_sys_boot as capabilities aren't supported");
 		#endif
 	} else {
-		DEBUG("Not dropping cap_sys_boot or watching utmp\n");
+		DEBUG("Not dropping cap_sys_boot or watching utmp");
 		handler->conf->need_utmp_watch = 0;
 	}
 
@@ -940,7 +970,7 @@ int __lxc_start(const char *name, struct lxc_conf *conf,
 			handler->conf->reboot = 1;
 			break;
 		default:
-			DEBUG("unknown exit status for init: %d\n", WTERMSIG(status));
+			DEBUG("unknown exit status for init: %d", WTERMSIG(status));
 			break;
 		}
         }

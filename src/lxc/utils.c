@@ -192,7 +192,7 @@ extern int mkdir_p(const char *dir, mode_t mode)
 		makeme = strndup(orig, dir - orig);
 		if (*makeme) {
 			if (mkdir(makeme, mode) && errno != EEXIST) {
-				SYSERROR("failed to create directory '%s'\n", makeme);
+				SYSERROR("failed to create directory '%s'", makeme);
 				free(makeme);
 				return -1;
 			}
@@ -382,7 +382,7 @@ const char *get_rundir()
 
 	rundir = getenv("XDG_RUNTIME_DIR");
 	if (geteuid() == 0 || rundir == NULL)
-		rundir = "/run";
+		rundir = RUNTIME_PATH;
 	return rundir;
 }
 
@@ -642,7 +642,10 @@ extern struct lxc_popen_FILE *lxc_popen(const char *command)
 			 * But it must not be marked close-on-exec.
 			 * Undo the effects.
 			 */
-			fcntl(child_end, F_SETFD, 0);
+			if (fcntl(child_end, F_SETFD, 0) != 0) {
+				SYSERROR("Failed to remove FD_CLOEXEC from fd.");
+				exit(127);
+			}
 		}
 
 		/*

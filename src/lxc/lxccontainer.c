@@ -35,6 +35,7 @@
 #include <libgen.h>
 #include <stdint.h>
 #include <grp.h>
+#include <sys/syscall.h>
 
 #include <lxc/lxccontainer.h>
 #include <lxc/version.h>
@@ -64,6 +65,20 @@
 #define MAX_BUFFER 4096
 
 #define NOT_SUPPORTED_ERROR "the requested function %s is not currently supported with unprivileged containers"
+
+/* Define faccessat() if missing from the C library */
+#ifndef HAVE_FACCESSAT
+static int faccessat(int __fd, const char *__file, int __type, int __flag)
+{
+#ifdef __NR_faccessat
+return syscall(__NR_faccessat, __fd, __file, __type, __flag);
+#else
+errno = ENOSYS;
+return -1;
+#endif
+}
+#endif
+
 
 lxc_log_define(lxc_container, lxc);
 
@@ -743,7 +758,7 @@ static bool create_container_dir(struct lxc_container *c)
 		if (errno == EEXIST)
 			ret = 0;
 		else
-			SYSERROR("failed to create container path for %s\n", c->name);
+			SYSERROR("failed to create container path for %s", c->name);
 	}
 	free(s);
 	return ret == 0;
@@ -781,7 +796,7 @@ static struct bdev *do_bdev_create(struct lxc_container *c, const char *type,
 
 	bdev = bdev_create(dest, type, c->name, specs);
 	if (!bdev) {
-		ERROR("Failed to create backing store type %s\n", type);
+		ERROR("Failed to create backing store type %s", type);
 		return NULL;
 	}
 
@@ -792,7 +807,7 @@ static struct bdev *do_bdev_create(struct lxc_container *c, const char *type,
 
 	if (geteuid() != 0) {
 		if (chown_mapped_root(bdev->dest, c->lxc_conf) < 0) {
-			ERROR("Error chowning %s to container root\n", bdev->dest);
+			ERROR("Error chowning %s to container root", bdev->dest);
 			bdev_put(bdev);
 			return NULL;
 		}
@@ -827,7 +842,7 @@ static char *get_template_path(const char *t)
 		return NULL;
 	}
 	if (access(tpath, X_OK) < 0) {
-		SYSERROR("bad template: %s\n", t);
+		SYSERROR("bad template: %s", t);
 		free(tpath);
 		return NULL;
 	}
@@ -853,7 +868,7 @@ static bool create_run_template(struct lxc_container *c, char *tpath, bool quiet
 
 	pid = fork();
 	if (pid < 0) {
-		SYSERROR("failed to fork task for container creation template\n");
+		SYSERROR("failed to fork task for container creation template");
 		return false;
 	}
 
@@ -876,13 +891,15 @@ static bool create_run_template(struct lxc_container *c, char *tpath, bool quiet
 
 		src = c->lxc_conf->rootfs.path;
 		/*
-		 * for an overlayfs create, what the user wants is the template to fill
+		 * for an overlay create, what the user wants is the template to fill
 		 * in what will become the readonly lower layer.  So don't mount for
 		 * the template
 		 */
-		if (strncmp(src, "overlayfs:", 10) == 0) {
-			src = overlayfs_getlower(src+10);
-		}
+		if (strncmp(src, "overlayfs:", 10) == 0)
+			src = overlay_getlower(src+10);
+		if (strncmp(src, "aufs:", 5) == 0)
+			src = overlay_getlower(src+5);
+
 		bdev = bdev_init(src, c->lxc_conf->rootfs.mount, NULL);
 		if (!bdev) {
 			ERROR("Error opening rootfs");
@@ -1083,7 +1100,7 @@ static bool create_run_template(struct lxc_container *c, char *tpath, bool quiet
 	}
 
 	if (wait_for_pid(pid) != 0) {
-		ERROR("container creation template for %s failed\n", c->name);
+		ERROR("container creation template for %s failed", c->name);
 		return false;
 	}
 
@@ -1126,7 +1143,7 @@ static bool prepend_lxc_header(char *path, const char *t, char *const argv[])
 #if HAVE_LIBGNUTLS
 	tpath = get_template_path(t);
 	if (!tpath) {
-		ERROR("bad template: %s\n", t);
+		ERROR("bad template: %s", t);
 		goto out_free_contents;
 	}
 
@@ -1222,7 +1239,7 @@ static bool lxcapi_create(struct lxc_container *c, const char *t,
 	if (t) {
 		tpath = get_template_path(t);
 		if (!tpath) {
-			ERROR("bad template: %s\n", t);
+			ERROR("bad template: %s", t);
 			goto out;
 		}
 	}
@@ -1241,7 +1258,7 @@ static bool lxcapi_create(struct lxc_container *c, const char *t,
 
 	if (!c->lxc_conf) {
 		if (!c->load_config(c, lxc_global_config_value("lxc.default_config"))) {
-			ERROR("Error loading default configuration file %s\n", lxc_global_config_value("lxc.default_config"));
+			ERROR("Error loading default configuration file %s", lxc_global_config_value("lxc.default_config"));
 			goto free_tpath;
 		}
 	}
@@ -1282,7 +1299,7 @@ static bool lxcapi_create(struct lxc_container *c, const char *t,
 	 */
 	pid = fork();
 	if (pid < 0) {
-		SYSERROR("failed to fork task for container creation template\n");
+		SYSERROR("failed to fork task for container creation template");
 		goto out_unlock;
 	}
 
@@ -1297,7 +1314,7 @@ static bool lxcapi_create(struct lxc_container *c, const char *t,
 
 		/* save config file again to store the new rootfs location */
 		if (!c->save_config(c, NULL)) {
-			ERROR("failed to save starting configuration for %s\n", c->name);
+			ERROR("failed to save starting configuration for %s", c->name);
 			// parent task won't see bdev in config so we delete it
 			bdev->ops->umount(bdev);
 			bdev->ops->destroy(bdev);
@@ -1558,7 +1575,7 @@ static char** lxcapi_get_interfaces(struct lxc_container *c)
 
 	pid = fork();
 	if (pid < 0) {
-		SYSERROR("failed to fork task to get interfaces information\n");
+		SYSERROR("failed to fork task to get interfaces information");
 		close(pipefd[0]);
 		close(pipefd[1]);
 		return NULL;
@@ -1645,7 +1662,7 @@ static char** lxcapi_get_ips(struct lxc_container *c, const char* interface, con
 
 	pid = fork();
 	if (pid < 0) {
-		SYSERROR("failed to fork task to get container ips\n");
+		SYSERROR("failed to fork task to get container ips");
 		close(pipefd[0]);
 		close(pipefd[1]);
 		return NULL;
@@ -1808,7 +1825,7 @@ static bool lxcapi_save_config(struct lxc_container *c, const char *alt_file)
 	// If we haven't yet loaded a config, load the stock config
 	if (!c->lxc_conf) {
 		if (!c->load_config(c, lxc_global_config_value("lxc.default_config"))) {
-			ERROR("Error loading default configuration file %s while saving %s\n", lxc_global_config_value("lxc.default_config"), c->name);
+			ERROR("Error loading default configuration file %s while saving %s", lxc_global_config_value("lxc.default_config"), c->name);
 			return false;
 		}
 	}
@@ -1919,7 +1936,7 @@ static void mod_all_rdeps(struct lxc_container *c, bool inc)
 		return;
 	while (getline(&lxcpath, &pathlen, f) != -1) {
 		if (getline(&lxcname, &namelen, f) == -1) {
-			ERROR("badly formatted file %s\n", path);
+			ERROR("badly formatted file %s", path);
 			goto out;
 		}
 		strip_newline(lxcpath);
@@ -2481,10 +2498,13 @@ static int clone_update_rootfs(struct clone_update_data *data)
 	if (strcmp(bdev->type, "dir") != 0) {
 		if (unshare(CLONE_NEWNS) < 0) {
 			ERROR("error unsharing mounts");
+			bdev_put(bdev);
 			return -1;
 		}
-		if (bdev->ops->mount(bdev) < 0)
+		if (bdev->ops->mount(bdev) < 0) {
+			bdev_put(bdev);
 			return -1;
+		}
 	} else { // TODO come up with a better way
 		if (bdev->dest)
 			free(bdev->dest);
@@ -2511,18 +2531,21 @@ static int clone_update_rootfs(struct clone_update_data *data)
 
 		if (run_lxc_hooks(c->name, "clone", conf, c->get_config_path(c), hookargs)) {
 			ERROR("Error executing clone hook for %s", c->name);
+			bdev_put(bdev);
 			return -1;
 		}
 	}
 
 	if (!(flags & LXC_CLONE_KEEPNAME)) {
 		ret = snprintf(path, MAXPATHLEN, "%s/etc/hostname", bdev->dest);
+		bdev_put(bdev);
+
 		if (ret < 0 || ret >= MAXPATHLEN)
 			return -1;
 		if (!file_exists(path))
 			return 0;
 		if (!(fout = fopen(path, "w"))) {
-			SYSERROR("unable to open %s: ignoring\n", path);
+			SYSERROR("unable to open %s: ignoring", path);
 			return 0;
 		}
 		if (fprintf(fout, "%s", c->name) < 0) {
@@ -2532,6 +2555,9 @@ static int clone_update_rootfs(struct clone_update_data *data)
 		if (fclose(fout) < 0)
 			return -1;
 	}
+	else
+		bdev_put(bdev);
+
 	return 0;
 }
 
@@ -2563,7 +2589,7 @@ static int create_file_dirname(char *path)
 	*p = '\0';
 	ret = mkdir(path, 0755);
 	if (ret && errno != EEXIST)
-		SYSERROR("creating container path %s\n", path);
+		SYSERROR("creating container path %s", path);
 	*p = '/';
 	return ret;
 }
@@ -2628,7 +2654,7 @@ static struct lxc_container *lxcapi_clone(struct lxc_container *c, const char *n
 
 	if (am_unpriv()) {
 		if (chown_mapped_root(newpath, c->lxc_conf) < 0) {
-			ERROR("Error chowning %s to container root\n", newpath);
+			ERROR("Error chowning %s to container root", newpath);
 			goto out;
 		}
 	}
@@ -2716,7 +2742,7 @@ static bool lxcapi_rename(struct lxc_container *c, const char *newname)
 	struct bdev *bdev;
 	struct lxc_container *newc;
 
-	if (!c || !c->name || !c->config_path)
+	if (!c || !c->name || !c->config_path || !c->lxc_conf)
 		return false;
 
 	bdev = bdev_init(c->lxc_conf->rootfs.path, c->lxc_conf->rootfs.mount, NULL);
@@ -2812,9 +2838,16 @@ static int lxcapi_snapshot(struct lxc_container *c, const char *commentfile)
 	 */
 	flags = LXC_CLONE_SNAPSHOT | LXC_CLONE_KEEPMACADDR | LXC_CLONE_KEEPNAME |
 		LXC_CLONE_KEEPBDEVTYPE | LXC_CLONE_MAYBE_SNAPSHOT;
+	if (bdev_is_dir(c->lxc_conf->rootfs.path)) {
+		ERROR("Snapshot of directory-backed container requested.");
+		ERROR("Making a copy-clone.  If you do want snapshots, then");
+		ERROR("please create an aufs or overlayfs clone first, snapshot that");
+		ERROR("and keep the original container pristine.");
+		flags &= ~LXC_CLONE_SNAPSHOT | LXC_CLONE_MAYBE_SNAPSHOT;
+	}
 	c2 = c->clone(c, newname, snappath, flags, NULL, NULL, 0, NULL);
 	if (!c2) {
-		ERROR("clone of %s:%s failed\n", c->config_path, c->name);
+		ERROR("clone of %s:%s failed", c->config_path, c->name);
 		return -1;
 	}
 
@@ -2835,7 +2868,7 @@ static int lxcapi_snapshot(struct lxc_container *c, const char *commentfile)
 	sprintf(dfnam, "%s/%s/ts", snappath, newname);
 	f = fopen(dfnam, "w");
 	if (!f) {
-		ERROR("Failed to open %s\n", dfnam);
+		ERROR("Failed to open %s", dfnam);
 		return -1;
 	}
 	if (fprintf(f, "%s", buffer) < 0) {
@@ -3084,34 +3117,80 @@ static bool lxcapi_may_control(struct lxc_container *c)
 	return lxc_try_cmd(c->name, c->config_path) == 0;
 }
 
+static bool do_add_remove_node(pid_t init_pid, const char *path, bool add,
+		struct stat *st)
+{
+	char chrootpath[MAXPATHLEN];
+	char *directory_path = NULL;
+	pid_t pid;
+	int ret;
+
+	if ((pid = fork()) < 0) {
+		SYSERROR("failed to fork a child helper");
+		return false;
+	}
+	if (pid) {
+		if (wait_for_pid(pid) != 0) {
+			ERROR("Failed to create note in guest");
+			return false;
+		}
+		return true;
+	}
+
+	/* prepare the path */
+	ret = snprintf(chrootpath, MAXPATHLEN, "/proc/%d/root", init_pid);
+	if (ret < 0 || ret >= MAXPATHLEN)
+		return false;
+
+	if (chroot(chrootpath) < 0)
+		exit(1);
+	if (chdir("/") < 0)
+		exit(1);
+	/* remove path if it exists */
+	if(faccessat(AT_FDCWD, path, F_OK, AT_SYMLINK_NOFOLLOW) == 0) {
+		if (unlink(path) < 0) {
+			ERROR("unlink failed");
+			exit(1);
+		}
+	}
+	if (!add)
+		exit(0);
+
+	/* create any missing directories */
+	directory_path = dirname(strdup(path));
+	if (mkdir_p(directory_path, 0755) < 0 && errno != EEXIST) {
+		ERROR("failed to create directory");
+		exit(1);
+	}
+
+	/* create the device node */
+	if (mknod(path, st->st_mode, st->st_rdev) < 0) {
+		ERROR("mknod failed");
+		exit(1);
+	}
+
+	exit(0);
+}
+
 static bool add_remove_device_node(struct lxc_container *c, const char *src_path, const char *dest_path, bool add)
 {
 	int ret;
 	struct stat st;
-	char path[MAXPATHLEN];
 	char value[MAX_BUFFER];
-	char *directory_path = NULL;
 	const char *p;
 
 	/* make sure container is running */
 	if (!c->is_running(c)) {
 		ERROR("container is not running");
-		goto out;
+		return false;
 	}
 
 	/* use src_path if dest_path is NULL otherwise use dest_path */
 	p = dest_path ? dest_path : src_path;
 
-	/* prepare the path */
-	ret = snprintf(path, MAXPATHLEN, "/proc/%d/root/%s", c->init_pid(c), p);
-	if (ret < 0 || ret >= MAXPATHLEN)
-		goto out;
-	remove_trailing_slashes(path);
-
-	p = add ? src_path : path;
 	/* make sure we can access p */
 	if(access(p, F_OK) < 0 || stat(p, &st) < 0)
-		goto out;
+		return false;
 
 	/* continue if path is character device or block device */
 	if (S_ISCHR(st.st_mode))
@@ -3119,55 +3198,29 @@ static bool add_remove_device_node(struct lxc_container *c, const char *src_path
 	else if (S_ISBLK(st.st_mode))
 		ret = snprintf(value, MAX_BUFFER, "b %d:%d rwm", major(st.st_rdev), minor(st.st_rdev));
 	else
-		goto out;
+		return false;
 
 	/* check snprintf return code */
 	if (ret < 0 || ret >= MAX_BUFFER)
-		goto out;
+		return false;
 
-	directory_path = dirname(strdup(path));
-	/* remove path and directory_path (if empty) */
-	if(access(path, F_OK) == 0) {
-		if (unlink(path) < 0) {
-			ERROR("unlink failed");
-			goto out;
-		}
-		if (rmdir(directory_path) < 0 && errno != ENOTEMPTY) {
-			ERROR("rmdir failed");
-			goto out;
-		}
-	}
+	if (!do_add_remove_node(c->init_pid(c), p, add, &st))
+		return false;
 
+	/* add or remove device to/from cgroup access list */
 	if (add) {
-		/* create the missing directories */
-		if (mkdir_p(directory_path, 0755) < 0) {
-			ERROR("failed to create directory");
-			goto out;
-		}
-
-		/* create the device node */
-		if (mknod(path, st.st_mode, st.st_rdev) < 0) {
-			ERROR("mknod failed");
-			goto out;
-		}
-
-		/* add device node to device list */
 		if (!c->set_cgroup_item(c, "devices.allow", value)) {
 			ERROR("set_cgroup_item failed while adding the device node");
-			goto out;
+			return false;
 		}
 	} else {
-		/* remove device node from device list */
 		if (!c->set_cgroup_item(c, "devices.deny", value)) {
 			ERROR("set_cgroup_item failed while removing the device node");
-			goto out;
+			return false;
 		}
 	}
+
 	return true;
-out:
-	if (directory_path)
-		free(directory_path);
-	return false;
 }
 
 static bool lxcapi_add_device_node(struct lxc_container *c, const char *src_path, const char *dest_path)

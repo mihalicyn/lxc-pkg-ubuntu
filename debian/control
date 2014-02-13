@@ -79,7 +79,7 @@ Description: Linux Containers userspace tools (development)
  This package contains the development files.
 
 Package: lxc-templates
-Architecture: all
+Architecture: linux-any
 Depends: lxc (>= 0.8.0~rc1-4ubuntu43), ${misc:Depends}
 Recommends: cloud-image-utils | cloud-utils,
             debootstrap | cdebootstrap,

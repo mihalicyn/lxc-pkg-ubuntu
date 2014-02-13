@@ -1,3 +1,13 @@
+lxc (1.0.0~rc1-0ubuntu1) trusty; urgency=medium
+
+  * New upstream release (1.0.0~rc1).
+  * Drop dont_crash_log_init.patch: upstreamed
+  * Drop adt proxy workaround (fixed in adt).
+  * Make lxc-templates arch:any since unfortunately lxc-sshd hardcodes
+    some paths...
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Thu, 13 Feb 2014 18:58:51 -0500
+
 lxc (1.0.0~beta4-0ubuntu2) trusty; urgency=medium
 
   * debian/patches/dont_crash_log_init.patch: don't crash if no name is passed

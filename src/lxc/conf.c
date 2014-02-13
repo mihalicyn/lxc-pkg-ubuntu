@@ -812,6 +812,38 @@ static int setup_utsname(struct utsname *utsname)
 	return 0;
 }
 
+struct dev_symlinks {
+	const char *oldpath;
+	const char *name;
+};
+
+static const struct dev_symlinks dev_symlinks[] = {
+	{"/proc/self/fd",	"fd"},
+	{"/proc/self/fd/0",	"stdin"},
+	{"/proc/self/fd/1",	"stdout"},
+	{"/proc/self/fd/2",	"stderr"},
+};
+
+static int setup_dev_symlinks(const struct lxc_rootfs *rootfs)
+{
+	char path[MAXPATHLEN];
+	int ret,i;
+
+
+	for (i = 0; i < sizeof(dev_symlinks) / sizeof(dev_symlinks[0]); i++) {
+		const struct dev_symlinks *d = &dev_symlinks[i];
+		ret = snprintf(path, sizeof(path), "%s/dev/%s", rootfs->mount, d->name);
+		if (ret < 0 || ret >= MAXPATHLEN)
+			return -1;
+		ret = symlink(d->oldpath, path);
+		if (ret && errno != EEXIST) {
+			SYSERROR("Error creating %s", path);
+			return -1;
+		}
+	}
+	return 0;
+}
+
 static int setup_tty(const struct lxc_rootfs *rootfs,
 		     const struct lxc_tty_info *tty_info, char *ttydir)
 {
@@ -841,14 +873,14 @@ static int setup_tty(const struct lxc_rootfs *rootfs,
 			}
 			ret = creat(lxcpath, 0660);
 			if (ret==-1 && errno != EEXIST) {
-				SYSERROR("error creating %s\n", lxcpath);
+				SYSERROR("error creating %s", lxcpath);
 				return -1;
 			}
 			if (ret >= 0)
 				close(ret);
 			ret = unlink(path);
 			if (ret && errno != ENOENT) {
-				SYSERROR("error unlinking %s\n", path);
+				SYSERROR("error unlinking %s", path);
 				return -1;
 			}
 
@@ -865,7 +897,7 @@ static int setup_tty(const struct lxc_rootfs *rootfs,
 			}
 			ret = symlink(lxcpath, path);
 			if (ret) {
-				SYSERROR("failed to create symlink for tty %d\n", i+1);
+				SYSERROR("failed to create symlink for tty %d", i+1);
 				return -1;
 			}
 		} else {
@@ -873,7 +905,7 @@ static int setup_tty(const struct lxc_rootfs *rootfs,
 			if (access(path, F_OK)) {
 				ret = creat(path, 0660);
 				if (ret==-1) {
-					SYSERROR("error creating %s\n", path);
+					SYSERROR("error creating %s", path);
 					/* this isn't fatal, continue */
 				} else {
 					close(ret);
@@ -1051,7 +1083,7 @@ static int setup_rootfs_pivot_root(const char *rootfs, const char *pivotdir)
 
 	if (access(path, F_OK)) {
 
-		if (mkdir_p(path, 0755)) {
+		if (mkdir_p(path, 0755) < 0) {
 			SYSERROR("failed to create pivotdir '%s'", path);
 			return -1;
 		}
@@ -1142,7 +1174,7 @@ static int mount_check_fs( const char *dir, char *fstype )
 	int found_fs = 0;
 	char *p2;
 
-	DEBUG("entering mount_check_fs for %s\n", dir);
+	DEBUG("entering mount_check_fs for %s", dir);
 
 	if ( 0 != access(dir, F_OK) || 0 != stat(dir, &s) || 0 == S_ISDIR(s.st_mode) ) {
 		return 0;
@@ -1151,7 +1183,7 @@ static int mount_check_fs( const char *dir, char *fstype )
 	f = fopen("/proc/self/mounts", "r");
 	if (!f)
 		return 0;
-	while ((p = fgets(buf, LINELEN, f))) {
+	while (fgets(buf, LINELEN, f)) {
 		p = index(buf, ' ');
 		if( !p )
 			continue;
@@ -1184,7 +1216,7 @@ static int mount_check_fs( const char *dir, char *fstype )
 
 	fclose(f);
 
-	DEBUG("mount_check_fs returning %d last %s\n", found_fs, fstype);
+	DEBUG("mount_check_fs returning %d last %s", found_fs, fstype);
 
 	return found_fs;
 }
@@ -1313,7 +1345,7 @@ static int mount_autodev(const char *name, char *root, const char *lxcpath)
 	char host_path[MAXPATHLEN];
 	char devtmpfs_path[MAXPATHLEN];
 
-	INFO("Mounting /dev under %s\n", root);
+	INFO("Mounting /dev under %s", root);
 
 	ret = snprintf(host_path, MAXPATHLEN, "%s/%s/rootfs.dev", lxcpath, name);
 	if (ret < 0 || ret > MAXPATHLEN)
@@ -1337,7 +1369,7 @@ static int mount_autodev(const char *name, char *root, const char *lxcpath)
 		ret = symlink(devtmpfs_path, host_path);
 
 		if ( ret < 0 ) {
-			SYSERROR("WARNING: Failed to create symlink '%s'->'%s'\n", host_path, devtmpfs_path);
+			SYSERROR("WARNING: Failed to create symlink '%s'->'%s'", host_path, devtmpfs_path);
 		}
 		DEBUG("Bind mounting %s to %s", devtmpfs_path , path );
 		ret = mount(devtmpfs_path, path, NULL, MS_BIND, 0 );
@@ -1353,7 +1385,7 @@ static int mount_autodev(const char *name, char *root, const char *lxcpath)
 		}
 	}
 	if (ret) {
-		SYSERROR("Failed to mount /dev at %s\n", root);
+		SYSERROR("Failed to mount /dev at %s", root);
 		return -1;
 	}
 	ret = snprintf(path, MAXPATHLEN, "%s/dev/pts", root);
@@ -1371,7 +1403,7 @@ static int mount_autodev(const char *name, char *root, const char *lxcpath)
 		}
 	}
 
-	INFO("Mounted /dev under %s\n", root);
+	INFO("Mounted /dev under %s", root);
 	return 0;
 }
 
@@ -1399,7 +1431,7 @@ static int setup_autodev(const char *root)
 	int i;
 	mode_t cmask;
 
-	INFO("Creating initial consoles under %s/dev\n", root);
+	INFO("Creating initial consoles under %s/dev", root);
 
 	ret = snprintf(path, MAXPATHLEN, "%s/dev", root);
 	if (ret < 0 || ret >= MAXPATHLEN) {
@@ -1407,7 +1439,7 @@ static int setup_autodev(const char *root)
 		return -1;
 	}
 
-	INFO("Populating /dev under %s\n", root);
+	INFO("Populating /dev under %s", root);
 	cmask = umask(S_IXUSR | S_IXGRP | S_IXOTH);
 	for (i = 0; i < sizeof(lxc_devs) / sizeof(lxc_devs[0]); i++) {
 		const struct lxc_devs *d = &lxc_devs[i];
@@ -1416,13 +1448,13 @@ static int setup_autodev(const char *root)
 			return -1;
 		ret = mknod(path, d->mode, makedev(d->maj, d->min));
 		if (ret && errno != EEXIST) {
-			SYSERROR("Error creating %s\n", d->name);
+			SYSERROR("Error creating %s", d->name);
 			return -1;
 		}
 	}
 	umask(cmask);
 
-	INFO("Populated /dev under %s\n", root);
+	INFO("Populated /dev under %s", root);
 	return 0;
 }
 
@@ -1444,7 +1476,7 @@ int detect_shared_rootfs(void)
 	f = fopen("/proc/self/mountinfo", "r");
 	if (!f)
 		return 0;
-	while ((p = fgets(buf, LINELEN, f))) {
+	while (fgets(buf, LINELEN, f)) {
 		for (p = buf, i=0; p && i < 4; i++)
 			p = index(p+1, ' ');
 		if (!p)
@@ -1516,15 +1548,15 @@ static int chroot_into_slave(struct lxc_conf *conf)
 		SYSERROR("Failed to make tmp-/ at %s rslave", path);
 		return -1;
 	}
-	if (chdir(path)) {
-		SYSERROR("Failed to chdir into tmp-/");
-		return -1;
-	}
 	if (chroot(path)) {
 		SYSERROR("Failed to chroot into tmp-/");
 		return -1;
 	}
-	INFO("Chrooted into tmp-/ at %s\n", path);
+	if (chdir("/")) {
+		SYSERROR("Failed to chdir into tmp-/");
+		return -1;
+	}
+	INFO("Chrooted into tmp-/ at %s", path);
 	return 0;
 }
 
@@ -1651,7 +1683,7 @@ static int setup_dev_console(const struct lxc_rootfs *rootfs,
 
 	ret = snprintf(path, sizeof(path), "%s/dev/console", rootfs->mount);
 	if (ret >= sizeof(path)) {
-		ERROR("console path too long\n");
+		ERROR("console path too long");
 		return -1;
 	}
 
@@ -1699,28 +1731,28 @@ static int setup_ttydir_console(const struct lxc_rootfs *rootfs,
 		return -1;
 	ret = mkdir(path, 0755);
 	if (ret && errno != EEXIST) {
-		SYSERROR("failed with errno %d to create %s\n", errno, path);
+		SYSERROR("failed with errno %d to create %s", errno, path);
 		return -1;
 	}
-	INFO("created %s\n", path);
+	INFO("created %s", path);
 
 	ret = snprintf(lxcpath, sizeof(lxcpath), "%s/dev/%s/console",
 		       rootfs->mount, ttydir);
 	if (ret >= sizeof(lxcpath)) {
-		ERROR("console path too long\n");
+		ERROR("console path too long");
 		return -1;
 	}
 
 	snprintf(path, sizeof(path), "%s/dev/console", rootfs->mount);
 	ret = unlink(path);
 	if (ret && errno != ENOENT) {
-		SYSERROR("error unlinking %s\n", path);
+		SYSERROR("error unlinking %s", path);
 		return -1;
 	}
 
 	ret = creat(lxcpath, 0660);
 	if (ret==-1 && errno != EEXIST) {
-		SYSERROR("error %d creating %s\n", errno, lxcpath);
+		SYSERROR("error %d creating %s", errno, lxcpath);
 		return -1;
 	}
 	if (ret >= 0)
@@ -1780,7 +1812,7 @@ static int setup_kmsg(const struct lxc_rootfs *rootfs,
 
 	ret = unlink(kpath);
 	if (ret && errno != ENOENT) {
-		SYSERROR("error unlinking %s\n", kpath);
+		SYSERROR("error unlinking %s", kpath);
 		return -1;
 	}
 
@@ -1890,7 +1922,7 @@ static inline int mount_entry_on_systemfs(const struct mntent *mntent)
 	char* pathdirname = NULL;
 
 	if (hasmntopt(mntent, "create=dir")) {
-		if (!mkdir_p(mntent->mnt_dir, 0755)) {
+		if (mkdir_p(mntent->mnt_dir, 0755) < 0) {
 			WARN("Failed to create mount target '%s'", mntent->mnt_dir);
 			ret = -1;
 		}
@@ -1899,7 +1931,9 @@ static inline int mount_entry_on_systemfs(const struct mntent *mntent)
 	if (hasmntopt(mntent, "create=file") && access(mntent->mnt_dir, F_OK)) {
 		pathdirname = strdup(mntent->mnt_dir);
 		pathdirname = dirname(pathdirname);
-		mkdir_p(pathdirname, 0755);
+		if (mkdir_p(pathdirname, 0755) < 0) {
+			WARN("Failed to create target directory");
+		}
 		pathfile = fopen(mntent->mnt_dir, "wb");
 		if (!pathfile) {
 			WARN("Failed to create mount target '%s'", mntent->mnt_dir);
@@ -1976,7 +2010,7 @@ skipabs:
 	}
 
 	if (hasmntopt(mntent, "create=dir")) {
-		if (!mkdir_p(path, 0755)) {
+		if (mkdir_p(path, 0755) < 0) {
 			WARN("Failed to create mount target '%s'", path);
 			ret = -1;
 		}
@@ -1985,7 +2019,9 @@ skipabs:
 	if (hasmntopt(mntent, "create=file") && access(path, F_OK)) {
 		pathdirname = strdup(path);
 		pathdirname = dirname(pathdirname);
-		mkdir_p(pathdirname, 0755);
+		if (mkdir_p(pathdirname, 0755) < 0) {
+			WARN("Failed to create target directory");
+		}
 		pathfile = fopen(path, "wb");
 		if (!pathfile) {
 			WARN("Failed to create mount target '%s'", path);
@@ -2031,7 +2067,7 @@ static int mount_entry_on_relative_rootfs(const struct mntent *mntent,
 	}
 
 	if (hasmntopt(mntent, "create=dir")) {
-		if (!mkdir_p(path, 0755)) {
+		if (mkdir_p(path, 0755) < 0) {
 			WARN("Failed to create mount target '%s'", path);
 			ret = -1;
 		}
@@ -2040,7 +2076,9 @@ static int mount_entry_on_relative_rootfs(const struct mntent *mntent,
 	if (hasmntopt(mntent, "create=file") && access(path, F_OK)) {
 		pathdirname = strdup(path);
 		pathdirname = dirname(pathdirname);
-		mkdir_p(pathdirname, 0755);
+		if (mkdir_p(pathdirname, 0755) < 0) {
+			WARN("Failed to create target directory");
+		}
 		pathfile = fopen(path, "wb");
 		if (!pathfile) {
 			WARN("Failed to create mount target '%s'", path);
@@ -2212,7 +2250,7 @@ static int dropcaps_except(struct lxc_list *caps)
 	char *ptr;
 	int i, capid;
 	int numcaps = lxc_caps_last_cap() + 1;
-	INFO("found %d capabilities\n", numcaps);
+	INFO("found %d capabilities", numcaps);
 
 	if (numcaps <= 0 || numcaps > 200)
 		return -1;
@@ -2557,7 +2595,7 @@ void lxc_rename_phys_nics_on_shutdown(struct lxc_conf *conf)
 	INFO("running to reset %d nic names", conf->num_savednics);
 	for (i=0; i<conf->num_savednics; i++) {
 		struct saved_nic *s = &conf->saved_nics[i];
-		INFO("resetting nic %d to %s\n", s->ifindex, s->orig_name);
+		INFO("resetting nic %d to %s", s->ifindex, s->orig_name);
 		lxc_netdev_rename_by_index(s->ifindex, s->orig_name);
 		free(s->orig_name);
 	}
@@ -3334,6 +3372,7 @@ int chown_mapped_root(char *path, struct lxc_conf *conf)
 	uid_t rootid;
 	pid_t pid;
 	unsigned long val;
+	char *chownpath = path;
 
 	if (!get_mapped_rootid(conf, ID_TYPE_UID, &val)) {
 		ERROR("No mapping for container root");
@@ -3341,6 +3380,24 @@ int chown_mapped_root(char *path, struct lxc_conf *conf)
 	}
 	rootid = (uid_t) val;
 
+	/*
+	 * In case of overlay, we want only the writeable layer
+	 * to be chowned
+	 */
+	if (strncmp(path, "overlayfs:", 10) == 0 || strncmp(path, "aufs:", 5) == 0) {
+		chownpath = strchr(path, ':');
+		if (!chownpath) {
+			ERROR("Bad overlay path: %s", path);
+			return -1;
+		}
+		chownpath = strchr(chownpath+1, ':');
+		if (!chownpath) {
+			ERROR("Bad overlay path: %s", path);
+			return -1;
+		}
+		chownpath++;
+	}
+	path = chownpath;
 	if (geteuid() == 0) {
 		if (chown(path, rootid, -1) < 0) {
 			ERROR("Error chowning %s", path);
@@ -3451,7 +3508,7 @@ static int check_autodev( const char *rootfs, void *data )
 
 	if( arg && arg->argv[0] ) {
 		command = arg->argv[0];
-		DEBUG("Set exec command to %s\n", command );
+		DEBUG("Set exec command to %s", command );
 	}
 
 	strncpy( path, command, MAXPATHLEN-1 );
@@ -3591,6 +3648,11 @@ int lxc_setup(struct lxc_handler *handler)
 		return -1;
 	}
 
+	if (!lxc_conf->is_execute && setup_dev_symlinks(&lxc_conf->rootfs)) {
+		ERROR("failed to setup /dev symlinks for '%s'", name);
+		return -1;
+	}
+
 	/* mount /proc if needed for LSM transition */
 	if (lsm_proc_mount(lxc_conf) < 0) {
 		ERROR("failed to LSM mount proc for '%s'", name);
@@ -3619,7 +3681,7 @@ int lxc_setup(struct lxc_handler *handler)
 				return -1;
 			}
 			if (dropcaps_except(&lxc_conf->keepcaps)) {
-				ERROR("failed to keep requested caps\n");
+				ERROR("failed to keep requested caps");
 				return -1;
 			}
 		} else if (setup_caps(&lxc_conf->caps)) {
