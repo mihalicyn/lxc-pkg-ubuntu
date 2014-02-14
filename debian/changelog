@@ -1,3 +1,10 @@
+lxc (1.0.0~rc1-0ubuntu2) trusty; urgency=medium
+
+  * Re-add adt proxy workaround, it should have been fixed in adt but
+    apparently it's not, so keep hardcoding the right values for now.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Thu, 13 Feb 2014 23:55:59 -0500
+
 lxc (1.0.0~rc1-0ubuntu1) trusty; urgency=medium
 
   * New upstream release (1.0.0~rc1).
