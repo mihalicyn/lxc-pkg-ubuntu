@@ -4,7 +4,7 @@
 m4_define([lxc_version_major], 1)
 m4_define([lxc_version_minor], 0)
 m4_define([lxc_version_micro], 0)
-m4_define([lxc_version_beta], [rc1])
+m4_define([lxc_version_beta], [rc2])
 
 m4_define([lxc_version_base], [lxc_version_major.lxc_version_minor.lxc_version_micro])
 m4_define([lxc_version],
@@ -245,7 +245,7 @@ AC_ARG_ENABLE([cgmanager],
 	[], [enable_cgmanager=auto])
 
 if test "x$enable_cgmanager" = "xauto" ; then
-	AC_CHECK_LIB([cgmanager],[cgmanager_create],[enable_cgmanager=yes],[enable_cgmanager=no],[-lnih -lnih-dbus])
+	AC_CHECK_LIB([cgmanager],[cgmanager_create],[enable_cgmanager=yes],[enable_cgmanager=no],[-lnih -lnih-dbus -ldbus-1])
 fi
 AM_CONDITIONAL([ENABLE_CGMANAGER], [test "x$enable_cgmanager" = "xyes"])
 

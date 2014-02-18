@@ -1119,38 +1119,6 @@ static int setup_rootfs_pivot_root(const char *rootfs, const char *pivotdir)
 	return 0;
 }
 
-
-/*
- * Note: This is a verbatum copy of what is in monitor.c.  We're just
- * usint it here to generate a safe subdirectory in /dev/ for the
- * containers /dev/
- */
-
-/* Note we don't use SHA-1 here as we don't want to depend on HAVE_GNUTLS.
- * FNV has good anti collision properties and we're not worried
- * about pre-image resistance or one-way-ness, we're just trying to make
- * the name unique in the 108 bytes of space we have.
- */
-#define FNV1A_64_INIT ((uint64_t)0xcbf29ce484222325ULL)
-static uint64_t fnv_64a_buf(void *buf, size_t len, uint64_t hval)
-{
-	unsigned char *bp;
-
-	for(bp = buf; bp < (unsigned char *)buf + len; bp++)
-	{
-		/* xor the bottom with the current octet */
-		hval ^= (uint64_t)*bp;
-
-		/* gcc optimised:
-		 * multiply by the 64 bit FNV magic prime mod 2^64
-		 */
-		hval += (hval << 1) + (hval << 4) + (hval << 5) +
-			(hval << 7) + (hval << 8) + (hval << 40);
-	}
-
-	return hval;
-}
-
 /*
  * Check to see if a directory has something mounted on it and,
  * if it does, return the fstype.
@@ -2649,7 +2617,7 @@ struct lxc_conf *lxc_conf_init(void)
 	lxc_list_init(&new->groups);
 	new->lsm_aa_profile = NULL;
 	new->lsm_se_context = NULL;
-	new->lsm_umount_proc = 0;
+	new->tmp_umount_proc = 0;
 
 	for (i = 0; i < LXC_NS_MAX; i++)
 		new->inherit_ns_fd[i] = -1;
@@ -3046,6 +3014,10 @@ void lxc_delete_network(struct lxc_handler *handler)
 static int unpriv_assign_nic(struct lxc_netdev *netdev, pid_t pid)
 {
 	pid_t child;
+	int bytes, pipefd[2];
+	char *token, *saveptr = NULL;
+	/* lxc-user-nic returns "interface_name:interface_name" format */
+	char buffer[IFNAMSIZ*2 + 1];
 
 	if (netdev->type != LXC_NET_VETH) {
 		ERROR("nic type %d not support for unprivileged use",
@@ -3053,23 +3025,66 @@ static int unpriv_assign_nic(struct lxc_netdev *netdev, pid_t pid)
 		return -1;
 	}
 
-	if ((child = fork()) < 0) {
-		SYSERROR("fork");
+	if(pipe(pipefd) < 0) {
+		SYSERROR("pipe failed");
 		return -1;
 	}
 
-	if (child > 0)
-		return wait_for_pid(child);
+	if ((child = fork()) < 0) {
+		SYSERROR("fork");
+		close(pipefd[0]);
+		close(pipefd[1]);
+		return -1;
+	}
 
-	// Call lxc-user-nic pid type bridge
+	if (child == 0) { // child
+		/* close the read-end of the pipe */
+		close(pipefd[0]);
+		/* redirect the stdout to write-end of the pipe */
+		dup2(pipefd[1], STDOUT_FILENO);
+		/* close the write-end of the pipe */
+		close(pipefd[0]);
 
-	char pidstr[20];
-	char *args[] = {LXC_USERNIC_PATH, pidstr, "veth", netdev->link, netdev->name, NULL };
-	snprintf(pidstr, 19, "%lu", (unsigned long) pid);
-	pidstr[19] = '\0';
-	execvp(args[0], args);
-	SYSERROR("execvp lxc-user-nic");
-	exit(1);
+		// Call lxc-user-nic pid type bridge
+		char pidstr[20];
+		char *args[] = {LXC_USERNIC_PATH, pidstr, "veth", netdev->link, netdev->name, NULL };
+		snprintf(pidstr, 19, "%lu", (unsigned long) pid);
+		pidstr[19] = '\0';
+		execvp(args[0], args);
+		SYSERROR("execvp lxc-user-nic");
+		exit(1);
+	}
+
+	/* close the write-end of the pipe */
+	close(pipefd[1]);
+
+	bytes = read(pipefd[0], &buffer, IFNAMSIZ*2 + 1);
+	if (bytes < 0) {
+		SYSERROR("read failed");
+	}
+	buffer[bytes - 1] = '\0';
+
+	if (wait_for_pid(child) != 0) {
+		close(pipefd[0]);
+		return -1;
+	}
+
+	/* close the read-end of the pipe */
+	close(pipefd[0]);
+
+	/* fill netdev->name field */
+	token = strtok_r(buffer, ":", &saveptr);
+	if (!token)
+		return -1;
+	netdev->name = strdup(token);
+
+	/* fill netdev->veth_attr.pair field */
+	token = strtok_r(NULL, ":", &saveptr);
+	if (!token)
+		return -1;
+	netdev->priv.veth_attr.pair = strdup(token);
+
+	return 0;
 }
 
 int lxc_assign_network(struct lxc_list *network, pid_t pid)
@@ -3550,6 +3565,77 @@ static int check_autodev( const char *rootfs, void *data )
 	return 0;
 }
 
+/*
+ * _do_tmp_proc_mount: Mount /proc inside container if not already
+ * mounted
+ *
+ * @rootfs : the rootfs where proc should be mounted
+ *
+ * Returns < 0 on failure, 0 if the correct proc was already mounted
+ * and 1 if a new proc was mounted.
+ */
+static int do_tmp_proc_mount(const char *rootfs)
+{
+	char path[MAXPATHLEN];
+	char link[20];
+	int linklen, ret;
+
+	ret = snprintf(path, MAXPATHLEN, "%s/proc/self", rootfs);
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		SYSERROR("proc path name too long");
+		return -1;
+	}
+	memset(link, 0, 20);
+	linklen = readlink(path, link, 20);
+	INFO("I am %d, /proc/self points to '%s'", getpid(), link);
+	ret = snprintf(path, MAXPATHLEN, "%s/proc", rootfs);
+	if (linklen < 0) /* /proc not mounted */
+		goto domount;
+	/* can't be longer than rootfs/proc/1 */
+	if (strncmp(link, "1", linklen) != 0) {
+		/* wrong /procs mounted */
+		umount2(path, MNT_DETACH); /* ignore failure */
+		goto domount;
+	}
+	/* the right proc is already mounted */
+	return 0;
+
+domount:
+	if (mount("proc", path, "proc", 0, NULL))
+		return -1;
+	INFO("Mounted /proc in container for security transition");
+	return 1;
+}
+
+int tmp_proc_mount(struct lxc_conf *lxc_conf)
+{
+	int mounted;
+
+	if (lxc_conf->rootfs.path == NULL || strlen(lxc_conf->rootfs.path) == 0) {
+		if (mount("proc", "/proc", "proc", 0, NULL)) {
+			SYSERROR("Failed mounting /proc, proceeding");
+			mounted = 0;
+		} else
+			mounted = 1;
+	} else
+		mounted = do_tmp_proc_mount(lxc_conf->rootfs.mount);
+	if (mounted == -1) {
+		SYSERROR("failed to mount /proc in the container.");
+		return -1;
+	} else if (mounted == 1) {
+		lxc_conf->tmp_umount_proc = 1;
+	}
+	return 0;
+}
+
+void tmp_proc_unmount(struct lxc_conf *lxc_conf)
+{
+	if (lxc_conf->tmp_umount_proc == 1) {
+		umount("/proc");
+		lxc_conf->tmp_umount_proc = 0;
+	}
+}
+
 int lxc_setup(struct lxc_handler *handler)
 {
 	const char *name = handler->name;
@@ -3653,8 +3739,8 @@ int lxc_setup(struct lxc_handler *handler)
 		return -1;
 	}
 
-	/* mount /proc if needed for LSM transition */
-	if (lsm_proc_mount(lxc_conf) < 0) {
+	/* mount /proc if it's not already there */
+	if (tmp_proc_mount(lxc_conf) < 0) {
 		ERROR("failed to LSM mount proc for '%s'", name);
 		return -1;
 	}

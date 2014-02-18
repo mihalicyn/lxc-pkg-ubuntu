@@ -649,7 +649,12 @@ static int do_start(void *data)
 		lsm_label = handler->conf->lsm_se_context;
 	if (lsm_process_label_set(lsm_label, 1, 1) < 0)
 		goto out_warn_father;
-	lsm_proc_unmount(handler->conf);
+
+	if (lxc_check_inherited(handler->conf, handler->sigfd))
+		return -1;
+
+	/* If we mounted a temporary proc, then unmount it now */
+	tmp_proc_unmount(handler->conf);
 
 	if (lxc_seccomp_load(handler->conf) != 0)
 		goto out_warn_father;
@@ -1029,9 +1034,6 @@ int lxc_start(const char *name, char *const argv[], struct lxc_conf *conf,
 	struct start_args start_arg = {
 		.argv = argv,
 	};
-
-	if (lxc_check_inherited(conf, -1))
-		return -1;
 
 	conf->need_utmp_watch = 1;
 	return __lxc_start(name, conf, &start_ops, &start_arg, lxcpath);
