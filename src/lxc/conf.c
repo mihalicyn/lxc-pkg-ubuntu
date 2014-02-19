@@ -1881,13 +1881,39 @@ static int mount_entry(const char *fsname, const char *target,
 	return 0;
 }
 
-static inline int mount_entry_on_systemfs(const struct mntent *mntent)
+/*
+ * Remove 'optional', 'create=dir', and 'create=file' from mntopt
+ */
+static void cull_mntent_opt(struct mntent *mntent)
+{
+	int i;
+	char *p, *p2;
+	char *list[] = {"create=dir",
+			"create=file",
+			"optional",
+			NULL };
+
+	for (i=0; list[i]; i++) {
+		if (!(p = strstr(mntent->mnt_opts, list[i])))
+			continue;
+		p2 = strchr(p, ',');
+		if (!p2) {
+			/* no more mntopts, so just chop it here */
+			*p = '\0';
+			continue;
+		}
+		memmove(p, p2+1, strlen(p2+1)+1);
+	}
+}
+
+static inline int mount_entry_on_systemfs(struct mntent *mntent)
 {
 	unsigned long mntflags;
 	char *mntdata;
 	int ret;
 	FILE *pathfile = NULL;
 	char* pathdirname = NULL;
+	bool optional = hasmntopt(mntent, "optional") != NULL;
 
 	if (hasmntopt(mntent, "create=dir")) {
 		if (mkdir_p(mntent->mnt_dir, 0755) < 0) {
@@ -1911,6 +1937,8 @@ static inline int mount_entry_on_systemfs(const struct mntent *mntent)
 			fclose(pathfile);
 	}
 
+	cull_mntent_opt(mntent);
+
 	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
 		free(mntdata);
 		return -1;
@@ -1919,7 +1947,7 @@ static inline int mount_entry_on_systemfs(const struct mntent *mntent)
 	ret = mount_entry(mntent->mnt_fsname, mntent->mnt_dir,
 			  mntent->mnt_type, mntflags, mntdata);
 
-	if (hasmntopt(mntent, "optional") != NULL)
+	if (optional)
 		ret = 0;
 
 	free(pathdirname);
@@ -1928,7 +1956,7 @@ static inline int mount_entry_on_systemfs(const struct mntent *mntent)
 	return ret;
 }
 
-static int mount_entry_on_absolute_rootfs(const struct mntent *mntent,
+static int mount_entry_on_absolute_rootfs(struct mntent *mntent,
 					  const struct lxc_rootfs *rootfs,
 					  const char *lxc_name)
 {
@@ -1940,6 +1968,7 @@ static int mount_entry_on_absolute_rootfs(const struct mntent *mntent,
 	const char *lxcpath;
 	FILE *pathfile = NULL;
 	char *pathdirname = NULL;
+	bool optional = hasmntopt(mntent, "optional") != NULL;
 
 	lxcpath = lxc_global_config_value("lxc.lxcpath");
 	if (!lxcpath) {
@@ -1998,6 +2027,7 @@ skipabs:
 		else
 			fclose(pathfile);
 	}
+	cull_mntent_opt(mntent);
 
 	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
 		free(mntdata);
@@ -2009,7 +2039,7 @@ skipabs:
 
 	free(mntdata);
 
-	if (hasmntopt(mntent, "optional") != NULL)
+	if (optional)
 		ret = 0;
 
 out:
@@ -2017,7 +2047,7 @@ out:
 	return ret;
 }
 
-static int mount_entry_on_relative_rootfs(const struct mntent *mntent,
+static int mount_entry_on_relative_rootfs(struct mntent *mntent,
 					  const char *rootfs)
 {
 	char path[MAXPATHLEN];
@@ -2026,6 +2056,7 @@ static int mount_entry_on_relative_rootfs(const struct mntent *mntent,
 	int ret;
 	FILE *pathfile = NULL;
 	char *pathdirname = NULL;
+	bool optional = hasmntopt(mntent, "optional") != NULL;
 
 	/* relative to root mount point */
 	ret = snprintf(path, sizeof(path), "%s/%s", rootfs, mntent->mnt_dir);
@@ -2055,6 +2086,7 @@ static int mount_entry_on_relative_rootfs(const struct mntent *mntent,
 		else
 			fclose(pathfile);
 	}
+	cull_mntent_opt(mntent);
 
 	if (parse_mntopts(mntent->mnt_opts, &mntflags, &mntdata) < 0) {
 		free(mntdata);
@@ -2064,7 +2096,7 @@ static int mount_entry_on_relative_rootfs(const struct mntent *mntent,
 	ret = mount_entry(mntent->mnt_fsname, path, mntent->mnt_type,
 			  mntflags, mntdata);
 
-	if (hasmntopt(mntent, "optional") != NULL)
+	if (optional)
 		ret = 0;
 
 	free(pathdirname);
@@ -2374,16 +2406,19 @@ static int setup_netdev(struct lxc_netdev *netdev)
 				return -1;
 			}
 		}
-		return 0;
+		if (netdev->type != LXC_NET_VETH)
+			return 0;
+		netdev->ifindex = if_nametoindex(netdev->name);
 	}
 
 	/* get the new ifindex in case of physical netdev */
-	if (netdev->type == LXC_NET_PHYS)
+	if (netdev->type == LXC_NET_PHYS) {
 		if (!(netdev->ifindex = if_nametoindex(netdev->link))) {
 			ERROR("failed to get ifindex for %s",
 				netdev->link);
 			return -1;
 		}
+	}
 
 	/* retrieve the name of the interface */
 	if (!if_indextoname(netdev->ifindex, current_ifname)) {
@@ -2398,11 +2433,13 @@ static int setup_netdev(struct lxc_netdev *netdev)
 			netdev->link : "eth%d";
 
 	/* rename the interface name */
-	err = lxc_netdev_rename_by_name(ifname, netdev->name);
-	if (err) {
-		ERROR("failed to rename %s->%s : %s", ifname, netdev->name,
-		      strerror(-err));
-		return -1;
+	if (strcmp(ifname, netdev->name) != 0) {
+		err = lxc_netdev_rename_by_name(ifname, netdev->name);
+		if (err) {
+			ERROR("failed to rename %s->%s : %s", ifname, netdev->name,
+			      strerror(-err));
+			return -1;
+		}
 	}
 
 	/* Re-read the name of the interface because its name has changed
@@ -3011,13 +3048,14 @@ void lxc_delete_network(struct lxc_handler *handler)
 
 #define LXC_USERNIC_PATH LIBEXECDIR "/lxc/lxc-user-nic"
 
+/* lxc-user-nic returns "interface_name:interface_name\n" */
+#define MAX_BUFFER_SIZE IFNAMSIZ*2 + 2
 static int unpriv_assign_nic(struct lxc_netdev *netdev, pid_t pid)
 {
 	pid_t child;
 	int bytes, pipefd[2];
 	char *token, *saveptr = NULL;
-	/* lxc-user-nic returns "interface_name:interface_name" format */
-	char buffer[IFNAMSIZ*2 + 1];
+	char buffer[MAX_BUFFER_SIZE];
 
 	if (netdev->type != LXC_NET_VETH) {
 		ERROR("nic type %d not support for unprivileged use",
@@ -3043,7 +3081,7 @@ static int unpriv_assign_nic(struct lxc_netdev *netdev, pid_t pid)
 		/* redirect the stdout to write-end of the pipe */
 		dup2(pipefd[1], STDOUT_FILENO);
 		/* close the write-end of the pipe */
-		close(pipefd[0]);
+		close(pipefd[1]);
 
 		// Call lxc-user-nic pid type bridge
 		char pidstr[20];
@@ -3058,7 +3096,7 @@ static int unpriv_assign_nic(struct lxc_netdev *netdev, pid_t pid)
 	/* close the write-end of the pipe */
 	close(pipefd[1]);
 
-	bytes = read(pipefd[0], &buffer, IFNAMSIZ*2 + 1);
+	bytes = read(pipefd[0], &buffer, MAX_BUFFER_SIZE);
 	if (bytes < 0) {
 		SYSERROR("read failed");
 	}
@@ -3076,13 +3114,23 @@ static int unpriv_assign_nic(struct lxc_netdev *netdev, pid_t pid)
 	token = strtok_r(buffer, ":", &saveptr);
 	if (!token)
 		return -1;
-	netdev->name = strdup(token);
+	netdev->name = malloc(IFNAMSIZ+1);
+	if (!netdev->name) {
+		ERROR("Out of memory");
+		return -1;
+	}
+	memset(netdev->name, 0, IFNAMSIZ+1);
+	strncpy(netdev->name, token, IFNAMSIZ);
 
 	/* fill netdev->veth_attr.pair field */
 	token = strtok_r(NULL, ":", &saveptr);
 	if (!token)
 		return -1;
 	netdev->priv.veth_attr.pair = strdup(token);
+	if (!netdev->priv.veth_attr.pair) {
+		ERROR("Out of memory");
+		return -1;
+	}
 
 	return 0;
 }
@@ -3101,7 +3149,9 @@ int lxc_assign_network(struct lxc_list *network, pid_t pid)
 		if (netdev->type == LXC_NET_VETH && !am_root) {
 			if (unpriv_assign_nic(netdev, pid))
 				return -1;
-			// TODO fill in netdev->ifindex and name
+			// lxc-user-nic has moved the nic to the new ns.
+			// unpriv_assign_nic() fills in netdev->name.
+			// netdev->ifindex will be filed in at setup_netdev.
 			continue;
 		}
 
@@ -3131,7 +3181,7 @@ static int write_id_mapping(enum idtype idtype, pid_t pid, const char *buf,
 
 	ret = snprintf(path, PATH_MAX, "/proc/%d/%cid_map", pid, idtype == ID_TYPE_UID ? 'u' : 'g');
 	if (ret < 0 || ret >= PATH_MAX) {
-		fprintf(stderr, "%s: path name too long", __func__);
+		fprintf(stderr, "%s: path name too long\n", __func__);
 		return -E2BIG;
 	}
 	f = fopen(path, "w");

@@ -79,7 +79,7 @@ build_triplet = @build@
 host_triplet = @host@
 subdir = config
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am compile \
-	config.guess config.sub depcomp install-sh missing
+	config.guess config.sub install-sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acinclude.m4 \
 	$(top_srcdir)/config/tls.m4 $(top_srcdir)/configure.ac
