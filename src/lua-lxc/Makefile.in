@@ -97,8 +97,7 @@ PROGRAMS = $(so_PROGRAMS)
 am__core_so_SOURCES_DIST = core.c
 @ENABLE_LUA_TRUE@am_core_so_OBJECTS = core_so-core.$(OBJEXT)
 core_so_OBJECTS = $(am_core_so_OBJECTS)
-am__DEPENDENCIES_1 =
-@ENABLE_LUA_TRUE@core_so_DEPENDENCIES = $(am__DEPENDENCIES_1)
+core_so_DEPENDENCIES =
 core_so_LINK = $(CCLD) $(core_so_CFLAGS) $(CFLAGS) $(core_so_LDFLAGS) \
 	$(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
@@ -360,7 +359,7 @@ top_srcdir = @top_srcdir@
 @ENABLE_LUA_TRUE@	-L$(top_srcdir)/src/lxc \
 @ENABLE_LUA_TRUE@	-Wl,-soname,core.so.$(firstword $(subst ., ,$(VERSION)))
 
-@ENABLE_LUA_TRUE@core_so_LDADD = -llxc $(LUA_LIBS)
+@ENABLE_LUA_TRUE@core_so_LDADD = -llxc
 EXTRA_DIST = \
 	lxc.lua \
 	test/apitest.lua

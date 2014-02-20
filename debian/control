@@ -29,7 +29,7 @@ Depends: adduser,
          bridge-utils,
          dnsmasq-base,
          iptables,
-         liblxc0 (= ${binary:Version}),
+         liblxc1 (= ${binary:Version}),
          python3,
          python3-lxc,
          rsync,
@@ -99,7 +99,7 @@ Description: Linux Containers userspace tools (templates)
 
 Package: lxc-tests
 Architecture: linux-any
-Depends: liblxc0 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Depends: liblxc1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Recommends: lxc, lxc-templates
 Description: Linux Containers userspace tools (test binaries)
  Containers are insulated areas inside a system, which have their own namespace
@@ -109,12 +109,14 @@ Description: Linux Containers userspace tools (test binaries)
  .
  This package contains the test binaries.
 
-Package: liblxc0
+Package: liblxc1
 Architecture: linux-any
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends}
-Replaces: lxc (<< 0.9.0~alpha3-0ubuntu1~)
+Replaces: liblxc0, lxc (<< 0.9.0~alpha3-0ubuntu1~)
 Breaks: lxc (<< 0.9.0~alpha3-0ubuntu1~)
+Provides: liblxc0
+Conflicts: liblxc0
 Description: Linux Containers userspace tools (library)
  Containers are insulated areas inside a system, which have their own namespace
  for filesystem, network, PID, IPC, CPU and memory allocation and which can be
@@ -126,7 +128,7 @@ Description: Linux Containers userspace tools (library)
 Package: python3-lxc
 Architecture: linux-any
 Section: python
-Depends: liblxc0 (=${binary:Version}),
+Depends: liblxc1 (=${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends}

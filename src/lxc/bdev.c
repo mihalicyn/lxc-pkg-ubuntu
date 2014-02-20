@@ -2064,10 +2064,11 @@ static int aufs_detect(const char *path)
 //
 static int aufs_mount(struct bdev *bdev)
 {
-	char *options, *dup, *lower, *upper;
+	char *options, *dup, *lower, *upper, *rundir;
 	int len;
 	unsigned long mntflags;
 	char *mntdata;
+	char *runpath;
 	int ret;
 
 	if (strcmp(bdev->type, "aufs"))
@@ -2094,16 +2095,41 @@ static int aufs_mount(struct bdev *bdev)
 	// TODO We should check whether bdev->src is a blockdev, and if so
 	// but for now, only support aufs of a basic directory
 
+	rundir = get_rundir();
+	if (!rundir)
+		return -1;
+
+	len = strlen(rundir) + strlen("/lxc") + 1;
+	runpath = alloca(len);
+	ret = snprintf(runpath, len, "%s/lxc", rundir);
+	if (ret < 0 || ret >= len) {
+		free(mntdata);
+		free(rundir);
+		return -1;
+	}
+	if (mkdir_p(runpath, 0755) < 0) {
+		free(mntdata);
+		free(rundir);
+		return -1;
+	}
+
+	// AUFS does not work on top of certain filesystems like (XFS or Btrfs)
+	// so add xino=RUNDIR/lxc/aufs.xino parameter to mount options
+	//
+	// see http://www.mail-archive.com/aufs-users@lists.sourceforge.net/msg02587.html
 	if (mntdata) {
-		len = strlen(lower) + strlen(upper) + strlen("br==rw:=ro,") + strlen(mntdata) + 1;
+		len = strlen(lower) + strlen(upper) + strlen(runpath) + strlen("br==rw:=ro,,xino=/aufs.xino") + strlen(mntdata) + 1;
 		options = alloca(len);
-		ret = snprintf(options, len, "br=%s=rw:%s=ro,%s", upper, lower, mntdata);
+		ret = snprintf(options, len, "br=%s=rw:%s=ro,%s,xino=%s/aufs.xino", upper, lower, mntdata, runpath);
 	}
 	else {
-		len = strlen(lower) + strlen(upper) + strlen("br==rw:=ro") + 1;
+		len = strlen(lower) + strlen(upper) + strlen(runpath) + strlen("br==rw:=ro,xino=/aufs.xino") + 1;
 		options = alloca(len);
-		ret = snprintf(options, len, "br=%s=rw:%s=ro", upper, lower);
+		ret = snprintf(options, len, "br=%s=rw:%s=ro,xino=%s/aufs.xino", upper, lower, runpath);
 	}
+
+	free(rundir);
+
 	if (ret < 0 || ret >= len) {
 		free(mntdata);
 		return -1;
@@ -2386,6 +2412,12 @@ static int rsync_rootfs(struct rsync_data *data)
 	if (unshare(CLONE_NEWNS) < 0) {
 		SYSERROR("unshare CLONE_NEWNS");
 		return -1;
+	}
+	if (detect_shared_rootfs()) {
+		if (mount(NULL, "/", NULL, MS_SLAVE|MS_REC, NULL)) {
+			SYSERROR("Failed to make / rslave to run rsync");
+			ERROR("Continuing...");
+		}
 	}
 
 	// If not a snapshot, copy the fs.
