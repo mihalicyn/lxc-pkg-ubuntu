@@ -1,3 +1,9 @@
 Tests: exercise
-Depends: @, busybox-static, cgroup-lite, cloud-image-utils, uidmap, xz-utils
+Depends: busybox-static,
+         cgroup-lite,
+         cloud-image-utils,
+         debootstrap,
+         uidmap,
+         xz-utils,
+         @
 Restrictions: needs-root allow-stderr
