@@ -12,14 +12,14 @@ IGNORE_LIST=""
 
 # FIXME: This should be done in default adt environment
 # Detect the ubuntu-ci setup
-if ping 10.245.64.1 -c 1 -W 1 >/dev/null 2>&1; then
-    echo "Running in the Canonical enablement environment"
-    export http_proxy="http://10.245.64.1:3128"
-    export https_proxy="http://10.245.64.1:3128"
-elif getent hosts squid.internal >/dev/null 2>&1; then
+if echo "" | nc -w 2 squid.internal 3128 >/dev/null 2>&1; then
     echo "Running in the Canonical CI environment"
     export http_proxy="http://squid.internal:3128"
     export https_proxy="http://squid.internal:3128"
+elif echo "" | nc -w 2 10.245.64.1 3128 >/dev/null 2>&1; then
+    echo "Running in the Canonical enablement environment"
+    export http_proxy="http://10.245.64.1:3128"
+    export https_proxy="http://10.245.64.1:3128"
 fi
 
 # Helper functions
