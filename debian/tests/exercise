@@ -12,7 +12,11 @@ IGNORE_LIST=""
 
 # FIXME: This should be done in default adt environment
 # Detect the ubuntu-ci setup
-if getent hosts squid.internal >/dev/null 2>&1; then
+if ping 10.245.64.1 -c 1 -W 1 >/dev/null 2>&1; then
+    echo "Running in the Canonical enablement environment"
+    export http_proxy="http://10.245.64.1:3128"
+    export https_proxy="http://10.245.64.1:3128"
+elif getent hosts squid.internal >/dev/null 2>&1; then
     echo "Running in the Canonical CI environment"
     export http_proxy="http://squid.internal:3128"
     export https_proxy="http://squid.internal:3128"
@@ -61,21 +65,57 @@ for testbin in /usr/bin/lxc-test-*; do
     # Some tests can't be run standalone
     [ "$testbin" = "/usr/bin/lxc-test-may-control" ] && continue
 
+    # Skip some tests when running in a container
+    if [ -f /run/container_type ]; then
+        [ "$testbin" = "/usr/bin/lxc-test-device-add-remove" ] && \
+            ignore "$STRING" && continue
+
+        [ "$testbin" = "/usr/bin/lxc-test-reboot" ] && \
+            ignore "$STRING" && continue
+    fi
+
+    # Skip some tests on old kernels
+    if [ ! -f /proc/self/uid_map ] || [ ! -f /etc/subuid ] || \
+       [ ! -f /etc/subgid ]; then
+        [ "$testbin" = "/usr/bin/lxc-test-unpriv" ] && \
+            ignore "$STRING" && continue
+
+        [ "$testbin" = "/usr/bin/lxc-test-usernic" ] && \
+            ignore "$STRING" && continue
+    fi
+
+    # Skip some tests on archs not supported by lxc-download
+    if [ "$(dpkg --print-architecture)" = "ppc64el" ]; then
+        [ "$testbin" = "/usr/bin/lxc-test-autostart" ] && \
+            ignore "$STRING" && continue
+
+        [ "$testbin" = "/usr/bin/lxc-test-unpriv" ] && \
+            ignore "$STRING" && continue
+
+        [ "$testbin" = "/usr/bin/lxc-test-usernic" ] && \
+            ignore "$STRING" && continue
+    fi
+
     OUT=$(mktemp)
     $testbin >$OUT 2>&1 && pass "$STRING" || fail "$STRING" "$testbin" "$OUT"
     rm $OUT
 done
 
 ## Python3 testsuite
-OUT=$(mktemp)
-
 STRING="python3: API"
-PYTEST=$(mktemp)
-cat /usr/share/doc/python3-lxc/examples/api_test.py.gz | gzip -d > $PYTEST
-python3 $PYTEST >$OUT 2>&1 && pass "$STRING" || fail "$STRING" "python3" "$OUT"
-rm $PYTEST
+if [ "$(dpkg --print-architecture)" = "ppc64el" ]; then
+    ignore "$STRING"
+else
+    OUT=$(mktemp)
 
-rm $OUT
+    PYTEST=$(mktemp)
+    cat /usr/share/doc/python3-lxc/examples/api_test.py.gz | gzip -d > $PYTEST
+    python3 $PYTEST >$OUT 2>&1 && pass "$STRING" || \
+        fail "$STRING" "python3" "$OUT"
+    rm $PYTEST
+
+    rm $OUT
+fi
 
 # Test summary
 summary

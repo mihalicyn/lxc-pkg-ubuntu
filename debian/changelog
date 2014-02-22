@@ -1,3 +1,12 @@
+lxc (1.0.0-0ubuntu2) trusty; urgency=medium
+
+  * Update autopkgtest script to detect:
+    - ppc64el
+    - running in a container
+    - running on an older kernel
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Fri, 21 Feb 2014 20:16:44 -0500
+
 lxc (1.0.0-0ubuntu1) trusty; urgency=medium
 
   * New upstream release (1.0.0).
