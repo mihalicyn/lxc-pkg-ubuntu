@@ -1,3 +1,11 @@
+lxc (1.0.1-0ubuntu1) trusty; urgency=medium
+
+  * New upstream bugfix release. (LP: #1246094, LP: #1277466)
+    Changelog at: https://linuxcontainers.org/news
+  * Add xz-utils to lxc-templates' dependencies.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Fri, 07 Mar 2014 12:18:28 -0500
+
 lxc (1.0.0-0ubuntu4) trusty; urgency=medium
 
   * Tweak autopkgtest proxy detection to hopefully detect the right
