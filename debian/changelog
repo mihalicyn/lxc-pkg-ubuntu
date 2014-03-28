@@ -1,3 +1,23 @@
+lxc (1.0.2-0ubuntu1) trusty; urgency=medium
+
+  * New upstream bugfix release.
+  * Update packaging from daily branch.
+    - Build-depend on libcgmanager-dev
+    - Build-depend on libseccomp-dev for armhf too
+    - Move rsync dependency from lxc to liblxc1
+    - Stop recommending cgroup-lite | cgroup-bin (replace by cgmanager)
+    - Stop recommending libcap2-bin (lxc-setcap was dropped ages ago)
+    - Stop recommending openssl from lxc (only used by templates)
+    - Move uidmap recommend from lxc to liblxc1
+    - Recommend busybox-static for lxc-templates
+    - Add cgmanager as a dependency of liblxc1
+    - Enable cgmanager support in LXC (LP: #1279048)
+    - Drop cgroup-lite test suite dependency.
+    - Update testsuite runner to work inside an unprivileged container.
+    - Update testsuite runner to work in the LXC CI environment.
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Thu, 27 Mar 2014 23:18:11 -0400
+
 lxc (1.0.1-0ubuntu1) trusty; urgency=medium
 
   * New upstream bugfix release. (LP: #1246094, LP: #1277466)

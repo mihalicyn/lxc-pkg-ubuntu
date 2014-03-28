@@ -31,7 +31,6 @@
 #include <unistd.h>
 #include <signal.h>
 #include <fcntl.h>
-#include <termios.h>
 #include <grp.h>
 #include <poll.h>
 #include <sys/param.h>
@@ -697,6 +696,15 @@ static int do_start(void *data)
 	if (lsm_process_label_set(lsm_label, 1, 1) < 0)
 		goto out_warn_father;
 
+	/* Some init's such as busybox will set sane tty settings on stdin,
+	 * stdout, stderr which it thinks is the console. We already set them
+	 * the way we wanted on the real terminal, and we want init to do its
+	 * setup on its console ie. the pty allocated in lxc_console_create()
+	 * so make sure that that pty is stdin,stdout,stderr.
+	 */
+	if (lxc_console_set_stdfds(handler) < 0)
+		goto out_warn_father;
+
 	if (lxc_check_inherited(handler->conf, handler->sigfd))
 		return -1;
 
@@ -1000,12 +1008,33 @@ out_abort:
 	return -1;
 }
 
+int get_netns_fd(int pid)
+{
+	char path[MAXPATHLEN];
+	int ret, fd;
+
+	ret = snprintf(path, MAXPATHLEN, "/proc/%d/ns/net", pid);
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		WARN("Failed to pin netns file for pid %d", pid);
+		return -1;
+	}
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		WARN("Failed to pin netns file %s for pid %d: %s",
+				path, pid, strerror(errno));
+		return -1;
+	}
+	return fd;
+}
+
 int __lxc_start(const char *name, struct lxc_conf *conf,
 		struct lxc_operations* ops, void *data, const char *lxcpath)
 {
 	struct lxc_handler *handler;
 	int err = -1;
 	int status;
+	int netnsfd = -1;
 
 	handler = lxc_init(name, conf, lxcpath);
 	if (!handler) {
@@ -1032,9 +1061,13 @@ int __lxc_start(const char *name, struct lxc_conf *conf,
 		goto out_fini_nonet;
 	}
 
+	netnsfd = get_netns_fd(handler->pid);
+
 	err = lxc_poll(name, handler);
 	if (err) {
 		ERROR("mainloop exited with an error");
+		if (netnsfd >= 0)
+			close(netnsfd);
 		goto out_abort;
 	}
 
@@ -1065,7 +1098,9 @@ int __lxc_start(const char *name, struct lxc_conf *conf,
 		}
         }
 
-	lxc_rename_phys_nics_on_shutdown(handler->conf);
+	lxc_rename_phys_nics_on_shutdown(netnsfd, handler->conf);
+	if (netnsfd >= 0)
+		close(netnsfd);
 
 	if (handler->pinfd >= 0) {
 		close(handler->pinfd);

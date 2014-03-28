@@ -358,6 +358,7 @@ extern int lxc_clear_config_caps(struct lxc_conf *c);
 extern int lxc_clear_config_keepcaps(struct lxc_conf *c);
 extern int lxc_clear_cgroups(struct lxc_conf *c, const char *key);
 extern int lxc_clear_mount_entries(struct lxc_conf *c);
+extern int lxc_clear_automounts(struct lxc_conf *c);
 extern int lxc_clear_hooks(struct lxc_conf *c, const char *key);
 extern int lxc_clear_idmaps(struct lxc_conf *c);
 extern int lxc_clear_groups(struct lxc_conf *c);
@@ -369,7 +370,7 @@ extern int lxc_clear_groups(struct lxc_conf *c);
 struct cgroup_process_info;
 extern int lxc_setup(struct lxc_handler *handler);
 
-extern void lxc_rename_phys_nics_on_shutdown(struct lxc_conf *conf);
+extern void lxc_rename_phys_nics_on_shutdown(int netnsfd, struct lxc_conf *conf);
 
 extern int find_unmapped_nsuid(struct lxc_conf *conf, enum idtype idtype);
 extern int mapped_hostid(unsigned id, struct lxc_conf *conf, enum idtype idtype);

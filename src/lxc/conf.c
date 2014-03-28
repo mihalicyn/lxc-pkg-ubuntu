@@ -1821,11 +1821,18 @@ int parse_mntopts(const char *mntopts, unsigned long *mntflags,
 
 static int mount_entry(const char *fsname, const char *target,
 		       const char *fstype, unsigned long mountflags,
-		       const char *data)
+		       const char *data, int optional)
 {
 	if (mount(fsname, target, fstype, mountflags & ~MS_REMOUNT, data)) {
-		SYSERROR("failed to mount '%s' on '%s'", fsname, target);
-		return -1;
+		if (optional) {
+			INFO("failed to mount '%s' on '%s' (optional): %s", fsname,
+			     target, strerror(errno));
+			return 0;
+		}
+		else {
+			SYSERROR("failed to mount '%s' on '%s'", fsname, target);
+			return -1;
+		}
 	}
 
 	if ((mountflags & MS_REMOUNT) || (mountflags & MS_BIND)) {
@@ -1835,9 +1842,16 @@ static int mount_entry(const char *fsname, const char *target,
 
 		if (mount(fsname, target, fstype,
 			  mountflags | MS_REMOUNT, data)) {
-			SYSERROR("failed to mount '%s' on '%s'",
-				 fsname, target);
-			return -1;
+			if (optional) {
+				INFO("failed to mount '%s' on '%s' (optional): %s",
+					 fsname, target, strerror(errno));
+				return 0;
+			}
+			else {
+				SYSERROR("failed to mount '%s' on '%s'",
+					 fsname, target);
+				return -1;
+			}
 		}
 	}
 
@@ -1910,10 +1924,7 @@ static inline int mount_entry_on_systemfs(struct mntent *mntent)
 	}
 
 	ret = mount_entry(mntent->mnt_fsname, mntent->mnt_dir,
-			  mntent->mnt_type, mntflags, mntdata);
-
-	if (optional)
-		ret = 0;
+			  mntent->mnt_type, mntflags, mntdata, optional);
 
 	free(pathdirname);
 	free(mntdata);
@@ -2000,12 +2011,9 @@ skipabs:
 	}
 
 	ret = mount_entry(mntent->mnt_fsname, path, mntent->mnt_type,
-			  mntflags, mntdata);
+			  mntflags, mntdata, optional);
 
 	free(mntdata);
-
-	if (optional)
-		ret = 0;
 
 out:
 	free(pathdirname);
@@ -2059,10 +2067,7 @@ static int mount_entry_on_relative_rootfs(struct mntent *mntent,
 	}
 
 	ret = mount_entry(mntent->mnt_fsname, path, mntent->mnt_type,
-			  mntflags, mntdata);
-
-	if (optional)
-		ret = 0;
+			  mntflags, mntdata, optional);
 
 	free(pathdirname);
 	free(mntdata);
@@ -2558,11 +2563,49 @@ static int setup_network(struct lxc_list *network)
 	return 0;
 }
 
-void lxc_rename_phys_nics_on_shutdown(struct lxc_conf *conf)
+/* try to move physical nics to the init netns */
+void restore_phys_nics_to_netns(int netnsfd, struct lxc_conf *conf)
+{
+	int i, ret, oldfd;
+	char path[MAXPATHLEN];
+
+	if (netnsfd < 0)
+		return;
+
+	ret = snprintf(path, MAXPATHLEN, "/proc/self/ns/net");
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		WARN("Failed to open monitor netns fd");
+		return;
+	}
+	if ((oldfd = open(path, O_RDONLY)) < 0) {
+		SYSERROR("Failed to open monitor netns fd");
+		return;
+	}
+	if (setns(netnsfd, 0) != 0) {
+		SYSERROR("Failed to enter container netns to reset nics");
+		close(oldfd);
+		return;
+	}
+	for (i=0; i<conf->num_savednics; i++) {
+		struct saved_nic *s = &conf->saved_nics[i];
+		if (lxc_netdev_move_by_index(s->ifindex, 1))
+			WARN("Error moving nic index:%d back to host netns",
+					s->ifindex);
+	}
+	if (setns(oldfd, 0) != 0)
+		SYSERROR("Failed to re-enter monitor's netns");
+	close(oldfd);
+}
+
+void lxc_rename_phys_nics_on_shutdown(int netnsfd, struct lxc_conf *conf)
 {
 	int i;
 
+	if (conf->num_savednics == 0)
+		return;
+
 	INFO("running to reset %d nic names", conf->num_savednics);
+	restore_phys_nics_to_netns(netnsfd, conf);
 	for (i=0; i<conf->num_savednics; i++) {
 		struct saved_nic *s = &conf->saved_nics[i];
 		INFO("resetting nic %d to %s", s->ifindex, s->orig_name);
@@ -3169,7 +3212,7 @@ int lxc_map_ids(struct lxc_list *idmap, pid_t pid)
 	int ret = 0;
 	enum idtype type;
 	char *buf = NULL, *pos;
-	int use_shadow = (on_path("newuidmap") && on_path("newuidmap"));
+	int use_shadow = (on_path("newuidmap") && on_path("newgidmap"));
 
 	if (!use_shadow && geteuid()) {
 		ERROR("Missing newuidmap/newgidmap");
@@ -4056,6 +4099,12 @@ int lxc_clear_mount_entries(struct lxc_conf *c)
 		free(it->elem);
 		free(it);
 	}
+	return 0;
+}
+
+int lxc_clear_automounts(struct lxc_conf *c)
+{
+	c->auto_mounts = 0;
 	return 0;
 }
 

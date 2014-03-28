@@ -10,8 +10,9 @@ Build-Depends: autotools-dev,
                hardening-wrapper,
                libapparmor-dev,
                libcap-dev,
+               libcgmanager-dev,
                libgnutls-dev,
-               libseccomp-dev [i386 amd64],
+               libseccomp-dev [i386 amd64 armhf],
                libselinux1-dev,
                linux-libc-dev,
                pkg-config,
@@ -32,14 +33,9 @@ Depends: adduser,
          liblxc1 (= ${binary:Version}),
          python3,
          python3-lxc,
-         rsync,
          ${misc:Depends},
          ${shlibs:Depends}
-Recommends: cgroup-lite | cgroup-bin,
-            libcap2-bin,
-            lxc-templates (>= 0.8.0~rc1-4ubuntu43),
-            openssl,
-            uidmap
+Recommends: lxc-templates (>= 0.8.0~rc1-4ubuntu43)
 Suggests: btrfs-tools, lvm2, lxctl
 Description: Linux Containers userspace tools
  Containers are insulated areas inside a system, which have their own namespace
@@ -81,7 +77,8 @@ Description: Linux Containers userspace tools (development)
 Package: lxc-templates
 Architecture: linux-any
 Depends: lxc (>= 0.8.0~rc1-4ubuntu43), ${misc:Depends}
-Recommends: cloud-image-utils | cloud-utils,
+Recommends: busybox-static,
+            cloud-image-utils | cloud-utils,
             debootstrap | cdebootstrap,
             openssl,
             rsync,
@@ -113,7 +110,8 @@ Description: Linux Containers userspace tools (test binaries)
 Package: liblxc1
 Architecture: linux-any
 Pre-Depends: ${misc:Pre-Depends}
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: cgmanager, rsync, ${misc:Depends}, ${shlibs:Depends}
+Recommends: uidmap
 Replaces: liblxc0, lxc (<< 0.9.0~alpha3-0ubuntu1~)
 Breaks: lxc (<< 0.9.0~alpha3-0ubuntu1~)
 Provides: liblxc0

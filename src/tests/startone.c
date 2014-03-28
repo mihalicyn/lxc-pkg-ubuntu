@@ -26,10 +26,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #define MYNAME "lxctest1"
 
-static int destroy_ubuntu(void)
+static int destroy_container(void)
 {
 	int status, ret;
 	pid_t pid = fork();
@@ -61,7 +62,7 @@ again:
 	return WEXITSTATUS(status);
 }
 
-static int create_ubuntu(void)
+static int create_container(void)
 {
 	int status, ret;
 	pid_t pid = fork();
@@ -71,7 +72,7 @@ static int create_ubuntu(void)
 		return -1;
 	}
 	if (pid == 0) {
-		ret = execlp("lxc-create", "lxc-create", "-t", "ubuntu", "-n", MYNAME, NULL);
+		ret = execlp("lxc-create", "lxc-create", "-t", "busybox", "-n", MYNAME, NULL);
 		// Should not return
 		perror("execl");
 		exit(1);
@@ -116,9 +117,9 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	ret = create_ubuntu();
+	ret = create_container();
 	if (ret) {
-		fprintf(stderr, "%d: failed to create a ubuntu container\n", __LINE__);
+		fprintf(stderr, "%d: failed to create a container\n", __LINE__);
 		goto out;
 	}
 
@@ -162,18 +163,11 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "%d: failed to get extra ref to container\n", __LINE__);
 		exit(1);
 	}
-	c->want_daemonize(c, false);
-	pid_t pid = fork();
-	if (pid < 0) {
-		fprintf(stderr, "%d: fork failed\n", __LINE__);
-		goto out;
-	}
-	if (pid == 0) {
-		b = c->startl(c, 0, NULL);
-		if (!b)
-			fprintf(stderr, "%d: %s failed to start\n", __LINE__, c->name);
-		lxc_container_put(c);
-		exit(!b);
+
+	c->want_daemonize(c, true);
+	if (!c->startl(c, 0, NULL)) {
+		fprintf(stderr, "%d: %s failed to start\n", __LINE__, c->name);
+		exit(1);
 	}
 
 	sleep(3);
@@ -251,7 +245,7 @@ ok:
 out:
 	if (c) {
 		c->stop(c);
-		destroy_ubuntu();
+		destroy_container();
 	}
 	lxc_container_put(c);
 	exit(ret);

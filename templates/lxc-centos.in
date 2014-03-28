@@ -203,6 +203,13 @@ configure_centos()
         )
     fi
 
+    # Set default localtime to the host localtime if not set...
+    if [ -e /etc/localtime -a ! -e ${rootfs_path}/etc/localtime ]
+    then
+        # if /etc/localtime is a symlink, this should preserve it.
+        cp -a /etc/localtime ${rootfs_path}/etc/localtime
+    fi
+
     # Deal with some dain bramage in the /etc/init.d/halt script.
     # Trim it and make it our own and link it in before the default
     # halt script so we can intercept it.  This also preventions package
@@ -356,6 +363,18 @@ configure_centos_init()
         chroot ${rootfs_path} chkconfig udev-post off
     fi
     chroot ${rootfs_path} chkconfig network on
+
+    if [ -d ${rootfs_path}/etc/init ]
+    then
+       # This is to make upstart honor SIGPWR
+        cat <<EOF >${rootfs_path}/etc/init/power-status-changed.conf
+#  power-status-changed - shutdown on SIGPWR
+#
+start on power-status-changed
+    
+exec /sbin/shutdown -h now "SIGPWR received"
+EOF
+    fi
 }
 
 download_centos()

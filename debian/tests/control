@@ -1,6 +1,5 @@
 Tests: exercise
 Depends: busybox-static,
-         cgroup-lite,
          cloud-image-utils,
          debootstrap,
          uidmap,

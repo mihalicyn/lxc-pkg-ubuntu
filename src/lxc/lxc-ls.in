@@ -104,10 +104,16 @@ def get_root_path(path):
 # Constants
 FIELDS = ("name", "state", "ipv4", "ipv6", "autostart", "pid",
           "memory", "ram", "swap")
+DEFAULT_FIELDS = ("name", "state", "ipv4", "ipv6", "autostart")
 
 # Begin parsing the command line
 parser = argparse.ArgumentParser(description=_("LXC: List containers"),
-                                 formatter_class=argparse.RawTextHelpFormatter)
+                                 formatter_class=argparse.RawTextHelpFormatter,
+                                 epilog=_("""Valid fancy-format fields:
+  %s
+
+Default fancy-format fields:
+  %s\n""" % (", ".join(FIELDS), ", ".join(DEFAULT_FIELDS))))
 
 parser.add_argument("-1", dest="one", action="store_true",
                     help=_("list one container per line (default when piped)"))
@@ -132,7 +138,7 @@ parser.add_argument("-f", "--fancy", action="store_true",
                     help=_("use fancy output"))
 
 parser.add_argument("-F", "--fancy-format", type=str,
-                    default="name,state,ipv4,ipv6,autostart",
+                    default=",".join(DEFAULT_FIELDS),
                     help=_("comma separated list of fields to show"))
 
 parser.add_argument("--nesting", dest="nesting", action="store_true",
@@ -238,17 +244,17 @@ def get_containers(fd=None, base="/", root=False):
                 continue
 
             # Some extra field we may want
-            if 'state' in args.fancy_format or args.nesting:
+            if 'state' in args.fancy_format:
                 entry['state'] = state
 
-            if 'pid' in args.fancy_format or args.nesting:
+            if 'pid' in args.fancy_format:
                 entry['pid'] = "-"
                 if state == 'UNKNOWN':
                     entry['pid'] = state
                 elif container.init_pid != -1:
                     entry['pid'] = str(container.init_pid)
 
-            if 'autostart' in args.fancy_format or args.nesting:
+            if 'autostart' in args.fancy_format:
                 entry['autostart'] = "NO"
                 try:
                     if container.get_config_item("lxc.start.auto") == "1":
@@ -266,19 +272,21 @@ def get_containers(fd=None, base="/", root=False):
 
                 if container.running:
                     try:
-                        memory_total = int(container.get_cgroup_item(
+                        memory_ram = int(container.get_cgroup_item(
                             "memory.usage_in_bytes"))
                     except:
-                        memory_total = 0
+                        memory_ram = 0
 
                     try:
                         memory_swap = int(container.get_cgroup_item(
-                            "memory.memsw.usage_in_bytes"))
+                            "memory.memsw.usage_in_bytes")) - memory_ram
                     except:
                         memory_swap = 0
                 else:
-                    memory_total = 0
+                    memory_ram = 0
                     memory_swap = 0
+
+                memory_total = memory_ram + memory_swap
 
             if 'memory' in args.fancy_format:
                 if container.running:
@@ -288,8 +296,7 @@ def get_containers(fd=None, base="/", root=False):
 
             if 'ram' in args.fancy_format:
                 if container.running:
-                    entry['ram'] = "%sMB" % round(
-                        (memory_total - memory_swap) / 1048576, 2)
+                    entry['ram'] = "%sMB" % round(memory_ram / 1048576, 2)
                 else:
                     entry['ram'] = "-"
 
@@ -301,7 +308,7 @@ def get_containers(fd=None, base="/", root=False):
 
             # Get the IPs
             for family, protocol in {'inet': 'ipv4', 'inet6': 'ipv6'}.items():
-                if protocol in args.fancy_format or args.nesting:
+                if protocol in args.fancy_format:
                     entry[protocol] = "-"
 
                     if state == 'UNKNOWN':
@@ -324,8 +331,7 @@ def get_containers(fd=None, base="/", root=False):
                     temp_fd, temp_file = tempfile.mkstemp()
                     os.remove(temp_file)
 
-                    container.attach_wait(get_containers, temp_fd,
-                                          attach_flags=0)
+                    container.attach_wait(get_containers, temp_fd)
 
                     json_file = os.fdopen(temp_fd, "r")
                     json_file.seek(0)
