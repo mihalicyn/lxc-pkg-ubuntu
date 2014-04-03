@@ -1,3 +1,13 @@
+lxc (1.0.2-0ubuntu2) trusty; urgency=medium
+
+  * updates for AppArmor signal and ptrace mediation (LP: #1298611)
+    - debian/patches/apparmor-signal-ptrace.patch: add signal and ptrace rules
+      to abstractions/container-base and abstractions/start-container
+    - debian/rules: remove signal and ptrace rules for Ubuntu releases earlier
+      than 14.04 LTS
+
+ -- Jamie Strandboge <jamie@ubuntu.com>  Thu, 03 Apr 2014 07:06:56 -0500
+
 lxc (1.0.2-0ubuntu1) trusty; urgency=medium
 
   * New upstream bugfix release.
