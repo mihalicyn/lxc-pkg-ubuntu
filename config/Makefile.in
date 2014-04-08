@@ -266,6 +266,7 @@ PYTHON_PLATFORM = @PYTHON_PLATFORM@
 PYTHON_PREFIX = @PYTHON_PREFIX@
 PYTHON_VERSION = @PYTHON_VERSION@
 RUNTIME_PATH = @RUNTIME_PATH@
+SBINDIR = @SBINDIR@
 SECCOMP_CFLAGS = @SECCOMP_CFLAGS@
 SECCOMP_LIBS = @SECCOMP_LIBS@
 SED = @SED@
@@ -331,7 +332,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = apparmor bash etc init templates
+SUBDIRS = apparmor bash etc init templates yum
 all: all-recursive
 
 .SUFFIXES:

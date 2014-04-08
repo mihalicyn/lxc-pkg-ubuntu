@@ -75,6 +75,7 @@ static int quit;
 
 static int lxc_monitord_fifo_create(struct lxc_monitor *mon)
 {
+	struct flock lk;
 	char fifo_path[PATH_MAX];
 	int ret;
 
@@ -83,8 +84,8 @@ static int lxc_monitord_fifo_create(struct lxc_monitor *mon)
 		return ret;
 
 	ret = mknod(fifo_path, S_IFIFO|S_IRUSR|S_IWUSR, 0);
-	if (ret < 0) {
-		INFO("monitor fifo %s exists, already running?", fifo_path);
+	if (ret < 0 && errno != EEXIST) {
+		INFO("failed to mknod monitor fifo %s %s", fifo_path, strerror(errno));
 		return -1;
 	}
 
@@ -92,6 +93,17 @@ static int lxc_monitord_fifo_create(struct lxc_monitor *mon)
 	if (mon->fifofd < 0) {
 		unlink(fifo_path);
 		ERROR("failed to open monitor fifo");
+		return -1;
+	}
+
+	lk.l_type = F_WRLCK;
+	lk.l_whence = SEEK_SET;
+	lk.l_start = 0;
+	lk.l_len = 0;
+	if (fcntl(mon->fifofd, F_SETLK, &lk) != 0) {
+		/* another lxc-monitord is already running, don't start up */
+		DEBUG("lxc-monitord already running on lxcpath %s", mon->lxcpath);
+		close(mon->fifofd);
 		return -1;
 	}
 	return 0;
@@ -264,8 +276,8 @@ static void lxc_monitord_delete(struct lxc_monitor *mon)
 	lxc_monitord_sock_delete(mon);
 
 	lxc_mainloop_del_handler(&mon->descr, mon->fifofd);
-	close(mon->fifofd);
 	lxc_monitord_fifo_delete(mon);
+	close(mon->fifofd);
 
 	for (i = 0; i < mon->clientfds_cnt; i++) {
 		lxc_mainloop_del_handler(&mon->descr, mon->clientfds[i]);
@@ -348,7 +360,7 @@ int main(int argc, char *argv[])
 	}
 
 	ret = snprintf(logpath, sizeof(logpath), "%s/lxc-monitord.log",
-		       lxcpath);
+		       (strcmp(LXCPATH, lxcpath) ? lxcpath : LOGPATH ) );
 	if (ret < 0 || ret >= sizeof(logpath))
 		return EXIT_FAILURE;
 
@@ -366,7 +378,7 @@ int main(int argc, char *argv[])
 	    sigdelset(&mask, SIGTERM) ||
 	    sigprocmask(SIG_BLOCK, &mask, NULL)) {
 		SYSERROR("failed to set signal mask");
-		return -1;
+		return 1;
 	}
 
 	signal(SIGILL,  lxc_monitord_sig_handler);
@@ -401,7 +413,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	NOTICE("monitoring lxcpath %s", mon.lxcpath);
+	NOTICE("pid:%d monitoring lxcpath %s", getpid(), mon.lxcpath);
 	for(;;) {
 		ret = lxc_mainloop(&mon.descr, 1000 * 30);
 		if (mon.clientfds_cnt <= 0)
@@ -416,5 +428,7 @@ int main(int argc, char *argv[])
 	ret = EXIT_SUCCESS;
 	NOTICE("monitor exiting");
 out:
-	return ret;
+	if (ret == 0)
+		return 0;
+	return 1;
 }

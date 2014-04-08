@@ -129,6 +129,7 @@ cache_setup(){
     cache_net && \
     cache_dev && \
     cache_openrc && \
+    cache_locale && \
     rm -rf "${cachefs}" && \
     mv "${partialfs}" "${cachefs}" && \
     printf "###### cache_setup: Cache should be ready\n"
@@ -257,6 +258,16 @@ cache_openrc()
     return 0
 }
 
+cache_locale()
+{
+   printf "### cache_locale(): initiating minimale locale en_US.UTF-8 \n"
+
+   echo "en_US.UTF-8 UTF-8" >> "${partialfs}/etc/locale.gen"
+   chroot "${partialfs}" locale-gen
+
+   return 0
+}
+
 ################################################################################
 #                    CONTAINER Preparation
 ################################################################################
@@ -288,6 +299,7 @@ container_setup() {
     container_net && \
     container_hostname && \
     container_auth && \
+    container_sshd && \
     container_conf
     if [ $? -ne 0 ]; then
         die 1 "container_setup(): one step didn't complete, sorry\n"
@@ -638,6 +650,14 @@ container_auth()
     printf " => done.\n"
 }
 
+container_sshd() {
+    printf "#### container_sshd(): enabling sshd... \n"
+
+    chroot "${rootfs}" rc-update add sshd || die 1 "failed to enable sshd\n"
+
+    printf " => done.\n"
+}
+
 ################################################################################
 #                        lxc configuration files
 ################################################################################
@@ -741,7 +761,7 @@ set_default_arch
 mirror="http://distfiles.gentoo.org"
 user="root"
 password="toor"
-tty=0
+tty=1
 settings="common"
 options=$(getopt -o hp:n:a:FcPv:t:S:u:w:s:m: -l help,rootfs:,path:,name:,arch:,flush-cache,cache-only,private-portage,variant:,portage-dir:,tarball:,auth_key:,user:,autologin,password:,settings:,mirror:,tty: -- "$@")
 

@@ -3,7 +3,7 @@
 
 m4_define([lxc_version_major], 1)
 m4_define([lxc_version_minor], 0)
-m4_define([lxc_version_micro], 2)
+m4_define([lxc_version_micro], 3)
 m4_define([lxc_version_beta], [])
 
 m4_define([lxc_version_base], [lxc_version_major.lxc_version_minor.lxc_version_micro])
@@ -470,6 +470,7 @@ AC_ARG_WITH([log-path],
 AS_AC_EXPAND(PREFIX, "$prefix")
 AS_AC_EXPAND(LIBDIR, "$libdir")
 AS_AC_EXPAND(BINDIR, "$bindir")
+AS_AC_EXPAND(SBINDIR, "$sbindir")
 AS_AC_EXPAND(LIBEXECDIR, "$libexecdir")
 AS_AC_EXPAND(INCLUDEDIR, "$includedir")
 AS_AC_EXPAND(SYSCONFDIR, "$sysconfdir")
@@ -587,6 +588,7 @@ AC_CONFIG_FILES([
 	config/templates/ubuntu.common.conf
 	config/templates/ubuntu.lucid.conf
 	config/templates/ubuntu.userns.conf
+	config/yum/Makefile
 
 	doc/Makefile
 	doc/api/Makefile

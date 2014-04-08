@@ -1506,18 +1506,6 @@ static int setup_rootfs(struct lxc_conf *conf)
 		return -1;
 	}
 
-       if (detect_ramfs_rootfs()) {
-		if (chroot_into_slave(conf)) {
-			ERROR("Failed to chroot into slave /");
-			return -1;
-		}
-       } else if (detect_shared_rootfs()) {
-               if (mount("", "/", NULL, MS_SLAVE|MS_REC, 0)) {
-                       SYSERROR("Failed to make / rslave");
-                       return -1;
-               }
-	}
-
 	// First try mounting rootfs using a bdev
 	struct bdev *bdev = bdev_init(rootfs->path, rootfs->mount, rootfs->options);
 	if (bdev && bdev->ops->mount(bdev) == 0) {
@@ -3209,10 +3197,23 @@ int lxc_map_ids(struct lxc_list *idmap, pid_t pid)
 {
 	struct lxc_list *iterator;
 	struct id_map *map;
-	int ret = 0;
+	int ret = 0, use_shadow = 0;
 	enum idtype type;
-	char *buf = NULL, *pos;
-	int use_shadow = (on_path("newuidmap") && on_path("newgidmap"));
+	char *buf = NULL, *pos, *cmdpath = NULL;
+
+	cmdpath = on_path("newuidmap");
+	if (cmdpath) {
+		use_shadow = 1;
+		free(cmdpath);
+	}
+
+	if (!use_shadow) {
+		cmdpath = on_path("newgidmap");
+		if (cmdpath) {
+			use_shadow = 1;
+			free(cmdpath);
+		}
+	}
 
 	if (!use_shadow && geteuid()) {
 		ERROR("Missing newuidmap/newgidmap");
@@ -3711,6 +3712,19 @@ int lxc_setup(struct lxc_handler *handler)
 	struct lxc_conf *lxc_conf = handler->conf;
 	const char *lxcpath = handler->lxcpath;
 	void *data = handler->data;
+
+	if (detect_shared_rootfs()) {
+		if (mount(NULL, "/", NULL, MS_SLAVE|MS_REC, NULL)) {
+			SYSERROR("Failed to make / rslave");
+			ERROR("Continuing...");
+		}
+	}
+	if (detect_ramfs_rootfs()) {
+		if (chroot_into_slave(lxc_conf)) {
+			ERROR("Failed to chroot into slave /");
+			return -1;
+		}
+	}
 
 	if (lxc_conf->inherit_ns_fd[LXC_NS_UTS] == -1) {
 		if (setup_utsname(lxc_conf->utsname)) {

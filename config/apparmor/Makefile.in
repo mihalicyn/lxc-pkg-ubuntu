@@ -78,7 +78,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 subdir = config/apparmor
-DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am
+DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am README
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acinclude.m4 \
 	$(top_srcdir)/config/tls.m4 $(top_srcdir)/configure.ac
@@ -205,6 +205,7 @@ PYTHON_PLATFORM = @PYTHON_PLATFORM@
 PYTHON_PREFIX = @PYTHON_PREFIX@
 PYTHON_VERSION = @PYTHON_VERSION@
 RUNTIME_PATH = @RUNTIME_PATH@
+SBINDIR = @SBINDIR@
 SECCOMP_CFLAGS = @SECCOMP_CFLAGS@
 SECCOMP_LIBS = @SECCOMP_LIBS@
 SED = @SED@
@@ -272,11 +273,15 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 EXTRA_DIST = \
 	abstractions/container-base \
+	abstractions/container-base.in \
 	abstractions/start-container \
+	container-rules \
+	container-rules.base \
+	lxc-containers \
+	lxc-generate-aa-rules.py \
 	profiles/lxc-default \
 	profiles/lxc-default-with-mounting \
 	profiles/lxc-default-with-nesting \
-	lxc-containers \
 	usr.bin.lxc-start
 
 all: all-am
@@ -383,8 +388,8 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
-@ENABLE_APPARMOR_FALSE@uninstall-local:
 @ENABLE_APPARMOR_FALSE@install-data-local:
+@ENABLE_APPARMOR_FALSE@uninstall-local:
 clean: clean-am
 
 clean-am: clean-generic mostlyclean-am

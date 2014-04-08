@@ -30,6 +30,7 @@
 #include "conf.h"
 #include "log.h"
 #include "start.h"
+#include "utils.h"
 
 lxc_log_define(lxc_execute, lxc_start);
 
@@ -38,19 +39,44 @@ struct execute_args {
 	int quiet;
 };
 
-/* historically lxc-init has been under /usr/lib/lxc.  Now with
- * multi-arch it can be under /usr/lib/$ARCH/lxc.  Serge thinks
- * it makes more sense to put it under /sbin.
- * If /usr/lib/$ARCH/lxc exists and is used, then LXCINITDIR will
- * point to it.
+/* historically lxc-init has been under /usr/lib/lxc and under
+ * /usr/lib/$ARCH/lxc.  It now lives as $prefix/sbin/init.lxc.
  */
 static char *choose_init(void)
 {
-	char *retv = malloc(PATH_MAX);
-	int ret;
+	char *retv = NULL;
+	int ret, env_set = 0;
 	struct stat mystat;
+
+	if (!getenv("PATH")) {
+		if (setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 0))
+			SYSERROR("Failed to setenv");
+		env_set = 1;
+	}
+
+	retv = on_path("init.lxc");
+
+	if (env_set) {
+		if (unsetenv("PATH"))
+			SYSERROR("Failed to unsetenv");
+	}
+
+	if (retv)
+		return retv;
+
+	retv = malloc(PATH_MAX);
 	if (!retv)
 		return NULL;
+
+	ret = snprintf(retv, PATH_MAX, SBINDIR "/init.lxc");
+	if (ret < 0 || ret >= PATH_MAX) {
+		ERROR("pathname too long");
+		goto out1;
+	}
+
+	ret = stat(retv, &mystat);
+	if (ret == 0)
+		return retv;
 
 	ret = snprintf(retv, PATH_MAX, LXCINITDIR "/lxc/lxc-init");
 	if (ret < 0 || ret >= PATH_MAX) {

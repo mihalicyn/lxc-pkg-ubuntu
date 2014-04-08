@@ -20,10 +20,6 @@ elif echo "" | nc -w 2 10.245.64.1 3128 >/dev/null 2>&1; then
     echo "Running in the Canonical enablement environment"
     export http_proxy="http://10.245.64.1:3128"
     export https_proxy="http://10.245.64.1:3128"
-elif echo "" | nc -w 2 sateda.srv.mtl.stgraber.net 3128 >/dev/null 2>&1; then
-    echo "Running in the LXC CI environment"
-    export http_proxy="http://sateda.srv.mtl.stgraber.net:3128"
-    export https_proxy="http://sateda.srv.mtl.stgraber.net:3128"
 fi
 
 # Helper functions
@@ -71,6 +67,9 @@ for testbin in /usr/bin/lxc-test-*; do
 
     # Skip some tests when running in a container
     if [ -f /run/container_type ]; then
+        [ "$testbin" = "/usr/bin/lxc-test-apparmor" ] && \
+            ignore "$STRING" && continue
+
         [ "$testbin" = "/usr/bin/lxc-test-device-add-remove" ] && \
             ignore "$STRING" && continue
 

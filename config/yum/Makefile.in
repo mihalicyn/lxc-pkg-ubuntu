@@ -78,7 +78,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-subdir = hooks
+subdir = config/yum
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acinclude.m4 \
@@ -116,8 +116,8 @@ am__uninstall_files_from_dir = { \
     || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
-am__installdirs = "$(DESTDIR)$(hooksdir)"
-SCRIPTS = $(hooks_SCRIPTS)
+am__installdirs = "$(DESTDIR)$(yumpluginsdir)"
+SCRIPTS = $(yumplugins_SCRIPTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -301,15 +301,11 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-hooksdir = @LXCHOOKDIR@
-hooks_SCRIPTS = \
-	clonehostname \
-	mountcgroups \
-	mountecryptfsroot \
-	ubuntu-cloud-prep \
-	squid-deb-proxy-client
+yumpluginsdir = $(datadir)/lxc
+yumplugins_SCRIPTS = \
+	lxc-patch.py
 
-EXTRA_DIST = $(hooks_SCRIPTS)
+EXTRA_DIST = $(yumplugins_SCRIPTS)
 all: all-am
 
 .SUFFIXES:
@@ -322,9 +318,9 @@ $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu hooks/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu config/yum/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu hooks/Makefile
+	  $(AUTOMAKE) --gnu config/yum/Makefile
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
@@ -343,12 +339,12 @@ $(top_srcdir)/configure:  $(am__configure_deps)
 $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
-install-hooksSCRIPTS: $(hooks_SCRIPTS)
+install-yumpluginsSCRIPTS: $(yumplugins_SCRIPTS)
 	@$(NORMAL_INSTALL)
-	@list='$(hooks_SCRIPTS)'; test -n "$(hooksdir)" || list=; \
+	@list='$(yumplugins_SCRIPTS)'; test -n "$(yumpluginsdir)" || list=; \
 	if test -n "$$list"; then \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(hooksdir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(hooksdir)" || exit 1; \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(yumpluginsdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(yumpluginsdir)" || exit 1; \
 	fi; \
 	for p in $$list; do \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
@@ -367,17 +363,17 @@ install-hooksSCRIPTS: $(hooks_SCRIPTS)
 	while read type dir files; do \
 	     if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
 	     test -z "$$files" || { \
-	       echo " $(INSTALL_SCRIPT) $$files '$(DESTDIR)$(hooksdir)$$dir'"; \
-	       $(INSTALL_SCRIPT) $$files "$(DESTDIR)$(hooksdir)$$dir" || exit $$?; \
+	       echo " $(INSTALL_SCRIPT) $$files '$(DESTDIR)$(yumpluginsdir)$$dir'"; \
+	       $(INSTALL_SCRIPT) $$files "$(DESTDIR)$(yumpluginsdir)$$dir" || exit $$?; \
 	     } \
 	; done
 
-uninstall-hooksSCRIPTS:
+uninstall-yumpluginsSCRIPTS:
 	@$(NORMAL_UNINSTALL)
-	@list='$(hooks_SCRIPTS)'; test -n "$(hooksdir)" || exit 0; \
+	@list='$(yumplugins_SCRIPTS)'; test -n "$(yumpluginsdir)" || exit 0; \
 	files=`for p in $$list; do echo "$$p"; done | \
 	       sed -e 's,.*/,,;$(transform)'`; \
-	dir='$(DESTDIR)$(hooksdir)'; $(am__uninstall_files_from_dir)
+	dir='$(DESTDIR)$(yumpluginsdir)'; $(am__uninstall_files_from_dir)
 tags TAGS:
 
 ctags CTAGS:
@@ -419,7 +415,7 @@ check-am: all-am
 check: check-am
 all-am: Makefile $(SCRIPTS)
 installdirs:
-	for dir in "$(DESTDIR)$(hooksdir)"; do \
+	for dir in "$(DESTDIR)$(yumpluginsdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -472,7 +468,7 @@ info: info-am
 
 info-am:
 
-install-data-am: install-hooksSCRIPTS
+install-data-am: install-yumpluginsSCRIPTS
 
 install-dvi: install-dvi-am
 
@@ -516,7 +512,7 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-hooksSCRIPTS
+uninstall-am: uninstall-yumpluginsSCRIPTS
 
 .MAKE: install-am install-strip
 
@@ -524,13 +520,13 @@ uninstall-am: uninstall-hooksSCRIPTS
 	ctags-am distclean distclean-generic distdir dvi dvi-am html \
 	html-am info info-am install install-am install-data \
 	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-hooksSCRIPTS install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-generic pdf pdf-am ps ps-am tags-am uninstall \
-	uninstall-am uninstall-hooksSCRIPTS
+	install-exec-am install-html install-html-am install-info \
+	install-info-am install-man install-pdf install-pdf-am \
+	install-ps install-ps-am install-strip \
+	install-yumpluginsSCRIPTS installcheck installcheck-am \
+	installdirs maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-generic pdf pdf-am ps ps-am tags-am \
+	uninstall uninstall-am uninstall-yumpluginsSCRIPTS
 
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

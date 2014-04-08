@@ -100,7 +100,8 @@ host_triplet = @host@
 @ENABLE_TESTS_TRUE@	lxc-test-reboot$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-list$(EXEEXT) \
 @ENABLE_TESTS_TRUE@	lxc-test-attach$(EXEEXT) \
-@ENABLE_TESTS_TRUE@	lxc-test-device-add-remove$(EXEEXT)
+@ENABLE_TESTS_TRUE@	lxc-test-device-add-remove$(EXEEXT) \
+@ENABLE_TESTS_TRUE@	lxc-test-apparmor$(EXEEXT)
 @DISTRO_UBUNTU_TRUE@@ENABLE_TESTS_TRUE@am__append_3 = lxc-test-usernic lxc-test-ubuntu lxc-test-unpriv
 subdir = src/tests
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
@@ -116,6 +117,11 @@ CONFIG_CLEAN_FILES = lxc-test-usernic
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
+am__lxc_test_apparmor_SOURCES_DIST = aa.c
+@ENABLE_TESTS_TRUE@am_lxc_test_apparmor_OBJECTS = aa.$(OBJEXT)
+lxc_test_apparmor_OBJECTS = $(am_lxc_test_apparmor_OBJECTS)
+lxc_test_apparmor_LDADD = $(LDADD)
+@ENABLE_TESTS_TRUE@lxc_test_apparmor_DEPENDENCIES = ../lxc/liblxc.so
 am__lxc_test_attach_SOURCES_DIST = attach.c
 @ENABLE_TESTS_TRUE@am_lxc_test_attach_OBJECTS = attach.$(OBJEXT)
 lxc_test_attach_OBJECTS = $(am_lxc_test_attach_OBJECTS)
@@ -292,9 +298,10 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(lxc_test_attach_SOURCES) $(lxc_test_cgpath_SOURCES) \
-	$(lxc_test_clonetest_SOURCES) $(lxc_test_concurrent_SOURCES) \
-	$(lxc_test_console_SOURCES) $(lxc_test_containertests_SOURCES) \
+SOURCES = $(lxc_test_apparmor_SOURCES) $(lxc_test_attach_SOURCES) \
+	$(lxc_test_cgpath_SOURCES) $(lxc_test_clonetest_SOURCES) \
+	$(lxc_test_concurrent_SOURCES) $(lxc_test_console_SOURCES) \
+	$(lxc_test_containertests_SOURCES) \
 	$(lxc_test_createtest_SOURCES) $(lxc_test_destroytest_SOURCES) \
 	$(lxc_test_device_add_remove_SOURCES) \
 	$(lxc_test_get_item_SOURCES) $(lxc_test_getkeys_SOURCES) \
@@ -303,7 +310,8 @@ SOURCES = $(lxc_test_attach_SOURCES) $(lxc_test_cgpath_SOURCES) \
 	$(lxc_test_reboot_SOURCES) $(lxc_test_saveconfig_SOURCES) \
 	$(lxc_test_shutdowntest_SOURCES) $(lxc_test_snapshot_SOURCES) \
 	$(lxc_test_startone_SOURCES)
-DIST_SOURCES = $(am__lxc_test_attach_SOURCES_DIST) \
+DIST_SOURCES = $(am__lxc_test_apparmor_SOURCES_DIST) \
+	$(am__lxc_test_attach_SOURCES_DIST) \
 	$(am__lxc_test_cgpath_SOURCES_DIST) \
 	$(am__lxc_test_clonetest_SOURCES_DIST) \
 	$(am__lxc_test_concurrent_SOURCES_DIST) \
@@ -444,6 +452,7 @@ PYTHON_PLATFORM = @PYTHON_PLATFORM@
 PYTHON_PREFIX = @PYTHON_PREFIX@
 PYTHON_VERSION = @PYTHON_VERSION@
 RUNTIME_PATH = @RUNTIME_PATH@
+SBINDIR = @SBINDIR@
 SECCOMP_CFLAGS = @SECCOMP_CFLAGS@
 SECCOMP_LIBS = @SECCOMP_LIBS@
 SED = @SED@
@@ -530,6 +539,7 @@ top_srcdir = @top_srcdir@
 @ENABLE_TESTS_TRUE@lxc_test_list_SOURCES = list.c
 @ENABLE_TESTS_TRUE@lxc_test_attach_SOURCES = attach.c
 @ENABLE_TESTS_TRUE@lxc_test_device_add_remove_SOURCES = device_add_remove.c
+@ENABLE_TESTS_TRUE@lxc_test_apparmor_SOURCES = aa.c
 @ENABLE_TESTS_TRUE@AM_CFLAGS = -I$(top_srcdir)/src \
 @ENABLE_TESTS_TRUE@	-DLXCROOTFSMOUNT=\"$(LXCROOTFSMOUNT)\" \
 @ENABLE_TESTS_TRUE@	-DLXCPATH=\"$(LXCPATH)\" \
@@ -641,6 +651,10 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
+
+lxc-test-apparmor$(EXEEXT): $(lxc_test_apparmor_OBJECTS) $(lxc_test_apparmor_DEPENDENCIES) $(EXTRA_lxc_test_apparmor_DEPENDENCIES) 
+	@rm -f lxc-test-apparmor$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(lxc_test_apparmor_OBJECTS) $(lxc_test_apparmor_LDADD) $(LIBS)
 
 lxc-test-attach$(EXEEXT): $(lxc_test_attach_OBJECTS) $(lxc_test_attach_DEPENDENCIES) $(EXTRA_lxc_test_attach_DEPENDENCIES) 
 	@rm -f lxc-test-attach$(EXEEXT)
@@ -763,6 +777,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/aa.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/attach.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cgpath.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/clonetest.Po@am__quote@

@@ -1,6 +1,7 @@
 etc
 usr/bin
 usr/lib/*/lxc/lxc-*
+usr/sbin/*
 usr/share/doc
 usr/share/lxc/config
 usr/share/lxc/hooks
