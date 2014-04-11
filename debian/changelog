@@ -1,3 +1,9 @@
+lxc (1.0.3-0ubuntu2) trusty; urgency=medium
+
+  * Cherry-pick upstream fix for cgmanager integration. (LP: #1303649)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Fri, 11 Apr 2014 12:17:41 -0400
+
 lxc (1.0.3-0ubuntu1) trusty; urgency=medium
 
   * New upstream bugfix release.
