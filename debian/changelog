@@ -1,3 +1,11 @@
+lxc (1.0.3-0ubuntu3) trusty; urgency=medium
+
+  * Add a dependency on the new apparmor to make sure we have the new
+    parser around before we attempt to load a profile requiring the new
+    stanza support. (LP: #1304167)
+
+ -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 14 Apr 2014 10:10:40 -0400
+
 lxc (1.0.3-0ubuntu2) trusty; urgency=medium
 
   * Cherry-pick upstream fix for cgmanager integration. (LP: #1303649)

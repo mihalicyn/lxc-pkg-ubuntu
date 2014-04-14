@@ -26,7 +26,7 @@ Package: lxc
 Architecture: linux-any
 Pre-Depends: ${misc:Pre-Depends}
 Depends: adduser,
-         apparmor,
+         apparmor (>= 2.8.95~2430-0ubuntu4),
          bridge-utils,
          dnsmasq-base,
          iptables,
