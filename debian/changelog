@@ -1,3 +1,10 @@
+lxc (1.0.3-0ubuntu4) utopic; urgency=medium
+
+  * Do not start lxc-instance in postinst without any instance specified,
+    as that is an invalid request.
+
+ -- Dimitri John Ledkov <xnox@ubuntu.com>  Thu, 15 May 2014 15:18:33 +0100
+
 lxc (1.0.3-0ubuntu3) trusty; urgency=medium
 
   * Add a dependency on the new apparmor to make sure we have the new
