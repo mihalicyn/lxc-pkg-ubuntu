@@ -1,3 +1,9 @@
+lxc (1.0.3-0ubuntu5build1) utopic; urgency=medium
+
+  * no-change rebuild to pick up /etc/init.d/ files.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 29 May 2014 11:59:18 -0500
+
 lxc (1.0.3-0ubuntu5) utopic; urgency=medium
 
   * Cherry-pick upstream commit to fix lxc-attach on 3.15 kernels.
