@@ -1,0 +1,62 @@
+Description: c/r: put lxc-restore-net in /usr/share
+ On restore, we pass criu a script to manage the network interfaces (i.e. the
+ full path to lxc-restore-net), which we previously installed into
+ /var/lib/<tuple>/lxc. However, this is also the directory that is the default
+ for use in mounting the rootfs locally before pivot_root()ing. So, we mounted
+ the rootfs and then happliy called criu, pointing it to this directory which
+ didn't have lxc-restore-net any more, it just had the container's rootfs.
+ Instead, we should put lxc-restore-net somewhere else, so that criu can still
+ see it after the rootfs is mounted.
+Author: Tycho Andersen <tycho.andersen@canonical.com>
+Origin: upstream
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1384751
+
+Index: lxc-1.1.0~alpha2/configure.ac
+===================================================================
+--- lxc-1.1.0~alpha2.orig/configure.ac
++++ lxc-1.1.0~alpha2/configure.ac
+@@ -533,6 +533,9 @@ AS_AC_EXPAND(LOGPATH, "$with_log_path")
+ AS_AC_EXPAND(RUNTIME_PATH, "$with_runtime_path")
+ AC_SUBST(DEFAULT_CGROUP_PATTERN, ["$with_cgroup_pattern"])
+ 
++# We need the install path so criu knows where to reference the hook scripts.
++AC_DEFINE_UNQUOTED([DATADIR], "$DATADIR", ["Prefix for shared files."])
++
+ # Check for some standard kernel headers
+ AC_CHECK_HEADERS([linux/unistd.h linux/netlink.h linux/genetlink.h],
+ 				[],
+Index: lxc-1.1.0~alpha2/src/lxc/Makefile.am
+===================================================================
+--- lxc-1.1.0~alpha2.orig/src/lxc/Makefile.am
++++ lxc-1.1.0~alpha2/src/lxc/Makefile.am
+@@ -203,8 +203,6 @@ sbin_PROGRAMS = init.lxc
+ pkglibexec_PROGRAMS = \
+ 	lxc-monitord \
+ 	lxc-user-nic
+-pkglibexec_SCRIPTS = \
+-	lxc-restore-net
+ 
+ AM_LDFLAGS = -Wl,-E
+ if ENABLE_RPATH
+@@ -263,5 +261,8 @@ install-exec-local: install-soPROGRAMS
+ install-exec-hook:
+ 	chmod u+s $(DESTDIR)$(libexecdir)/lxc/lxc-user-nic
+ 
++install-data-local:
++	install -c -m 755 lxc-restore-net $(DESTDIR)$(datadir)/lxc
++
+ uninstall-local:
+ 	$(RM) $(DESTDIR)$(libdir)/liblxc.so*
+Index: lxc-1.1.0~alpha2/src/lxc/lxccontainer.c
+===================================================================
+--- lxc-1.1.0~alpha2.orig/src/lxc/lxccontainer.c
++++ lxc-1.1.0~alpha2/src/lxc/lxccontainer.c
+@@ -3574,7 +3574,7 @@ static void exec_criu(struct criu_opts *
+ 	DECLARE_ARG("--force-irmap");
+ 	DECLARE_ARG("--manage-cgroups");
+ 	DECLARE_ARG("--action-script");
+-	DECLARE_ARG(LIBEXECDIR "/lxc/lxc-restore-net");
++	DECLARE_ARG(DATADIR "/lxc/lxc-restore-net");
+ 	DECLARE_ARG("-D");
+ 	DECLARE_ARG(opts->directory);
+ 	DECLARE_ARG("-o");

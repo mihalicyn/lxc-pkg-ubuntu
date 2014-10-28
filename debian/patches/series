@@ -4,3 +4,4 @@
 0004-fix-lxc-mount-auto-clearing
 0005-lxc-test-unpriv-test-different-cgroups
 0006-lxc-test-apparmor-mount-don-t-clear-out-etc-lxc-lxc-.patch
+0007-move-lxc-restore-net
