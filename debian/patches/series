@@ -6,3 +6,4 @@
 0006-lxc-test-apparmor-mount-don-t-clear-out-etc-lxc-lxc-.patch
 0007-move-lxc-restore-net
 0008-cgmanager-fix-attach-with-all-controller
+0009-attach-dont-ignore-sigint-sigkill-if-stdin-is-redirected
