@@ -7,3 +7,4 @@
 0007-move-lxc-restore-net
 0008-cgmanager-fix-attach-with-all-controller
 0009-attach-dont-ignore-sigint-sigkill-if-stdin-is-redirected
+0010-apparmor-check-for-mount-feature-at-a-better-time.patch
