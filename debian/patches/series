@@ -1,1 +1,2 @@
-fix-lxcbr0-on-preinstall
+0001-Allocate-new-lxcbr0-subnet-at-startup-time.patch
+0002-Add-NetworkManager-bug-workaround.patch
