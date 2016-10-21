@@ -1,5 +1,6 @@
 #!/usr/bin/make -f
 export DEB_BUILD_HARDENING = 1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 DEB_DH_INSTALLINIT_ARGS = --upstart-only
 
@@ -51,6 +52,9 @@ override_dh_install:
 	if [ -x /usr/bin/dh_apparmor ]; then \
 		dh_apparmor -p lxc-common --profile-name=usr.bin.lxc-start; \
 	fi
+
+	# cleanup .la files
+	find debian/tmp/ -type f -name \*.la -delete
 
 	# copy apport hook
 	mkdir -p debian/tmp/usr/share/apport/package-hooks
