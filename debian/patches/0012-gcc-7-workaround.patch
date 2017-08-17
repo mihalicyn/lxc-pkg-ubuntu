@@ -1,0 +1,57 @@
+Description: workaround gcc-7 bug
+Author: Christian Brauner <christian.brauner@ubuntu.com>
+Origin: upstream, https://github.com/lxc/lxc/commit/66b66624fce21606d11f24f5b615776074d212ae
+Bug: https://github.com/lxc/lxc/issues/1603 
+Bug-Debian: https://bugs.debian.org/853531
+Bug-Ubuntu: https://launchpad.net/bugs/1711449
+Applied-Upstream: https://github.com/lxc/lxc/commit/66b66624fce21606d11f24f5b615776074d212ae
+Last-Update: 2017-08-17
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+
+
+From 66b66624fce21606d11f24f5b615776074d212ae Mon Sep 17 00:00:00 2001
+From: Christian Brauner <christian.brauner@ubuntu.com>
+Date: Thu, 27 Jul 2017 20:49:58 +0200
+Subject: [PATCH] cgroups: workaround gcc-7 bug
+
+Also: LOL
+
+Signed-off-by: Christian Brauner <christian.brauner@ubuntu.com>
+---
+ src/lxc/cgroups/cgfsng.c | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+--- a/src/lxc/cgroups/cgfsng.c
++++ b/src/lxc/cgroups/cgfsng.c
+@@ -1351,7 +1351,8 @@ static inline bool cgfsng_create(void *h
+ {
+ 	struct cgfsng_handler_data *d = hdata;
+ 	char *tmp, *cgname, *offset;
+-	int i, idx = 0;
++	int i, ret;
++	int idx = 0;
+ 	size_t len;
+ 
+ 	if (!d)
+@@ -1377,8 +1378,18 @@ again:
+ 		ERROR("Too many conflicting cgroup names");
+ 		goto out_free;
+ 	}
+-	if (idx)
+-		snprintf(offset, 5, "-%d", idx);
++	if (idx) {
++		ret = snprintf(offset, 5, "-%d", idx);
++		if (ret < 0 || (size_t)ret >= 5) {
++			FILE *f = fopen("/dev/null", "w");
++			if (f >= 0) {
++				fprintf(f, "Workaround for GCC7 bug: "
++					   "https://gcc.gnu.org/bugzilla/"
++					   "show_bug.cgi?id=78969");
++				fclose(f);
++			}
++		}
++	}
+ 	for (i = 0; hierarchies[i]; i++) {
+ 		if (!create_path_for_hierarchy(hierarchies[i], cgname)) {
+ 			int j;
