@@ -12,3 +12,5 @@
 0012-cgroups-handle-hybrid-cgroup-layouts.patch
 0013-Make-must_make_path-available-to-cgroup_utils.patch
 0014-templates-ubuntu-conditionally-move-upstart-ssh-job-.patch
+649f249cd086e2417e3e79d38de526b8cf590c4d.patch
+db3c8336ac89a0c7a1ea29c613c58dd91220e4e3.patch
