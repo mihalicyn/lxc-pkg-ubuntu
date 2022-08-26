@@ -1,3 +1,12 @@
+lxc (1:5.0.0~git2209-g5a7b9ce67-0ubuntu2) kinetic; urgency=medium
+
+  * d/p/lp1987625/*.patch: cherry-picked to fix FTBFS against glibc 2.36
+    (LP: #1987625)
+  * d/p/ppc64el-gcc12-warning.patch: work around a false positive warning in
+    GCC 12 on ppc64el due to it defaulting to -O3
+
+ -- Simon Chopin <schopin@ubuntu.com>  Fri, 26 Aug 2022 11:18:18 +0200
+
 lxc (1:5.0.0~git2209-g5a7b9ce67-0ubuntu1) jammy; urgency=medium
 
   * Pre-release snapshot of LXC 5.0 LTS (LP: #1967620)

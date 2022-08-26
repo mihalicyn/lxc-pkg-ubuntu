@@ -1,1 +1,6 @@
 0001-Ubuntu-default-lxcbr0-configuration.patch
+lp1987625/0001-build-detect-where-struct-mount_attr-is-declared.patch
+lp1987625/0002-build-detect-sys-pidfd.h-availability.patch
+lp1987625/0003-build-check-for-FS_CONFIG_-header-symbol-in-sys-moun.patch
+
+ppc64el-gcc12-warning.patch
