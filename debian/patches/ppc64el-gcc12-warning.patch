@@ -2,7 +2,8 @@ Description: Fix a spurious warning on PPC64EL with GCC 12
  The optimizations on that architecture would lead to some loop unrolling
  beyond the fixed buffer size. The generated code is correct, and the code
  sections that would overflow the buffer are actually unreachable, but for
- some reason GCC isn't able to deduce this by itself, so we put 
+ some reason GCC isn't able to deduce this by itself, so we put a hard limit
+ on the loop itself.
 Author: Simon Chopin <schopin@ubuntu.com>
 Bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=106757
 Last-Update: 2022-09-06
@@ -16,7 +17,7 @@ Index: lxc-5.0.0~git2209-g5a7b9ce67/src/lxc/seccomp.c
  
  	memset(&arg_cmp, 0, sizeof(arg_cmp));
 -	for (size_t i = 0; i < rule->args_num; i++) {
-+	for (size_t i = 0; i < rule->args_num && i < 6; i++) {
++	for (size_t i = 0; i < rule->args_num && i < sizeof(arg_cmp)/sizeof(arg_cmp[0]); i++) {
  		INFO("arg_cmp[%zu]: SCMP_CMP(%u, %llu, %llu, %llu)", i,
  		     rule->args_value[i].index,
  		     (long long unsigned int)rule->args_value[i].op,

@@ -1,3 +1,10 @@
+lxc (1:5.0.0~git2209-g5a7b9ce67-0ubuntu3) kinetic; urgency=medium
+
+  * d/p/ppc64el-gcc12-warning.patch: refine the patch to be less brittle in
+    case of upstream changes
+
+ -- Simon Chopin <schopin@ubuntu.com>  Wed, 07 Sep 2022 10:19:55 +0200
+
 lxc (1:5.0.0~git2209-g5a7b9ce67-0ubuntu2) kinetic; urgency=medium
 
   * d/p/lp1987625/*.patch: cherry-picked to fix FTBFS against glibc 2.36
