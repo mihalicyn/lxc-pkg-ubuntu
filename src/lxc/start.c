@@ -150,9 +150,6 @@ static int lxc_try_preserve_namespace(struct lxc_handler *handler,
 static bool lxc_try_preserve_namespaces(struct lxc_handler *handler,
 					int ns_clone_flags)
 {
-	for (lxc_namespace_t ns_idx = 0; ns_idx < LXC_NS_MAX; ns_idx++)
-		handler->nsfd[ns_idx] = -EBADF;
-
 	for (lxc_namespace_t ns_idx = 0; ns_idx < LXC_NS_MAX; ns_idx++) {
 		int ret;
 		const char *ns = ns_info[ns_idx].proc_name;
@@ -1588,6 +1585,25 @@ static int core_scheduling(struct lxc_handler *handler)
 	return 0;
 }
 
+static bool inherits_namespaces(const struct lxc_handler *handler)
+{
+	struct lxc_conf *conf = handler->conf;
+
+	for (lxc_namespace_t i = 0; i < LXC_NS_MAX; i++) {
+		if (conf->ns_share[i])
+			return true;
+	}
+
+	return false;
+}
+
+static inline void resolve_cgroup_clone_flags(struct lxc_handler *handler)
+{
+	handler->clone_flags		&= ~(CLONE_INTO_CGROUP | CLONE_NEWCGROUP);
+	handler->ns_on_clone_flags	&= ~(CLONE_INTO_CGROUP | CLONE_NEWCGROUP);
+	handler->ns_unshare_flags	|= CLONE_NEWCGROUP;
+}
+
 /* lxc_spawn() performs crucial setup tasks and clone()s the new process which
  * exec()s the requested container binary.
  * Note that lxc_spawn() runs in the parent namespaces. Any operations performed
@@ -1603,24 +1619,11 @@ static int lxc_spawn(struct lxc_handler *handler)
 	bool wants_to_map_ids;
 	struct list_head *id_map;
 	const char *name = handler->name;
-	const char *lxcpath = handler->lxcpath;
-	bool share_ns = false;
 	struct lxc_conf *conf = handler->conf;
 	struct cgroup_ops *cgroup_ops = handler->cgroup_ops;
 
 	id_map = &conf->id_map;
 	wants_to_map_ids = !list_empty(id_map);
-
-	for (i = 0; i < LXC_NS_MAX; i++) {
-		if (!conf->ns_share[i])
-			continue;
-
-		handler->nsfd[i] = lxc_inherit_namespace(conf->ns_share[i], lxcpath, ns_info[i].proc_name);
-		if (handler->nsfd[i] < 0)
-			return -1;
-
-		share_ns = true;
-	}
 
 	if (!lxc_sync_init(handler))
 		return -1;
@@ -1631,10 +1634,6 @@ static int lxc_spawn(struct lxc_handler *handler)
 		goto out_sync_fini;
 	data_sock0 = handler->data_sock[0];
 	data_sock1 = handler->data_sock[1];
-
-	ret = resolve_clone_flags(handler);
-	if (ret < 0)
-		goto out_sync_fini;
 
 	if (handler->ns_clone_flags & CLONE_NEWNET) {
 		ret = lxc_find_gateway_addresses(handler);
@@ -1650,9 +1649,10 @@ static int lxc_spawn(struct lxc_handler *handler)
 	}
 
 	/* Create a process in a new set of namespaces. */
-	if (share_ns) {
+	if (inherits_namespaces(handler)) {
 		pid_t attacher_pid;
 
+		resolve_cgroup_clone_flags(handler);
 		attacher_pid = lxc_clone(do_share_ns, handler,
 					 CLONE_VFORK | CLONE_VM | CLONE_FILES, NULL);
 		if (attacher_pid < 0) {
@@ -1694,11 +1694,8 @@ static int lxc_spawn(struct lxc_handler *handler)
 			SYSTRACE("Failed to spawn container directly into target cgroup");
 
 			/* Kernel might simply be too old for CLONE_INTO_CGROUP. */
-			handler->clone_flags		&= ~(CLONE_INTO_CGROUP | CLONE_NEWCGROUP);
-			handler->ns_on_clone_flags	&= ~CLONE_NEWCGROUP;
-			handler->ns_unshare_flags	|= CLONE_NEWCGROUP;
-
-			clone_args.flags		= handler->clone_flags;
+			resolve_cgroup_clone_flags(handler);
+			clone_args.flags = handler->clone_flags;
 
 			handler->pid = lxc_clone3(&clone_args, CLONE_ARGS_SIZE_VER0);
 		} else if (cgroup_fd >= 0) {
@@ -1995,6 +1992,28 @@ out_sync_fini:
 	return -1;
 }
 
+static int lxc_inherit_namespaces(struct lxc_handler *handler)
+{
+	const char *lxcpath = handler->lxcpath;
+	struct lxc_conf *conf = handler->conf;
+
+	for (lxc_namespace_t i = 0; i < LXC_NS_MAX; i++) {
+		if (!conf->ns_share[i])
+			continue;
+
+		handler->nsfd[i] = lxc_inherit_namespace(conf->ns_share[i],
+							lxcpath,
+							ns_info[i].proc_name);
+		if (handler->nsfd[i] < 0)
+			return -1;
+
+		TRACE("Recording inherited %s namespace with fd %d",
+		      ns_info[i].proc_name, handler->nsfd[i]);
+	}
+
+	return 0;
+}
+
 int __lxc_start(struct lxc_handler *handler, struct lxc_operations *ops,
 		void *data, const char *lxcpath, bool daemonize, int *error_num)
 {
@@ -2033,6 +2052,20 @@ int __lxc_start(struct lxc_handler *handler, struct lxc_operations *ops,
 
 	if (!cgroup_ops->monitor_enter(cgroup_ops, handler)) {
 		ERROR("Failed to enter monitor cgroup");
+		ret = -1;
+		goto out_abort;
+	}
+
+	ret = resolve_clone_flags(handler);
+	if (ret < 0) {
+		ERROR("Failed to resolve clone flags");
+		ret = -1;
+		goto out_abort;
+	}
+
+	ret = lxc_inherit_namespaces(handler);
+	if (ret) {
+		SYSERROR("Failed to record inherited namespaces");
 		ret = -1;
 		goto out_abort;
 	}

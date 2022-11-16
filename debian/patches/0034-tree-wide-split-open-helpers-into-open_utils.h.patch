@@ -1,0 +1,453 @@
+From 589a930f15ec7b43ddf20b30cf615701c0a6d9b9 Mon Sep 17 00:00:00 2001
+From: Christian Brauner <brauner@kernel.org>
+Date: Wed, 17 Aug 2022 09:58:34 +0200
+Subject: [PATCH 34/45] tree-wide: split open helpers into open_utils.h
+
+Signed-off-by: Christian Brauner (Microsoft) <christian.brauner@ubuntu.com>
+---
+ src/lxc/attach.c               |  1 +
+ src/lxc/caps.c                 |  1 +
+ src/lxc/cgroups/cgfsng.c       |  1 +
+ src/lxc/cgroups/cgroup.c       |  3 +-
+ src/lxc/cgroups/cgroup_utils.c |  1 +
+ src/lxc/cmd/meson.build        |  2 +
+ src/lxc/conf.c                 |  1 +
+ src/lxc/file_utils.c           |  6 +++
+ src/lxc/file_utils.h           |  5 +-
+ src/lxc/lsm/apparmor.c         |  1 +
+ src/lxc/lsm/selinux.c          |  1 +
+ src/lxc/lxccontainer.c         |  1 +
+ src/lxc/meson.build            |  1 +
+ src/lxc/mount_utils.c          |  1 +
+ src/lxc/open_utils.h           | 87 ++++++++++++++++++++++++++++++++++
+ src/lxc/pam/meson.build        |  1 +
+ src/lxc/storage/dir.c          |  1 +
+ src/lxc/syscall_wrappers.h     | 76 -----------------------------
+ src/lxc/terminal.c             |  1 +
+ src/lxc/utils.c                |  1 +
+ 20 files changed, 112 insertions(+), 81 deletions(-)
+ create mode 100644 src/lxc/open_utils.h
+
+diff --git a/src/lxc/attach.c b/src/lxc/attach.c
+index 77da7bb45..769613d6d 100644
+--- a/src/lxc/attach.c
++++ b/src/lxc/attach.c
+@@ -40,6 +40,7 @@
+ #include "memory_utils.h"
+ #include "mount_utils.h"
+ #include "namespace.h"
++#include "open_utils.h"
+ #include "process_utils.h"
+ #include "sync.h"
+ #include "syscall_wrappers.h"
+diff --git a/src/lxc/caps.c b/src/lxc/caps.c
+index a99048864..273cf08f5 100644
+--- a/src/lxc/caps.c
++++ b/src/lxc/caps.c
+@@ -14,6 +14,7 @@
+ #include "log.h"
+ #include "macro.h"
+ #include "memory_utils.h"
++#include "open_utils.h"
+ 
+ lxc_log_define(caps, lxc);
+ 
+diff --git a/src/lxc/cgroups/cgfsng.c b/src/lxc/cgroups/cgfsng.c
+index ee4fc052f..8a3615893 100644
+--- a/src/lxc/cgroups/cgfsng.c
++++ b/src/lxc/cgroups/cgfsng.c
+@@ -45,6 +45,7 @@
+ #include "mainloop.h"
+ #include "memory_utils.h"
+ #include "mount_utils.h"
++#include "open_utils.h"
+ #include "storage/storage.h"
+ #include "string_utils.h"
+ #include "syscall_wrappers.h"
+diff --git a/src/lxc/cgroups/cgroup.c b/src/lxc/cgroups/cgroup.c
+index 8f6e49e04..5e2a7d099 100644
+--- a/src/lxc/cgroups/cgroup.c
++++ b/src/lxc/cgroups/cgroup.c
+@@ -12,8 +12,9 @@
+ #include "compiler.h"
+ #include "conf.h"
+ #include "initutils.h"
+-#include "memory_utils.h"
+ #include "log.h"
++#include "memory_utils.h"
++#include "open_utils.h"
+ #include "start.h"
+ #include "string_utils.h"
+ 
+diff --git a/src/lxc/cgroups/cgroup_utils.c b/src/lxc/cgroups/cgroup_utils.c
+index c5fb91c2f..dc2fbec4b 100644
+--- a/src/lxc/cgroups/cgroup_utils.c
++++ b/src/lxc/cgroups/cgroup_utils.c
+@@ -14,6 +14,7 @@
+ #include "log.h"
+ #include "macro.h"
+ #include "memory_utils.h"
++#include "open_utils.h"
+ #include "utils.h"
+ 
+ lxc_log_define(cgroup_utils, lxc);
+diff --git a/src/lxc/cmd/meson.build b/src/lxc/cmd/meson.build
+index f84269ecb..c7df528d3 100644
+--- a/src/lxc/cmd/meson.build
++++ b/src/lxc/cmd/meson.build
+@@ -20,6 +20,7 @@ cmd_lxc_init_sources = files(
+     '../memory_utils.h',
+     '../namespace.c',
+     '../namespace.h',
++    '../open_utils.h',
+     '../string_utils.c',
+     '../string_utils.h') + include_sources
+ 
+@@ -41,6 +42,7 @@ cmd_lxc_init_static_sources = files(
+     '../memory_utils.h',
+     '../namespace.c',
+     '../namespace.h',
++    '../open_utils.h',
+     '../string_utils.c',
+     '../string_utils.h') + include_sources
+ 
+diff --git a/src/lxc/conf.c b/src/lxc/conf.c
+index 4193cd07f..a04bb0de8 100644
+--- a/src/lxc/conf.c
++++ b/src/lxc/conf.c
+@@ -50,6 +50,7 @@
+ #include "mount_utils.h"
+ #include "namespace.h"
+ #include "network.h"
++#include "open_utils.h"
+ #include "parse.h"
+ #include "process_utils.h"
+ #include "ringbuf.h"
+diff --git a/src/lxc/file_utils.c b/src/lxc/file_utils.c
+index 38f056766..5ee2bea9e 100644
+--- a/src/lxc/file_utils.c
++++ b/src/lxc/file_utils.c
+@@ -15,6 +15,7 @@
+ #include "file_utils.h"
+ #include "macro.h"
+ #include "memory_utils.h"
++#include "open_utils.h"
+ #include "string_utils.h"
+ #include "syscall_wrappers.h"
+ #include "utils.h"
+@@ -800,3 +801,8 @@ bool same_device(int fda, const char *patha, int fdb, const char *pathb)
+ 
+ 	return (st_fda.st_rdev == st_fdb.st_rdev);
+ }
++
++int open_beneath(int dfd, const char *path, unsigned int flags)
++{
++	return open_at(dfd, path, flags, PROTECT_LOOKUP_BENEATH, 0);
++}
+diff --git a/src/lxc/file_utils.h b/src/lxc/file_utils.h
+index e169ab8b0..fc20da5a2 100644
+--- a/src/lxc/file_utils.h
++++ b/src/lxc/file_utils.h
+@@ -108,10 +108,7 @@ __hidden extern int open_at(int dfd, const char *path, unsigned int o_flags,
+ __hidden extern int open_at_same(int fd_same, int dfd, const char *path,
+ 				 unsigned int o_flags,
+ 				 unsigned int resolve_flags, mode_t mode);
+-static inline int open_beneath(int dfd, const char *path, unsigned int flags)
+-{
+-	return open_at(dfd, path, flags, PROTECT_LOOKUP_BENEATH, 0);
+-}
++__hidden extern int open_beneath(int dfd, const char *path, unsigned int flags);
+ __hidden int fd_make_nonblocking(int fd);
+ __hidden extern char *read_file_at(int dfd, const char *fnam,
+                                    unsigned int o_flags,
+diff --git a/src/lxc/lsm/apparmor.c b/src/lxc/lsm/apparmor.c
+index fa4e4d6e0..bf0f771e2 100644
+--- a/src/lxc/lsm/apparmor.c
++++ b/src/lxc/lsm/apparmor.c
+@@ -18,6 +18,7 @@
+ #include "file_utils.h"
+ #include "log.h"
+ #include "lsm.h"
++#include "open_utils.h"
+ #include "parse.h"
+ #include "process_utils.h"
+ #include "utils.h"
+diff --git a/src/lxc/lsm/selinux.c b/src/lxc/lsm/selinux.c
+index 7a34b9cc4..9c131ee29 100644
+--- a/src/lxc/lsm/selinux.c
++++ b/src/lxc/lsm/selinux.c
+@@ -15,6 +15,7 @@
+ #include "log.h"
+ #include "lsm.h"
+ #include "memory_utils.h"
++#include "open_utils.h"
+ 
+ #define DEFAULT_LABEL "unconfined_t"
+ 
+diff --git a/src/lxc/lxccontainer.c b/src/lxc/lxccontainer.c
+index 4363340b3..8df60595a 100644
+--- a/src/lxc/lxccontainer.c
++++ b/src/lxc/lxccontainer.c
+@@ -47,6 +47,7 @@
+ #include "monitor.h"
+ #include "namespace.h"
+ #include "network.h"
++#include "open_utils.h"
+ #include "parse.h"
+ #include "process_utils.h"
+ #include "start.h"
+diff --git a/src/lxc/meson.build b/src/lxc/meson.build
+index 38faf7f5e..b4609e203 100644
+--- a/src/lxc/meson.build
++++ b/src/lxc/meson.build
+@@ -114,6 +114,7 @@ liblxc_sources = files(
+     'nl.h',
+     'parse.c',
+     'parse.h',
++    'open_utils.h',
+     'process_utils.c',
+     'process_utils.h',
+     'rexec.c',
+diff --git a/src/lxc/mount_utils.c b/src/lxc/mount_utils.c
+index 123bbda77..fe8da8200 100644
+--- a/src/lxc/mount_utils.c
++++ b/src/lxc/mount_utils.c
+@@ -15,6 +15,7 @@
+ #include "macro.h"
+ #include "memory_utils.h"
+ #include "mount_utils.h"
++#include "open_utils.h"
+ #include "syscall_numbers.h"
+ #include "syscall_wrappers.h"
+ 
+diff --git a/src/lxc/open_utils.h b/src/lxc/open_utils.h
+new file mode 100644
+index 000000000..7ff5945c7
+--- /dev/null
++++ b/src/lxc/open_utils.h
+@@ -0,0 +1,87 @@
++/* SPDX-License-Identifier: LGPL-2.1+ */
++
++#ifndef __LXC_OPEN_UTILS_H
++#define __LXC_OPEN_UTILS_H
++
++#include "config.h"
++
++#include "syscall_numbers.h"
++
++/*
++ * Arguments for how openat2(2) should open the target path. If only @flags and
++ * @mode are non-zero, then openat2(2) operates very similarly to openat(2).
++ *
++ * However, unlike openat(2), unknown or invalid bits in @flags result in
++ * -EINVAL rather than being silently ignored. @mode must be zero unless one of
++ * {O_CREAT, O_TMPFILE} are set.
++ *
++ * @flags: O_* flags.
++ * @mode: O_CREAT/O_TMPFILE file mode.
++ * @resolve: RESOLVE_* flags.
++ */
++#if !HAVE_STRUCT_OPEN_HOW
++struct open_how {
++	__u64 flags;
++	__u64 mode;
++	__u64 resolve;
++};
++#endif
++
++/* how->resolve flags for openat2(2). */
++#ifndef RESOLVE_NO_XDEV
++#define RESOLVE_NO_XDEV		0x01 /* Block mount-point crossings
++					(includes bind-mounts). */
++#endif
++
++#ifndef RESOLVE_NO_MAGICLINKS
++#define RESOLVE_NO_MAGICLINKS	0x02 /* Block traversal through procfs-style
++					"magic-links". */
++#endif
++
++#ifndef RESOLVE_NO_SYMLINKS
++#define RESOLVE_NO_SYMLINKS	0x04 /* Block traversal through all symlinks
++					(implies OEXT_NO_MAGICLINKS) */
++#endif
++
++#ifndef RESOLVE_BENEATH
++#define RESOLVE_BENEATH		0x08 /* Block "lexical" trickery like
++					"..", symlinks, and absolute
++					paths which escape the dirfd. */
++#endif
++
++#ifndef RESOLVE_IN_ROOT
++#define RESOLVE_IN_ROOT		0x10 /* Make all jumps to "/" and ".."
++					be scoped inside the dirfd
++					(similar to chroot(2)). */
++#endif
++
++#define PROTECT_LOOKUP_BENEATH  (RESOLVE_BENEATH | RESOLVE_NO_XDEV | RESOLVE_NO_MAGICLINKS | RESOLVE_NO_SYMLINKS)
++#define PROTECT_LOOKUP_BENEATH_WITH_SYMLINKS (PROTECT_LOOKUP_BENEATH & ~RESOLVE_NO_SYMLINKS)
++#define PROTECT_LOOKUP_BENEATH_WITH_MAGICLINKS (PROTECT_LOOKUP_BENEATH & ~(RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS))
++#define PROTECT_LOOKUP_BENEATH_XDEV (PROTECT_LOOKUP_BENEATH & ~RESOLVE_NO_XDEV)
++
++#define PROTECT_LOOKUP_ABSOLUTE (PROTECT_LOOKUP_BENEATH & ~RESOLVE_BENEATH)
++#define PROTECT_LOOKUP_ABSOLUTE_WITH_SYMLINKS (PROTECT_LOOKUP_ABSOLUTE & ~RESOLVE_NO_SYMLINKS)
++#define PROTECT_LOOKUP_ABSOLUTE_WITH_MAGICLINKS (PROTECT_LOOKUP_ABSOLUTE & ~(RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS))
++#define PROTECT_LOOKUP_ABSOLUTE_XDEV (PROTECT_LOOKUP_ABSOLUTE & ~RESOLVE_NO_XDEV)
++#define PROTECT_LOOKUP_ABSOLUTE_XDEV_SYMLINKS (PROTECT_LOOKUP_ABSOLUTE_WITH_SYMLINKS & ~RESOLVE_NO_XDEV)
++
++#define PROTECT_OPATH_FILE (O_NOFOLLOW | O_PATH | O_CLOEXEC)
++#define PROTECT_OPATH_DIRECTORY (PROTECT_OPATH_FILE | O_DIRECTORY)
++
++#define PROTECT_OPEN_WITH_TRAILING_SYMLINKS (O_CLOEXEC | O_NOCTTY | O_RDONLY)
++#define PROTECT_OPEN (PROTECT_OPEN_WITH_TRAILING_SYMLINKS | O_NOFOLLOW)
++
++#define PROTECT_OPEN_W_WITH_TRAILING_SYMLINKS (O_CLOEXEC | O_NOCTTY | O_WRONLY)
++#define PROTECT_OPEN_W (PROTECT_OPEN_W_WITH_TRAILING_SYMLINKS | O_NOFOLLOW)
++#define PROTECT_OPEN_RW (O_CLOEXEC | O_NOCTTY | O_RDWR | O_NOFOLLOW)
++
++#if !HAVE_OPENAT2
++static inline int openat2(int dfd, const char *filename, struct open_how *how, size_t size)
++{
++	return syscall(__NR_openat2, dfd, filename, how, size);
++}
++#endif /* HAVE_OPENAT2 */
++
++#endif /* __LXC_OPEN_UTILS_H */
++
+diff --git a/src/lxc/pam/meson.build b/src/lxc/pam/meson.build
+index 3078fb1c4..3151c43fc 100644
+--- a/src/lxc/pam/meson.build
++++ b/src/lxc/pam/meson.build
+@@ -6,6 +6,7 @@ pam_cgfs_sources = files(
+     '../file_utils.h',
+     '../macro.h',
+     '../memory_utils.h',
++    '../open_utils.h',
+     '../string_utils.c',
+     '../string_utils.h') + include_sources
+ 
+diff --git a/src/lxc/storage/dir.c b/src/lxc/storage/dir.c
+index dca510140..bdf4e3f3a 100644
+--- a/src/lxc/storage/dir.c
++++ b/src/lxc/storage/dir.c
+@@ -10,6 +10,7 @@
+ #include "macro.h"
+ #include "memory_utils.h"
+ #include "mount_utils.h"
++#include "open_utils.h"
+ #include "storage.h"
+ #include "utils.h"
+ 
+diff --git a/src/lxc/syscall_wrappers.h b/src/lxc/syscall_wrappers.h
+index d5b7c3bf0..87e0294fd 100644
+--- a/src/lxc/syscall_wrappers.h
++++ b/src/lxc/syscall_wrappers.h
+@@ -143,82 +143,6 @@ static int faccessat(int __fd, const char *__file, int __type, int __flag)
+ }
+ #endif
+ 
+-/*
+- * Arguments for how openat2(2) should open the target path. If only @flags and
+- * @mode are non-zero, then openat2(2) operates very similarly to openat(2).
+- *
+- * However, unlike openat(2), unknown or invalid bits in @flags result in
+- * -EINVAL rather than being silently ignored. @mode must be zero unless one of
+- * {O_CREAT, O_TMPFILE} are set.
+- *
+- * @flags: O_* flags.
+- * @mode: O_CREAT/O_TMPFILE file mode.
+- * @resolve: RESOLVE_* flags.
+- */
+-#if !HAVE_STRUCT_OPEN_HOW
+-struct open_how {
+-	__u64 flags;
+-	__u64 mode;
+-	__u64 resolve;
+-};
+-#endif
+-
+-/* how->resolve flags for openat2(2). */
+-#ifndef RESOLVE_NO_XDEV
+-#define RESOLVE_NO_XDEV		0x01 /* Block mount-point crossings
+-					(includes bind-mounts). */
+-#endif
+-
+-#ifndef RESOLVE_NO_MAGICLINKS
+-#define RESOLVE_NO_MAGICLINKS	0x02 /* Block traversal through procfs-style
+-					"magic-links". */
+-#endif
+-
+-#ifndef RESOLVE_NO_SYMLINKS
+-#define RESOLVE_NO_SYMLINKS	0x04 /* Block traversal through all symlinks
+-					(implies OEXT_NO_MAGICLINKS) */
+-#endif
+-
+-#ifndef RESOLVE_BENEATH
+-#define RESOLVE_BENEATH		0x08 /* Block "lexical" trickery like
+-					"..", symlinks, and absolute
+-					paths which escape the dirfd. */
+-#endif
+-
+-#ifndef RESOLVE_IN_ROOT
+-#define RESOLVE_IN_ROOT		0x10 /* Make all jumps to "/" and ".."
+-					be scoped inside the dirfd
+-					(similar to chroot(2)). */
+-#endif
+-
+-#define PROTECT_LOOKUP_BENEATH  (RESOLVE_BENEATH | RESOLVE_NO_XDEV | RESOLVE_NO_MAGICLINKS | RESOLVE_NO_SYMLINKS)
+-#define PROTECT_LOOKUP_BENEATH_WITH_SYMLINKS (PROTECT_LOOKUP_BENEATH & ~RESOLVE_NO_SYMLINKS)
+-#define PROTECT_LOOKUP_BENEATH_WITH_MAGICLINKS (PROTECT_LOOKUP_BENEATH & ~(RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS))
+-#define PROTECT_LOOKUP_BENEATH_XDEV (PROTECT_LOOKUP_BENEATH & ~RESOLVE_NO_XDEV)
+-
+-#define PROTECT_LOOKUP_ABSOLUTE (PROTECT_LOOKUP_BENEATH & ~RESOLVE_BENEATH)
+-#define PROTECT_LOOKUP_ABSOLUTE_WITH_SYMLINKS (PROTECT_LOOKUP_ABSOLUTE & ~RESOLVE_NO_SYMLINKS)
+-#define PROTECT_LOOKUP_ABSOLUTE_WITH_MAGICLINKS (PROTECT_LOOKUP_ABSOLUTE & ~(RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS))
+-#define PROTECT_LOOKUP_ABSOLUTE_XDEV (PROTECT_LOOKUP_ABSOLUTE & ~RESOLVE_NO_XDEV)
+-#define PROTECT_LOOKUP_ABSOLUTE_XDEV_SYMLINKS (PROTECT_LOOKUP_ABSOLUTE_WITH_SYMLINKS & ~RESOLVE_NO_XDEV)
+-
+-#define PROTECT_OPATH_FILE (O_NOFOLLOW | O_PATH | O_CLOEXEC)
+-#define PROTECT_OPATH_DIRECTORY (PROTECT_OPATH_FILE | O_DIRECTORY)
+-
+-#define PROTECT_OPEN_WITH_TRAILING_SYMLINKS (O_CLOEXEC | O_NOCTTY | O_RDONLY)
+-#define PROTECT_OPEN (PROTECT_OPEN_WITH_TRAILING_SYMLINKS | O_NOFOLLOW)
+-
+-#define PROTECT_OPEN_W_WITH_TRAILING_SYMLINKS (O_CLOEXEC | O_NOCTTY | O_WRONLY)
+-#define PROTECT_OPEN_W (PROTECT_OPEN_W_WITH_TRAILING_SYMLINKS | O_NOFOLLOW)
+-#define PROTECT_OPEN_RW (O_CLOEXEC | O_NOCTTY | O_RDWR | O_NOFOLLOW)
+-
+-#if !HAVE_OPENAT2
+-static inline int openat2(int dfd, const char *filename, struct open_how *how, size_t size)
+-{
+-	return syscall(__NR_openat2, dfd, filename, how, size);
+-}
+-#endif /* HAVE_OPENAT2 */
+-
+ #ifndef CLOSE_RANGE_UNSHARE
+ #define CLOSE_RANGE_UNSHARE	(1U << 1)
+ #endif
+diff --git a/src/lxc/terminal.c b/src/lxc/terminal.c
+index 38ba5c14d..a1dcc2dc7 100644
+--- a/src/lxc/terminal.c
++++ b/src/lxc/terminal.c
+@@ -23,6 +23,7 @@
+ #include "lxclock.h"
+ #include "mainloop.h"
+ #include "memory_utils.h"
++#include "open_utils.h"
+ #include "start.h"
+ #include "syscall_wrappers.h"
+ #include "terminal.h"
+diff --git a/src/lxc/utils.c b/src/lxc/utils.c
+index 0e2a7188b..d3d82e23e 100644
+--- a/src/lxc/utils.c
++++ b/src/lxc/utils.c
+@@ -32,6 +32,7 @@
+ #include "lxclock.h"
+ #include "memory_utils.h"
+ #include "namespace.h"
++#include "open_utils.h"
+ #include "parse.h"
+ #include "process_utils.h"
+ #include "syscall_wrappers.h"
+-- 
+2.37.2
+

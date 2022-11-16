@@ -1,3 +1,14 @@
+lxc (1:5.0.1-0ubuntu1) lunar; urgency=medium
+
+  * Update to lxc-5.0.1 (using the orig tarball from debian)
+  * d/p: add all patches up to current git master
+  * d/control: add libsystemd-dev and meson
+  * d/rules: follow guidance from daily packaging
+  * remove d/.git-dpm
+  * update paths in liblxc1.install and liblxc.lintian-overrides
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Wed, 16 Nov 2022 09:31:08 -0600
+
 lxc (1:5.0.0~git2209-g5a7b9ce67-0ubuntu3) kinetic; urgency=medium
 
   * d/p/ppc64el-gcc12-warning.patch: refine the patch to be less brittle in

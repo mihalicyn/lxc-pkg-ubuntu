@@ -1,0 +1,30 @@
+From 7b1836bce13d32343df9cc1bdb6e0205ef6f195d Mon Sep 17 00:00:00 2001
+From: Christian Brauner <brauner@kernel.org>
+Date: Wed, 17 Aug 2022 09:48:32 +0200
+Subject: [PATCH 33/45] build: prevent the inclusion of linux/mount.h with a
+ hack
+
+Signed-off-by: Christian Brauner (Microsoft) <christian.brauner@ubuntu.com>
+---
+ meson.build | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/meson.build b/meson.build
+index 666824c5a..3f1840417 100644
+--- a/meson.build
++++ b/meson.build
+@@ -85,6 +85,11 @@ srcconf = configuration_data()
+ srcconf.set('_GNU_SOURCE', true)
+ srcconf.set('_FILE_OFFSET_BITS', 64)
+ srcconf.set('__STDC_FORMAT_MACROS', true)
++
++## This is a hack to prevent any inclusion ofr linux/mount.h which causes
++## conflicts with sys/mount.h all over the place
++srcconf.set('_LINUX_MOUNT_H', true)
++
+ srcconf.set_quoted('APPARMOR_CACHE_DIR', lxcapparmorcachedir)
+ srcconf.set_quoted('LIBEXECDIR', libexecdir)
+ srcconf.set_quoted('LOGPATH', lxclogpath)
+-- 
+2.37.2
+

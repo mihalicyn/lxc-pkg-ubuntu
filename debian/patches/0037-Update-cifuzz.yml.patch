@@ -1,0 +1,28 @@
+From 2b802090f5c20139d6170530df9838bdf0c40c41 Mon Sep 17 00:00:00 2001
+From: Alex <93376818+sashashura@users.noreply.github.com>
+Date: Thu, 1 Sep 2022 15:52:05 +0100
+Subject: [PATCH 37/45] Update cifuzz.yml
+
+Signed-off-by: sashashura <93376818+sashashura@users.noreply.github.com>
+
+Signed-off-by: Alex <93376818+sashashura@users.noreply.github.com>
+---
+ .github/workflows/cifuzz.yml | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/.github/workflows/cifuzz.yml b/.github/workflows/cifuzz.yml
+index e7a78c68c..7347f2882 100644
+--- a/.github/workflows/cifuzz.yml
++++ b/.github/workflows/cifuzz.yml
+@@ -9,6 +9,8 @@ on:
+       - 'src/**'
+     branches:
+       - master
++permissions:
++  contents: read
+ jobs:
+   Fuzzing:
+     runs-on: ubuntu-22.04
+-- 
+2.37.2
+

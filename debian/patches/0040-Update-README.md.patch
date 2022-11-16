@@ -1,0 +1,28 @@
+From 09233897b54d86e5c397b921edf32a90c8c7a237 Mon Sep 17 00:00:00 2001
+From: DarkGuySM <78262720+DarkGuySM@users.noreply.github.com>
+Date: Sun, 2 Oct 2022 15:36:50 +0530
+Subject: [PATCH 40/45] Update README.md
+
+Corrected grammar in readme.
+
+Signed-off-by: DarkGuySM <78262720+DarkGuySM@users.noreply.github.com>
+---
+ README.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/README.md b/README.md
+index 186137107..c476e46eb 100644
+--- a/README.md
++++ b/README.md
+@@ -190,7 +190,7 @@ When you find you need help, the LXC projects provides you with several options.
+ 
+ ### Discuss Forum
+ 
+-We maintain an discuss forum at
++We maintain a discuss forum at
+ 
+ - https://discuss.linuxcontainers.org/
+ 
+-- 
+2.37.2
+

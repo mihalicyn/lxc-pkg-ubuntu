@@ -1,0 +1,62 @@
+From 32a07151939c6c251def2a1e5e04973e4c64103a Mon Sep 17 00:00:00 2001
+From: Christian Brauner <brauner@kernel.org>
+Date: Mon, 25 Jul 2022 22:25:55 +0200
+Subject: [PATCH 20/45] lxc-usernsexec: allow to select which {g,u}id to switch
+ to
+
+Signed-off-by: Christian Brauner (Microsoft) <christian.brauner@ubuntu.com>
+---
+ src/lxc/cmd/lxc_usernsexec.c | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/src/lxc/cmd/lxc_usernsexec.c b/src/lxc/cmd/lxc_usernsexec.c
+index 96a1182a3..b17faa38c 100644
+--- a/src/lxc/cmd/lxc_usernsexec.c
++++ b/src/lxc/cmd/lxc_usernsexec.c
+@@ -32,6 +32,9 @@
+ #include "utils.h"
+ 
+ __hidden extern int lxc_log_fd;
++/* Assume we want to become root */
++static uid_t uid = 0;
++static gid_t gid = 0;
+ 
+ static void usage(const char *name)
+ {
+@@ -90,8 +93,7 @@ static int do_child(void *vargv)
+ 	if (!lxc_drop_groups() && errno != EPERM)
+ 		return -1;
+ 
+-	/* Assume we want to become root */
+-	if (!lxc_switch_uid_gid(0, 0))
++	if (!lxc_switch_uid_gid(uid, gid))
+ 		return -1;
+ 
+ 	ret = unshare(CLONE_NEWNS);
+@@ -328,7 +330,7 @@ int main(int argc, char *argv[])
+ 		}
+ 	}
+ 
+-	while ((c = getopt(argc, argv, "m:hs")) != EOF) {
++	while ((c = getopt(argc, argv, "m:hsu:g:")) != EOF) {
+ 		switch (c) {
+ 		case 'm':
+ 			ret = parse_map(optarg);
+@@ -343,6 +345,14 @@ int main(int argc, char *argv[])
+ 		case 's':
+ 			map_self = true;
+ 			break;
++		case 'u':
++			if (lxc_safe_uint(optarg, &uid) < 0)
++				return -1;
++			break;
++		case 'g':
++			if (lxc_safe_uint(optarg, &gid) < 0)
++				return -1;
++			break;
+ 		default:
+ 			usage(argv[0]);
+ 			_exit(EXIT_FAILURE);
+-- 
+2.37.2
+

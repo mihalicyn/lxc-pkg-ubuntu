@@ -1,0 +1,31 @@
+From 8480c56a4502df3cb13c5a66fb50adfca88ebd21 Mon Sep 17 00:00:00 2001
+From: Po-Hsu Lin <po-hsu.lin@canonical.com>
+Date: Wed, 19 Oct 2022 11:59:34 +0800
+Subject: [PATCH 44/45] tools: lxc-destroy: update help message for --force
+
+Looks like the --force is a flag to stop a running container before
+destroying it.
+
+Update the help message accordingly.
+
+Signed-off-by: Po-Hsu Lin <po-hsu.lin@canonical.com>
+---
+ src/lxc/tools/lxc_destroy.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lxc/tools/lxc_destroy.c b/src/lxc/tools/lxc_destroy.c
+index e0fb09c57..fd5cab801 100644
+--- a/src/lxc/tools/lxc_destroy.c
++++ b/src/lxc/tools/lxc_destroy.c
+@@ -38,7 +38,7 @@ lxc-destroy destroys a container with the identifier NAME\n\
+ Options :\n\
+   -n, --name=NAME   NAME of the container\n\
+   -s, --snapshots   destroy including all snapshots\n\
+-  -f, --force       wait for the container to shut down\n\
++  -f, --force       stop and destroy the container if it's still running\n\
+   --rcfile=FILE     Load configuration file FILE\n",
+ 	.options      = my_longopts,
+ 	.parser       = my_parser,
+-- 
+2.37.2
+

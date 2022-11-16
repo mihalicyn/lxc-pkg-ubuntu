@@ -10,14 +10,12 @@ SHELL := sh -e
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
 %:
-	dh ${@}
+	dh ${@} --buildsystem=meson
 
 override_dh_auto_configure:
-	dh_auto_configure -- --libdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
-		--libexecdir=\$${prefix}/lib/$(DEB_HOST_MULTIARCH) \
-		--with-rootfs-path=\$${prefix}/lib/$(DEB_HOST_MULTIARCH)/lxc \
-		$(shell dpkg-buildflags --export=configure) \
-		--enable-doc --disable-rpath --with-distro=ubuntu --enable-pam
+	dh_auto_configure -- -Dman=true -Dpam-cgroup=true \
+		-Dlibexecdir=/usr/lib/$(DEB_HOST_MULTIARCH) \
+		-Dinit-script=systemd,sysvinit,upstart
 
 override_dh_install:
 	if [ -x /usr/bin/dh_apparmor ]; then \
@@ -41,6 +39,10 @@ override_dh_install:
 
 	# move the examples
 	mv debian/tmp/usr/share/doc/lxc debian/tmp/usr/share/doc/liblxc-common
+
+	# move the PAM module
+	mkdir -p debian/tmp/lib/$(DEB_HOST_MULTIARCH)/
+	mv debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/security/ debian/tmp/lib/$(DEB_HOST_MULTIARCH)/
 
 	# move the special manpages
 	mkdir -p debian/libpam-cgfs/usr/share/man/man8/

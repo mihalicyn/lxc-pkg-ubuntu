@@ -1,0 +1,27 @@
+From fc133a9f37a62f4f35d66ee309d28d4953920b4a Mon Sep 17 00:00:00 2001
+From: Christian Brauner <brauner@kernel.org>
+Date: Wed, 29 Jun 2022 18:29:52 +0200
+Subject: [PATCH 07/45] conf: log file descriptors on error during idmapped
+ mount setup
+
+Signed-off-by: Christian Brauner (Microsoft) <christian.brauner@ubuntu.com>
+---
+ src/lxc/conf.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lxc/conf.c b/src/lxc/conf.c
+index a24fdcc8f..0bc42993b 100644
+--- a/src/lxc/conf.c
++++ b/src/lxc/conf.c
+@@ -4120,7 +4120,7 @@ int lxc_idmapped_mounts_parent(struct lxc_handler *handler)
+ 			return syserror("Failed to receive idmapped mount file descriptors from child");
+ 
+ 		if (fd_from < 0 || fd_userns < 0)
+-			return log_trace(0, "Finished receiving idmapped mount file descriptors from child");
++			return log_trace(0, "Finished receiving idmapped mount file descriptors (%d | %d) from child", fd_from, fd_userns);
+ 
+ 		attr.attr_set	= MOUNT_ATTR_IDMAP;
+ 		attr.userns_fd	= fd_userns;
+-- 
+2.37.2
+

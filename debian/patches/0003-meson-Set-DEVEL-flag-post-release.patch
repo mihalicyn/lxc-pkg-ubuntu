@@ -1,0 +1,26 @@
+From e73520adf4fd6a7548872ac4097adb67b7cd1314 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?St=C3=A9phane=20Graber?= <stgraber@ubuntu.com>
+Date: Thu, 16 Jun 2022 16:41:05 -0400
+Subject: [PATCH 03/45] meson: Set DEVEL flag post release
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Stéphane Graber <stgraber@ubuntu.com>
+---
+ meson.build | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Index: lxc-5.0.1/meson.build
+===================================================================
+--- lxc-5.0.1.orig/meson.build
++++ lxc-5.0.1/meson.build
+@@ -30,7 +30,7 @@ version_data.set('LXC_VERSION_MINOR', '0
+ version_data.set('LXC_VERSION_MICRO', '1')
+ version_data.set('LXC_VERSION_BETA', '')
+ version_data.set('LXC_ABI', liblxc_version)
+-version_data.set('LXC_DEVEL', '0')
++version_data.set('LXC_DEVEL', '1')
+ version_data.set('LXC_VERSION', meson.project_version())
+ 
+ # Path handling.

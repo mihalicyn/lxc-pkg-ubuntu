@@ -1,0 +1,28 @@
+From 7317d2a8a7d81a6208c64446b47f09748d406ecc Mon Sep 17 00:00:00 2001
+From: Christian Brauner <brauner@kernel.org>
+Date: Wed, 29 Jun 2022 18:31:01 +0200
+Subject: [PATCH 08/45] start: don't overwrite file descriptors during
+ namespace preservation
+
+Signed-off-by: Christian Brauner (Microsoft) <christian.brauner@ubuntu.com>
+---
+ src/lxc/start.c | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/src/lxc/start.c b/src/lxc/start.c
+index d0a860361..bf1a589ba 100644
+--- a/src/lxc/start.c
++++ b/src/lxc/start.c
+@@ -150,9 +150,6 @@ static int lxc_try_preserve_namespace(struct lxc_handler *handler,
+ static bool lxc_try_preserve_namespaces(struct lxc_handler *handler,
+ 					int ns_clone_flags)
+ {
+-	for (lxc_namespace_t ns_idx = 0; ns_idx < LXC_NS_MAX; ns_idx++)
+-		handler->nsfd[ns_idx] = -EBADF;
+-
+ 	for (lxc_namespace_t ns_idx = 0; ns_idx < LXC_NS_MAX; ns_idx++) {
+ 		int ret;
+ 		const char *ns = ns_info[ns_idx].proc_name;
+-- 
+2.37.2
+

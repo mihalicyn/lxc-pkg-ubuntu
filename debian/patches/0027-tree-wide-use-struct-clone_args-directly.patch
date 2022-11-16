@@ -1,0 +1,114 @@
+From 63468abd3287ebd5cc4ed9205334217031049fb4 Mon Sep 17 00:00:00 2001
+From: Christian Brauner <brauner@kernel.org>
+Date: Wed, 10 Aug 2022 12:03:54 +0200
+Subject: [PATCH 27/45] tree-wide: use struct clone_args directly
+
+Signed-off-by: Christian Brauner (Microsoft) <christian.brauner@ubuntu.com>
+---
+ meson.build             | 1 -
+ src/lxc/process_utils.c | 2 +-
+ src/lxc/process_utils.h | 7 ++++---
+ src/lxc/start.c         | 2 +-
+ src/lxc/start.h         | 1 -
+ src/tests/reboot.c      | 2 --
+ 6 files changed, 6 insertions(+), 9 deletions(-)
+
+diff --git a/meson.build b/meson.build
+index d55808fb0..d10e82ab8 100644
+--- a/meson.build
++++ b/meson.build
+@@ -583,7 +583,6 @@ decl_headers = '''
+ #include <linux/fs.h>
+ #include <linux/if_link.h>
+ #include <linux/openat2.h>
+-#include <linux/sched.h>
+ #include <linux/types.h>
+ '''
+ 
+diff --git a/src/lxc/process_utils.c b/src/lxc/process_utils.c
+index 76e27da0f..eb52736b6 100644
+--- a/src/lxc/process_utils.c
++++ b/src/lxc/process_utils.c
+@@ -90,7 +90,7 @@ __returns_twice pid_t lxc_raw_legacy_clone(unsigned long flags, int *pidfd)
+ __returns_twice pid_t lxc_raw_clone(unsigned long flags, int *pidfd)
+ {
+ 	pid_t pid;
+-	struct lxc_clone_args args = {
++	struct clone_args args = {
+ 		.flags		= flags,
+ 		.pidfd		= ptr_to_u64(pidfd),
+ 	};
+diff --git a/src/lxc/process_utils.h b/src/lxc/process_utils.h
+index ed84741d0..d2bf97802 100644
+--- a/src/lxc/process_utils.h
++++ b/src/lxc/process_utils.h
+@@ -5,7 +5,6 @@
+ 
+ #include "config.h"
+ 
+-#include <linux/sched.h>
+ #include <sched.h>
+ #include <signal.h>
+ #include <stdbool.h>
+@@ -165,7 +164,8 @@
+ #define u64_to_ptr(x) ((void *)(uintptr_t)x)
+ #endif
+ 
+-struct lxc_clone_args {
++#if !HAVE_STRUCT_CLONE_ARGS
++struct clone_args {
+ 	__aligned_u64 flags;
+ 	__aligned_u64 pidfd;
+ 	__aligned_u64 child_tid;
+@@ -178,8 +178,9 @@ struct lxc_clone_args {
+ 	__aligned_u64 set_tid_size;
+ 	__aligned_u64 cgroup;
+ };
++#endif
+ 
+-__returns_twice static inline pid_t lxc_clone3(struct lxc_clone_args *args, size_t size)
++__returns_twice static inline pid_t lxc_clone3(struct clone_args *args, size_t size)
+ {
+ 	return syscall(__NR_clone3, args, size);
+ }
+diff --git a/src/lxc/start.c b/src/lxc/start.c
+index 7751b7e90..9f68304bf 100644
+--- a/src/lxc/start.c
++++ b/src/lxc/start.c
+@@ -1673,7 +1673,7 @@ static int lxc_spawn(struct lxc_handler *handler)
+ 	} else {
+ 		int cgroup_fd = -EBADF;
+ 
+-		struct lxc_clone_args clone_args = {
++		struct clone_args clone_args = {
+ 			.flags = handler->clone_flags,
+ 			.pidfd = ptr_to_u64(&handler->pidfd),
+ 			.exit_signal = SIGCHLD,
+diff --git a/src/lxc/start.h b/src/lxc/start.h
+index 86b4c29a4..cd36bc55f 100644
+--- a/src/lxc/start.h
++++ b/src/lxc/start.h
+@@ -5,7 +5,6 @@
+ 
+ #include "config.h"
+ 
+-#include <linux/sched.h>
+ #include <sched.h>
+ #include <signal.h>
+ #include <stdbool.h>
+diff --git a/src/tests/reboot.c b/src/tests/reboot.c
+index 0a07bf467..005e9863d 100644
+--- a/src/tests/reboot.c
++++ b/src/tests/reboot.c
+@@ -32,8 +32,6 @@
+ 
+ #include "namespace.h"
+ 
+-#include <sched.h>
+-#include <linux/sched.h>
+ #include <linux/reboot.h>
+ 
+ int clone(int (*fn)(void *), void *child_stack, int flags, void *arg, ...);
+-- 
+2.37.2
+

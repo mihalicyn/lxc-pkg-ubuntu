@@ -899,13 +899,19 @@ static int set_config_net_ipv4_address(const char *key, const char *value,
 
 	/* If no broadcast address, compute one from the prefix and address. */
 	if (!bcast) {
-		unsigned int shift = LAST_BIT_PER_TYPE(inetdev->prefix);
+		/* 0<=inetdev->prefix<=32 */
+		switch (inetdev->prefix) {
+		case 32: /* single IPv4 network */
+			; /* fall thru */
+		case 31: /* RFC 3021 point to point network */
+			inetdev->bcast.s_addr = INADDR_ANY;
+			break;
 
-		inetdev->bcast.s_addr = inetdev->addr.s_addr;
-		if (inetdev->prefix < shift)
-			shift = inetdev->prefix;
-		inetdev->bcast.s_addr |= htonl(INADDR_BROADCAST >> shift);
-	}
+		default:
+			inetdev->bcast.s_addr |= htonl(INADDR_BROADCAST >> inetdev->prefix);
+			break;
+		}
+        }
 
 	list_add_tail(&inetdev->head, &netdev->ipv4_addresses);
 	move_ptr(inetdev);
@@ -1185,7 +1191,7 @@ static int add_hook(struct lxc_conf *lxc_conf, int which, __owns char *hook)
 static int set_config_seccomp_allow_nesting(const char *key, const char *value,
 					    struct lxc_conf *lxc_conf, void *data)
 {
-#ifdef HAVE_SECCOMP
+#if HAVE_SECCOMP
 	if (lxc_config_value_empty(value))
 		return clr_config_seccomp_allow_nesting(key, lxc_conf, NULL);
 
@@ -1236,7 +1242,7 @@ static int set_config_seccomp_notify_proxy(const char *key, const char *value,
 static int set_config_seccomp_profile(const char *key, const char *value,
 				      struct lxc_conf *lxc_conf, void *data)
 {
-#ifdef HAVE_SECCOMP
+#if HAVE_SECCOMP
 	return set_config_path_item(&lxc_conf->seccomp.seccomp, value);
 #else
 	return ret_errno(ENOSYS);
@@ -4389,7 +4395,7 @@ static int get_config_seccomp_allow_nesting(const char *key, char *retv,
 					    int inlen, struct lxc_conf *c,
 					    void *data)
 {
-#ifdef HAVE_SECCOMP
+#if HAVE_SECCOMP
 	return lxc_get_conf_int(c, retv, inlen, c->seccomp.allow_nesting);
 #else
 	return ret_errno(ENOSYS);
@@ -4422,7 +4428,7 @@ static int get_config_seccomp_notify_proxy(const char *key, char *retv, int inle
 static int get_config_seccomp_profile(const char *key, char *retv, int inlen,
 				      struct lxc_conf *c, void *data)
 {
-#ifdef HAVE_SECCOMP
+#if HAVE_SECCOMP
 	return lxc_get_conf_str(retv, inlen, c->seccomp.seccomp);
 #else
 	return ret_errno(ENOSYS);
@@ -5131,7 +5137,7 @@ static inline int clr_config_console_size(const char *key, struct lxc_conf *c,
 static inline int clr_config_seccomp_allow_nesting(const char *key,
 						   struct lxc_conf *c, void *data)
 {
-#ifdef HAVE_SECCOMP
+#if HAVE_SECCOMP
 	c->seccomp.allow_nesting = 0;
 	return 0;
 #else

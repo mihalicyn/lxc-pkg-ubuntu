@@ -350,7 +350,7 @@ bool wait_exited(pid_t pid)
 	return true;
 }
 
-#ifdef HAVE_OPENSSL
+#if HAVE_OPENSSL
 #include <openssl/evp.h>
 
 static int do_sha1_hash(const char *buf, int buflen, unsigned char *md_value,
@@ -1792,7 +1792,7 @@ bool lxc_can_use_pidfd(int pidfd)
 	int ret;
 
 	if (pidfd < 0)
-		return log_error(false, "Kernel does not support pidfds");
+		return log_trace(false, "Kernel does not support pidfds");
 
 	/*
 	 * We don't care whether or not children were in a waitable state. We

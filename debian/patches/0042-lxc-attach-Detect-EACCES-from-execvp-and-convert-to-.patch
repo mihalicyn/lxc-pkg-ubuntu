@@ -1,0 +1,44 @@
+From f7cadaa346a0233c00bbd60412c5f6148288d217 Mon Sep 17 00:00:00 2001
+From: Thomas Parrott <thomas.parrott@canonical.com>
+Date: Thu, 13 Oct 2022 15:33:30 +0100
+Subject: [PATCH 42/45] lxc/attach: Detect EACCES from execvp and convert to
+ 126 exit status
+
+Before:
+
+  sudo lxc-attach -n test /etc/passwd ; echo $?
+  lxc-attach: test: ../src/lxc/attach.c: lxc_attach_run_command: 1841 Permission denied - Failed to exec "/etc/passwd"
+  255
+
+After:
+
+  sudo lxc-attach -n test /etc/passwd ; echo $?
+  lxc-attach: test: ../src/lxc/attach.c: lxc_attach_run_command: 1841 Permission denied - Failed to exec "/etc/passwd"
+  126
+
+Which better aligns with bash:
+
+  /etc/passwd; echo $?
+  bash: /etc/passwd: Permission denied
+  126
+
+Signed-off-by: Thomas Parrott <thomas.parrott@canonical.com>
+---
+ src/lxc/attach.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/lxc/attach.c b/src/lxc/attach.c
+index 769613d6d..f086e96c4 100644
+--- a/src/lxc/attach.c
++++ b/src/lxc/attach.c
+@@ -1828,6 +1828,7 @@ int lxc_attach_run_command(void *payload)
+ 	ret = execvp(cmd->program, cmd->argv);
+ 	if (ret < 0) {
+ 		switch (errno) {
++		case EACCES:
+ 		case ENOEXEC:
+ 			ret = 126;
+ 			break;
+-- 
+2.37.2
+
