@@ -1,3 +1,9 @@
+lxc (1:5.0.1-0ubuntu2) lunar; urgency=medium
+
+  * Fix autopkg tests to use meson instead of autoconf
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Tue, 10 Jan 2023 16:21:26 -0600
+
 lxc (1:5.0.1-0ubuntu1) lunar; urgency=medium
 
   * Update to lxc-5.0.1 (using the orig tarball from debian)
