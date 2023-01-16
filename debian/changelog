@@ -1,3 +1,10 @@
+lxc (1:5.0.1-0ubuntu3) lunar; urgency=medium
+
+  * fix meson reconfiguration usage: the build/ directory doesn't exist
+    yet when tests/exercise runs, so use meson setup to create it.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Sun, 15 Jan 2023 22:53:15 -0600
+
 lxc (1:5.0.1-0ubuntu2) lunar; urgency=medium
 
   * Fix autopkg tests to use meson instead of autoconf

@@ -72,7 +72,7 @@ sed -i '/^DOWNLOAD_URL=$/a DOWNLOAD_KEYSERVER="hkp://keyserver.ubuntu.com:80"' /
 
 # Build the tests (don't install anything, we want the system lib and tools)
 MULTIARCH=$(gcc -print-multiarch)
-meson configure -Dtests=true -Dman=false build
+meson setup -Dtests=true -Dman=false build
 make
 rm -rf build/src/tests/lxc-test-*.p
 cp build/src/tests/lxc-test-* src/tests/
