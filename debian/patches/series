@@ -30,3 +30,4 @@
 0045-tests-lxc-test-checkpoint-restore-use-trap-to-do-cle.patch
 0046-src-lxc-meson.build-fix-the-static-library-path.patch
 ppc64el-gcc12-warning.patch
+test-usernic-fixes
