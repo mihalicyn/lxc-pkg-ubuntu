@@ -76,6 +76,7 @@ meson setup -Dtests=true -Dman=false -Dprefix=/usr -Dsysconfdir=/etc -Dlocalstat
 make
 rm -rf build/src/tests/lxc-test-*.p
 cp build/src/tests/lxc-test-* src/tests/
+rm -f src/tests/lxc-test-fuzzers
 cd src/tests/
 
 # The actual tests
