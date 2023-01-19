@@ -101,7 +101,11 @@ Description: Linux Containers userspace tools (common tools)
 Package: liblxc-dev
 Section: libdevel
 Architecture: linux-any
-Depends: liblxc1 (= ${binary:Version}), ${misc:Depends}
+Depends: liblxc1 (= ${binary:Version}),
+         libcap-dev,
+         libseccomp-dev,
+         libselinux1-dev,
+         ${misc:Depends}
 Replaces: lxc-dev (<< 2.1.1-0ubuntu2~)
 Breaks: lxc-dev (<< 2.1.1-0ubuntu2~)
 Description: Linux Containers userspace tools (development)

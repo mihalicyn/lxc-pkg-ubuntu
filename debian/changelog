@@ -1,3 +1,10 @@
+lxc (1:5.0.1-0ubuntu6) lunar; urgency=medium
+
+  * debian/control: add libcap-dev, libselinux1-dev, and libseccomp-dev to
+    depends for liblxc-dev, to fix go-lxc autopktest failure.
+
+ -- Serge Hallyn <serge.hallyn@ubuntu.com>  Thu, 19 Jan 2023 17:53:14 -0600
+
 lxc (1:5.0.1-0ubuntu5) lunar; urgency=medium
 
   * disable lxc-test-fuzzers - the test is failing to download external
