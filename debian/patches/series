@@ -31,3 +31,4 @@
 0046-src-lxc-meson.build-fix-the-static-library-path.patch
 ppc64el-gcc12-warning.patch
 test-usernic-fixes
+apparmor-userns.patch

@@ -1,3 +1,16 @@
+lxc (1:5.0.1-0ubuntu7) mantic; urgency=medium
+
+  * Update apparmor profile to support new userns feature (LP: #2035315)
+    - d/p/apparmor-userns.patch: Add userns permission to
+      start-container abstraction and declare new 4.0 ABI in
+      the usr.bin.lxc-start apparmor profile
+    - debian/control: Declare Breaks on anything less than apparmor
+      4.0.0~alpha2-0ubuntu4 for liblxc-common to ensure if apparmor is
+      installed that it supports the new 4.0 ABI and add systemd-dev to
+      Build-Depends to fix local build failure.
+
+ -- Alex Murray <alex.murray@canonical.com>  Mon, 18 Sep 2023 13:28:16 +0930
+
 lxc (1:5.0.1-0ubuntu6) lunar; urgency=medium
 
   * debian/control: add libcap-dev, libselinux1-dev, and libseccomp-dev to
