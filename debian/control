@@ -13,7 +13,7 @@ Build-Depends: bash-completion,
                libpam0g-dev,
                libseccomp-dev,
                libselinux1-dev,
-	       libsystemd-dev,
+               libsystemd-dev,
                linux-libc-dev,
                meson,
                pkg-config,
@@ -25,33 +25,6 @@ Vcs-Browser: https://github.com/lxc/lxc-pkg-ubuntu
 Rules-Requires-Root: no
 
 Package: lxc
-Architecture: all
-Depends: lxc-utils (>= ${source:Version}), ${misc:Depends}
-Section: oldlibs
-Description: Transitional package - lxc -> lxc-utils
- This is a transitional dummy package. It can safely be removed.
- .
- lxc is now replaced by lxc-utils.
-
-Package: lxc1
-Architecture: all
-Depends: lxc-utils (>= ${source:Version}), ${misc:Depends}
-Section: oldlibs
-Description: Transitional package - lxc1 -> lxc-utils
- This is a transitional dummy package. It can safely be removed.
- .
- lxc1 is now replaced by lxc-utils.
-
-Package: lxc-dev
-Architecture: all
-Depends: liblxc-dev (>= ${source:Version}), ${misc:Depends}
-Section: oldlibs
-Description: Transitional package - lxc-dev -> liblxc-dev
- This is a transitional dummy package. It can safely be removed.
- .
- lxc-dev is now replaced by liblxc-dev.
-
-Package: lxc-utils
 Architecture: linux-any
 Pre-Depends: ${misc:Pre-Depends}
 Depends: adduser,
@@ -74,6 +47,42 @@ Description: Linux Containers userspace tools
  This package provides the lxc-* tools, which can be used to start a single
  daemon in a container, or to boot an entire "containerized" system, and to
  manage and debug your containers.
+
+Package: lxc1
+Architecture: all
+Depends: lxc (>= ${source:Version}), ${misc:Depends}
+Section: oldlibs
+Description: Transitional package - lxc1 -> lxc
+ This is a transitional package. It can safely be removed.
+ .
+ lxc1 is now replaced by lxc.
+
+Package: lxc-dev
+Section: libdevel
+Architecture: linux-any
+Depends: liblxc1 (= ${binary:Version}),
+         libcap-dev,
+         libseccomp-dev,
+         libselinux1-dev,
+         ${misc:Depends}
+Replaces: lxc-dev (<< 2.1.1-0ubuntu2~)
+Breaks: lxc-dev (<< 2.1.1-0ubuntu2~)
+Description: Linux Containers userspace tools (development)
+ Containers are insulated areas inside a system, which have their own namespace
+ for filesystem, network, PID, IPC, CPU and memory allocation and which can be
+ created using the Control Group and Namespace features included in the Linux
+ kernel.
+ .
+ This package contains the development files.
+
+Package: lxc-utils
+Architecture: all
+Depends: lxc (>= ${source:Version}), ${misc:Depends}
+Section: oldlibs
+Description: Transitional package - lxc-utils -> lxc
+ This is a transitional package. It can safely be removed.
+ .
+ lxc-utils is now replaced by lxc.
 
 Package: liblxc-common
 Architecture: linux-any
@@ -101,22 +110,13 @@ Description: Linux Containers userspace tools (common tools)
  all liblxc users.
 
 Package: liblxc-dev
-Section: libdevel
-Architecture: linux-any
-Depends: liblxc1 (= ${binary:Version}),
-         libcap-dev,
-         libseccomp-dev,
-         libselinux1-dev,
-         ${misc:Depends}
-Replaces: lxc-dev (<< 2.1.1-0ubuntu2~)
-Breaks: lxc-dev (<< 2.1.1-0ubuntu2~)
-Description: Linux Containers userspace tools (development)
- Containers are insulated areas inside a system, which have their own namespace
- for filesystem, network, PID, IPC, CPU and memory allocation and which can be
- created using the Control Group and Namespace features included in the Linux
- kernel.
+Architecture: all
+Depends: lxc-dev (>= ${source:Version}), ${misc:Depends}
+Section: oldlibs
+Description: Transitional package - liblxc-dev -> lxc-dev
+ This is a transitional package. It can safely be removed.
  .
- This package contains the development files.
+ liblxc-dev is now replaced by lxc-dev.
 
 Package: liblxc1
 Architecture: linux-any

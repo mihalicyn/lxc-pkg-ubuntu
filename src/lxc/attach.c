@@ -40,6 +40,7 @@
 #include "memory_utils.h"
 #include "mount_utils.h"
 #include "namespace.h"
+#include "open_utils.h"
 #include "process_utils.h"
 #include "sync.h"
 #include "syscall_wrappers.h"
@@ -1318,7 +1319,7 @@ __noreturn static void do_attach(struct attach_payload *ap)
 	 * here, ignore errors.
 	 */
 	for (int fd = STDIN_FILENO; fd <= STDERR_FILENO; fd++) {
-		ret = fd_cloexec(fd, false);
+		ret = lxc_fd_cloexec(fd, false);
 		if (ret < 0) {
 			SYSERROR("Failed to clear FD_CLOEXEC from file descriptor %d", fd);
 			goto on_error;
@@ -1827,6 +1828,7 @@ int lxc_attach_run_command(void *payload)
 	ret = execvp(cmd->program, cmd->argv);
 	if (ret < 0) {
 		switch (errno) {
+		case EACCES:
 		case ENOEXEC:
 			ret = 126;
 			break;

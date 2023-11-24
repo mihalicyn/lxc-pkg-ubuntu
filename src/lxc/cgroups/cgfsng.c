@@ -45,6 +45,7 @@
 #include "mainloop.h"
 #include "memory_utils.h"
 #include "mount_utils.h"
+#include "open_utils.h"
 #include "storage/storage.h"
 #include "string_utils.h"
 #include "syscall_wrappers.h"
@@ -145,7 +146,7 @@ static struct hierarchy *get_hierarchy(const struct cgroup_ops *ops, const char 
 	}
 
 	if (controller)
-		WARN("There is no useable %s controller", controller);
+		INFO("There is no useable %s controller", controller);
 	else
 		WARN("There is no empty unified cgroup hierarchy");
 
@@ -559,15 +560,20 @@ __cgfsng_ops static void cgfsng_payload_destroy(struct cgroup_ops *ops,
 	if (ret < 0)
 		WARN("Failed to detach bpf program from cgroup");
 
-	if (!list_empty(&handler->conf->id_map)) {
+	/*
+	 * Only do the user namespace dance if we have too. If the container's
+	 * monitor is root we can assume that it is privileged enough to remove
+	 * the cgroups it created when the container started.
+	 */
+	if (!list_empty(&handler->conf->id_map) && !handler->am_root) {
 		struct generic_userns_exec_data wrap = {
 			.conf			= handler->conf,
 			.path_prune		= ops->container_limit_cgroup,
 			.hierarchies		= ops->hierarchies,
 			.origuid		= 0,
 		};
-		ret = userns_exec_1(handler->conf, cgroup_tree_remove_wrapper,
-				    &wrap, "cgroup_tree_remove_wrapper");
+		ret = userns_exec_full(handler->conf, cgroup_tree_remove_wrapper,
+				       &wrap, "cgroup_tree_remove_wrapper");
 	} else {
 		ret = cgroup_tree_remove(ops->hierarchies, ops->container_limit_cgroup);
 	}
@@ -1156,7 +1162,7 @@ static bool enable_controllers_delegation(int fd_dir, char *cg)
 
 	lxc_iterate_parts(controller, rbuf, " ") {
 		full_len += strlen(controller) + 2;
-		wbuf = must_realloc(wbuf, full_len);
+		wbuf = must_realloc(wbuf, full_len + 1);
 		if (first) {
 			wbuf[0] = '\0';
 			first = false;
@@ -1231,7 +1237,7 @@ static int unpriv_systemd_create_scope(struct cgroup_ops *ops, struct lxc_conf *
 	if (r < 0)
 		return log_error(SYSTEMD_SCOPE_FAILED, "Failed to connect to user bus: %s", strerror(-r));
 
-	r = sd_bus_call_method_asyncv(bus, NULL, DESTINATION, PATH, INTERFACE, "Subscribe", NULL, NULL, NULL, NULL);
+	r = sd_bus_call_method_async(bus, NULL, DESTINATION, PATH, INTERFACE, "Subscribe", NULL, NULL, NULL);
 	if (r < 0)
 		return log_error(SYSTEMD_SCOPE_FAILED, "Failed to subscribe to signals: %s", strerror(-r));
 
@@ -1262,7 +1268,9 @@ static int unpriv_systemd_create_scope(struct cgroup_ops *ops, struct lxc_conf *
 		return syserror("Out of memory");
 
 	do {
-		snprintf(full_scope_name, len, "lxc-%s-%d.scope", conf->name, idx);
+		r = strnprintf(full_scope_name, len, "lxc-%s-%d.scope", conf->name, idx);
+		if (r < 0)
+			return log_error_errno(-1, errno, "Failed to build scope name for \"%s\"", conf->name);
 		sd_data.scope_name = full_scope_name;
 		if (start_scope(bus, &sd_data, event)) {
 			conf->cgroup_meta.systemd_scope = get_current_unified_cgroup();
@@ -2159,7 +2167,7 @@ __cgfsng_ops static bool cgfsng_mount(struct cgroup_ops *ops,
 		hierarchy_mnt = must_make_path(cgroup_root, h->at_mnt, NULL);
 		path2 = must_make_path(hierarchy_mnt, h->at_base,
 				       ops->container_cgroup, NULL);
-		ret = mkdir_p(path2, 0755);
+		ret = lxc_mkdir_p(path2, 0755);
 		if (ret < 0 && (errno != EEXIST))
 			return false;
 
@@ -3302,7 +3310,7 @@ static bool __cgfsng_delegate_controllers(struct cgroup_ops *ops, const char *cg
 		(void)strlcat(add_controllers, "+", full_len + 1);
 		(void)strlcat(add_controllers, *it, full_len + 1);
 
-		if ((it + 1) && *(it + 1))
+		if (*(it + 1))
 			(void)strlcat(add_controllers, " ", full_len + 1);
 	}
 
@@ -3638,7 +3646,7 @@ static int __initialize_cgroups(struct cgroup_ops *ops, bool relative,
 			char *__controllers, *__current_cgroup;
 
 			type = LEGACY_HIERARCHY;
-			layout_mask |= CGFSNG_LAYOUT_UNIFIED;
+			layout_mask |= CGFSNG_LAYOUT_LEGACY;
 
 			__controllers = strchr(line, ':');
 			if (!__controllers)
@@ -3755,7 +3763,7 @@ static int __initialize_cgroups(struct cgroup_ops *ops, bool relative,
 	 * from the layout bitmask we created when parsing the cgroups.
 	 *
 	 * Keep the ordering in the switch otherwise the bistmask-based
-	 * matching won't work. 
+	 * matching won't work.
 	 */
 	if (ops->cgroup_layout == CGROUP_LAYOUT_UNKNOWN) {
 		switch (layout_mask) {

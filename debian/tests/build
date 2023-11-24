@@ -1,0 +1,7 @@
+#!/bin/sh
+# autopkgtest check: very basic checks to ensure that LXC package is in a good shape
+
+set -eux
+
+# ensure that LXC_DEVEL is 0
+grep "LXC_DEVEL" meson.build | grep 0

@@ -32,7 +32,6 @@ liblxc_sources = files(
     'cgroups/cgroup2_devices.h',
     'cgroups/cgroup_utils.c',
     'cgroups/cgroup_utils.h',
-    'lsm/apparmor.c',
     'lsm/lsm.c',
     'lsm/lsm.h',
     'lsm/nop.c',
@@ -114,6 +113,7 @@ liblxc_sources = files(
     'nl.h',
     'parse.c',
     'parse.h',
+    'open_utils.h',
     'process_utils.c',
     'process_utils.h',
     'rexec.c',
@@ -139,6 +139,10 @@ liblxc_sources = files(
     'uuid.c',
     'uuid.h')
 
+if want_apparmor and libapparmor.found()
+    liblxc_sources += files('lsm/apparmor.c')
+endif
+
 if want_seccomp and libseccomp.found()
     liblxc_sources += files('seccomp.c')
 endif
@@ -148,11 +152,11 @@ if want_selinux and libselinux.found()
 endif
 
 liblxc_static = static_library(
-    'lxc_static',
+    'lxc',
     liblxc_sources + include_sources + netns_ifaddrs_sources,
     install: true,
     include_directories: liblxc_includes,
-    dependencies: [threads],
+    dependencies: [threads] + liblxc_dependency_headers,
     c_args: '-fvisibility=default')
 
 lxc_functions = configure_file(

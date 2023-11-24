@@ -19,8 +19,6 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
-/* Needs to be after sys/mount.h header */
-#include <linux/fs.h>
 #include <sys/param.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
@@ -34,6 +32,7 @@
 #include "lxclock.h"
 #include "memory_utils.h"
 #include "namespace.h"
+#include "open_utils.h"
 #include "parse.h"
 #include "process_utils.h"
 #include "syscall_wrappers.h"
@@ -213,7 +212,7 @@ extern int get_u16(unsigned short *val, const char *arg, int base)
 	return 0;
 }
 
-int mkdir_p(const char *dir, mode_t mode)
+int lxc_mkdir_p(const char *dir, mode_t mode)
 {
 	const char *tmp = dir;
 	const char *orig = dir;
@@ -1097,7 +1096,7 @@ int __safe_mount_beneath_at(int beneath_fd, const char *src, const char *dst, co
 			    unsigned int flags, const void *data)
 {
 	__do_close int source_fd = -EBADF, target_fd = -EBADF;
-	struct lxc_open_how how = {
+	struct open_how how = {
 		.flags		= PROTECT_OPATH_DIRECTORY,
 		.resolve	= PROTECT_LOOKUP_BENEATH_WITH_MAGICLINKS,
 	};
@@ -1691,7 +1690,7 @@ static int process_dead(/* takes */ int status_fd)
 	if (dupfd < 0)
 		return -1;
 
-	if (fd_cloexec(dupfd, true) < 0)
+	if (lxc_fd_cloexec(dupfd, true) < 0)
 		return -1;
 
 	f = fdopen(dupfd, "re");
