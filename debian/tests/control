@@ -1,3 +1,6 @@
+Tests: build
+Restrictions: allow-stderr superficial
+
 Tests: exercise
 Depends: autoconf,
          busybox-static,

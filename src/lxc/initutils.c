@@ -224,7 +224,7 @@ int setproctitle(char *title)
 	 * PR_SET_MM_MAP requires us to set it all at once, so we have to
 	 * figure it out anyway.
 	 */
-	unsigned long start_data, end_data, start_brk, start_code, end_code,
+	uint64_t start_data, end_data, start_brk, start_code, end_code,
 	    start_stack, arg_start, arg_end, env_start, env_end, brk_val;
 	struct prctl_mm_map prctl_map;
 
@@ -242,32 +242,35 @@ int setproctitle(char *title)
 
 	buf[bytes_read] = '\0';
 
-	/* Skip the first 25 fields, column 26-28 are start_code, end_code,
-	 * and start_stack */
-	buf_ptr = strchr(buf, ' ');
-	for (i = 0; i < 24; i++) {
-		if (!buf_ptr)
-			return -1;
-		buf_ptr = strchr(buf_ptr + 1, ' ');
-	}
+	/*
+	 * executable names may contain spaces, so we search backwards for the
+	 * ), which is the kernel's marker for "end of executable name". this
+	 * puts the pointer at the end of the second field.
+	 */
+	buf_ptr = strrchr(buf, ')');
 	if (!buf_ptr)
 		return -1;
 
-	i = sscanf(buf_ptr, "%lu %lu %lu", &start_code, &end_code, &start_stack);
+	/* Skip the space and the next 23 fields, column 26-28 are start_code,
+         * end_code, and start_stack */
+	for (i = 0; i < 24; i++) {
+		buf_ptr = strchr(buf_ptr + 1, ' ');
+		if (!buf_ptr)
+			return -1;
+	}
+
+	i = sscanf(buf_ptr, "%" PRIu64 " %" PRIu64 " %" PRIu64, &start_code, &end_code, &start_stack);
 	if (i != 3)
 		return -1;
 
 	/* Skip the next 19 fields, column 45-51 are start_data to arg_end */
 	for (i = 0; i < 19; i++) {
+		buf_ptr = strchr(buf_ptr + 1, ' ');
 		if (!buf_ptr)
 			return -1;
-		buf_ptr = strchr(buf_ptr + 1, ' ');
 	}
 
-	if (!buf_ptr)
-		return -1;
-
-	i = sscanf(buf_ptr, "%lu %lu %lu %*u %*u %lu %lu", &start_data,
+	i = sscanf(buf_ptr, "%" PRIu64 " %" PRIu64 " %" PRIu64 " %*u %*u %" PRIu64 " %" PRIu64, &start_data,
 		   &end_data, &start_brk, &env_start, &env_end);
 	if (i != 5)
 		return -1;

@@ -18,6 +18,7 @@
 #include "file_utils.h"
 #include "log.h"
 #include "lsm.h"
+#include "open_utils.h"
 #include "parse.h"
 #include "process_utils.h"
 #include "utils.h"
@@ -972,12 +973,14 @@ static int load_apparmor_profile(struct lsm_ops *ops, struct lxc_conf *conf, con
 			goto out;
 		}
 		old_len = profile_sb.st_size;
-		old_content = lxc_strmmap(NULL, old_len, PROT_READ,
-		                          MAP_PRIVATE, profile_fd, 0);
-		if (!old_content) {
-			SYSERROR("Failed to mmap old profile from %s",
-			         profile_path);
-			goto out;
+		if (old_len) {
+			old_content = lxc_strmmap(NULL, old_len, PROT_READ,
+						  MAP_PRIVATE, profile_fd, 0);
+			if (old_content == MAP_FAILED) {
+				SYSERROR("Failed to mmap old profile from %s",
+					 profile_path);
+				goto out;
+			}
 		}
 	} else if (errno != ENOENT) {
 		SYSERROR("Error reading old profile from %s", profile_path);
@@ -993,14 +996,14 @@ static int load_apparmor_profile(struct lsm_ops *ops, struct lxc_conf *conf, con
 	if (!old_content || old_len != content_len || memcmp(old_content, new_content, content_len) != 0) {
 		char *path;
 
-		ret = mkdir_p(APPARMOR_CACHE_DIR, 0755);
+		ret = lxc_mkdir_p(APPARMOR_CACHE_DIR, 0755);
 		if (ret < 0) {
 			SYSERROR("Error creating AppArmor profile cache directory " APPARMOR_CACHE_DIR);
 			goto out;
 		}
 
 		path = apparmor_dir(conf->name, lxcpath);
-		ret = mkdir_p(path, 0755);
+		ret = lxc_mkdir_p(path, 0755);
 		if (ret < 0) {
 			SYSERROR("Error creating AppArmor profile directory: %s", path);
 			free(path);

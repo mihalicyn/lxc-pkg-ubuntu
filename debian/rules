@@ -31,11 +31,11 @@ override_dh_install:
 
 	# copy apport hook
 	mkdir -p debian/tmp/usr/share/apport/package-hooks
-	cp debian/lxc-utils.apport debian/tmp/usr/share/apport/package-hooks/source_lxc.py
+	cp debian/lxc.apport debian/tmp/usr/share/apport/package-hooks/source_lxc.py
 
 	# copy dnsmasq configuration
 	mkdir -p debian/tmp/etc/dnsmasq.d-available
-	cp debian/lxc-utils.dnsmasq debian/tmp/etc/dnsmasq.d-available/lxc
+	cp debian/lxc.dnsmasq debian/tmp/etc/dnsmasq.d-available/lxc
 
 	# move the examples
 	mv debian/tmp/usr/share/doc/lxc debian/tmp/usr/share/doc/liblxc-common
@@ -62,8 +62,8 @@ override_dh_install:
 
 override_dh_builddeb:
 	# prevent system users from using setuid-root binaries under /var/lib/lxc
-	chmod 700 debian/lxc-utils/var/lib/lxc
-	chmod 700 debian/lxc-utils/var/cache/lxc
+	chmod 700 debian/lxc/var/lib/lxc
+	chmod 700 debian/lxc/var/cache/lxc
 
 	# mark lxc-user-nic as setuid
 	chmod u+s debian/liblxc-common/usr/lib/${DEB_HOST_MULTIARCH}/lxc/lxc-user-nic
@@ -73,12 +73,12 @@ override_dh_builddeb:
 override_dh_installinit:
 ifeq (,$(findstring $(DEB_DISTRIBUTION), trusty xenial))
 	# Disable upstart integration on artful+
-	cp debian/lxc-utils.maintscript.in debian/lxc-utils.maintscript
-	rm -f debian/lxc-utils/etc/init/*.conf
+	cp debian/lxc.maintscript.in debian/lxc.maintscript
+	rm -f debian/lxc/etc/init/*.conf
 else
-	cp debian/lxc-utils/etc/init/lxc.conf debian/lxc-utils.upstart
-	cp debian/lxc-utils/etc/init/lxc-instance.conf debian/lxc-utils.lxc-instance.upstart
-	cp debian/lxc-utils/etc/init/lxc-net.conf debian/lxc-utils.lxc-net.upstart
+	cp debian/lxc/etc/init/lxc.conf debian/lxc.upstart
+	cp debian/lxc/etc/init/lxc-instance.conf debian/lxc.lxc-instance.upstart
+	cp debian/lxc/etc/init/lxc-net.conf debian/lxc.lxc-net.upstart
 	dh_installinit --no-start --no-stop-on-upgrade --name=lxc-instance
 endif
 	dh_installinit --no-stop-on-upgrade --name=lxc

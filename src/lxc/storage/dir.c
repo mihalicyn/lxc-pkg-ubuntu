@@ -10,6 +10,7 @@
 #include "macro.h"
 #include "memory_utils.h"
 #include "mount_utils.h"
+#include "open_utils.h"
 #include "storage.h"
 #include "utils.h"
 
@@ -80,7 +81,7 @@ int dir_create(struct lxc_storage *bdev, const char *dest, const char *n,
 	if (!bdev_dest)
 		return ret_errno(ENOMEM);
 
-	ret = mkdir_p(dest, 0755);
+	ret = lxc_mkdir_p(dest, 0755);
 	if (ret < 0)
 		return log_error_errno(-errno, errno, "Failed to create directory \"%s\"", dest);
 

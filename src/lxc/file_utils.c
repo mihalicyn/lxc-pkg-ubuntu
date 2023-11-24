@@ -15,6 +15,7 @@
 #include "file_utils.h"
 #include "macro.h"
 #include "memory_utils.h"
+#include "open_utils.h"
 #include "string_utils.h"
 #include "syscall_wrappers.h"
 #include "utils.h"
@@ -274,7 +275,7 @@ int print_to_file(const char *file, const char *content)
 	return ret;
 }
 
-int is_dir(const char *path)
+int lxc_is_dir(const char *path)
 {
 	int ret;
 	struct stat statbuf;
@@ -331,7 +332,7 @@ int lxc_make_tmpfile(char *template, bool rm)
 	return move_fd(fd);
 }
 
-bool is_fs_type(const struct statfs *fs, fs_type_magic magic_val)
+bool lxc_is_fs_type(const struct statfs *fs, fs_type_magic magic_val)
 {
 	return (fs->f_type == (fs_type_magic)magic_val);
 }
@@ -345,7 +346,7 @@ bool has_fs_type(const char *path, fs_type_magic magic_val)
 	if (ret < 0)
 		return false;
 
-	return is_fs_type(&sb, magic_val);
+	return lxc_is_fs_type(&sb, magic_val);
 }
 
 bool fhas_fs_type(int fd, fs_type_magic magic_val)
@@ -357,7 +358,7 @@ bool fhas_fs_type(int fd, fs_type_magic magic_val)
 	if (ret < 0)
 		return false;
 
-	return is_fs_type(&sb, magic_val);
+	return lxc_is_fs_type(&sb, magic_val);
 }
 
 FILE *fopen_cloexec(const char *path, const char *mode)
@@ -548,7 +549,7 @@ FILE *fdopen_cached(int fd, const char *mode, void **caller_freed_buffer)
 	return f;
 }
 
-int fd_cloexec(int fd, bool cloexec)
+int lxc_fd_cloexec(int fd, bool cloexec)
 {
 	int oflags, nflags;
 
@@ -652,7 +653,7 @@ int open_at(int dfd, const char *path, unsigned int o_flags,
 	    unsigned int resolve_flags, mode_t mode)
 {
 	__do_close int fd = -EBADF;
-	struct lxc_open_how how = {
+	struct open_how how = {
 		.flags		= o_flags,
 		.mode		= mode,
 		.resolve	= resolve_flags,
@@ -687,7 +688,7 @@ int open_at_same(int fd_same, int dfd, const char *path, unsigned int o_flags,
 	return move_fd(fd);
 }
 
-int fd_make_nonblocking(int fd)
+int fd_make_blocking(int fd)
 {
 	int flags;
 
@@ -696,6 +697,18 @@ int fd_make_nonblocking(int fd)
 		return -1;
 
 	flags &= ~O_NONBLOCK;
+	return fcntl(fd, F_SETFL, flags);
+}
+
+int fd_make_nonblocking(int fd)
+{
+	int flags;
+
+	flags = fcntl(fd, F_GETFL);
+	if (flags < 0)
+		return -1;
+
+	flags |= O_NONBLOCK;
 	return fcntl(fd, F_SETFL, flags);
 }
 
@@ -795,8 +808,13 @@ bool same_device(int fda, const char *patha, int fdb, const char *pathb)
 	errno = EINVAL;
 	modea = (st_fda.st_mode & S_IFMT);
 	modeb = (st_fdb.st_mode & S_IFMT);
-	if (modea != modeb || !IN_SET(modea, S_IFCHR, S_IFBLK))
+	if (modea != modeb || !(modea == S_IFCHR || modea == S_IFBLK))
 		return false;
 
 	return (st_fda.st_rdev == st_fdb.st_rdev);
+}
+
+int open_beneath(int dfd, const char *path, unsigned int flags)
+{
+	return open_at(dfd, path, flags, PROTECT_LOOKUP_BENEATH, 0);
 }

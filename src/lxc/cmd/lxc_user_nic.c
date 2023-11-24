@@ -489,20 +489,30 @@ static int instantiate_veth(char *veth1, char *veth2, pid_t pid, unsigned int mt
 	return netdev_set_flag(veth1, IFF_UP);
 }
 
-static int get_mtu(char *name)
+#define NETDEV_MTU_DEFAULT 1500
+
+static unsigned int get_mtu(char *name)
 {
-	int idx;
+	int idx, val;
 
 	idx = if_nametoindex(name);
-	if (idx < 0)
-		return -1;
+	if (idx < 0) {
+		usernic_error("Could not find netdev %s\n", name);
+		return NETDEV_MTU_DEFAULT;
+	}
 
-	return netdev_get_mtu(idx);
+	val = netdev_get_mtu(idx);
+	if (val < 0) {
+		usernic_error("Could not get MTU for netdev %s ifindex %d\n", name, idx);
+		return NETDEV_MTU_DEFAULT;
+	}
+
+	return val;
 }
 
 static int create_nic(char *nic, char *br, int pid, char **cnic)
 {
-	unsigned int mtu = 1500;
+	unsigned int mtu = NETDEV_MTU_DEFAULT;
 	int ret;
 	char veth1buf[IFNAMSIZ], veth2buf[IFNAMSIZ];
 
@@ -520,8 +530,6 @@ static int create_nic(char *nic, char *br, int pid, char **cnic)
 
 	if (strcmp(br, "none"))
 		mtu = get_mtu(br);
-	if (!mtu)
-		mtu = 1500;
 
 	/* create the nics */
 	ret = instantiate_veth(veth1buf, veth2buf, pid, mtu);
@@ -1085,20 +1093,17 @@ int main(int argc, char *argv[])
 	} else if (request == LXC_USERNIC_DELETE) {
 		char opath[LXC_PROC_PID_FD_LEN];
 
-		/* Open the path with O_PATH which will not trigger an actual
-		 * open(). Don't report an errno to the caller to not leak
-		 * information whether the path exists or not.
-		 * When stracing setuid is stripped so this is not a concern
-		 * either.
-		 */
+		// Keep in mind CVE-2022-47952: It's crucial not to leak any
+		// information whether open() succeeded of failed.
+
 		netns_fd = open(args.pid, O_PATH | O_CLOEXEC);
 		if (netns_fd < 0) {
-			usernic_error("Failed to open \"%s\"\n", args.pid);
+			usernic_error("Failed while opening netns file for \"%s\"\n", args.pid);
 			_exit(EXIT_FAILURE);
 		}
 
 		if (!fhas_fs_type(netns_fd, NSFS_MAGIC)) {
-			usernic_error("Path \"%s\" does not refer to a network namespace path\n", args.pid);
+			usernic_error("Failed while opening netns file for \"%s\"\n", args.pid);
 			close(netns_fd);
 			_exit(EXIT_FAILURE);
 		}
@@ -1112,7 +1117,7 @@ int main(int argc, char *argv[])
 		/* Now get an fd that we can use in setns() calls. */
 		ret = open(opath, O_RDONLY | O_CLOEXEC);
 		if (ret < 0) {
-			CMD_SYSERROR("Failed to open \"%s\"\n", args.pid);
+			CMD_SYSERROR("Failed while opening netns file for \"%s\"\n", args.pid);
 			close(netns_fd);
 			_exit(EXIT_FAILURE);
 		}

@@ -23,6 +23,7 @@
 #include "lxclock.h"
 #include "mainloop.h"
 #include "memory_utils.h"
+#include "open_utils.h"
 #include "start.h"
 #include "syscall_wrappers.h"
 #include "terminal.h"
@@ -333,9 +334,12 @@ static int lxc_terminal_ptx_io(struct lxc_terminal *terminal)
 	int r, w, w_log, w_rbuf;
 
 	w = r = lxc_read_nointr(terminal->ptx, buf, sizeof(buf));
-	if (r <= 0)
-		return -1;
+	if (r <= 0) {
+		if (errno == EWOULDBLOCK)
+			return 0;
 
+		return -1;
+	}
 	w_rbuf = w_log = 0;
 	/* write to peer first */
 	if (terminal->peer >= 0)
@@ -369,8 +373,12 @@ static int lxc_terminal_peer_io(struct lxc_terminal *terminal)
 	int r, w;
 
 	w = r = lxc_read_nointr(terminal->peer, buf, sizeof(buf));
-	if (r <= 0)
+	if (r <= 0) {
+		if (errno == EWOULDBLOCK)
+			return 0;
+
 		return -1;
+	}
 
 	w = lxc_write_nointr(terminal->ptx, buf, r);
 	if (w != r)
@@ -414,6 +422,9 @@ static int lxc_terminal_mainloop_add_peer(struct lxc_terminal *terminal)
 	int ret;
 
 	if (terminal->peer >= 0) {
+		if (fd_make_nonblocking(terminal->peer))
+			return log_error_errno(-1, errno, "Failed to make terminal peer fd non-blocking");
+
 		ret = lxc_mainloop_add_handler(terminal->descr, terminal->peer,
 					       lxc_terminal_peer_io_handler,
 					       default_cleanup_handler,
@@ -450,6 +461,9 @@ int lxc_terminal_mainloop_add(struct lxc_async_descr *descr,
 		INFO("Terminal is not initialized");
 		return 0;
 	}
+
+	if (fd_make_nonblocking(terminal->ptx))
+		return log_error_errno(-1, errno, "Failed to make terminal ptx fd non-blocking");
 
 	ret = lxc_mainloop_add_handler(descr, terminal->ptx,
 				       lxc_terminal_ptx_io_handler,
@@ -576,13 +590,13 @@ static int lxc_terminal_peer_proxy_alloc(struct lxc_terminal *terminal,
 		goto on_error;
 	}
 
-	ret = fd_cloexec(terminal->proxy.ptx, true);
+	ret = lxc_fd_cloexec(terminal->proxy.ptx, true);
 	if (ret < 0) {
 		SYSERROR("Failed to set FD_CLOEXEC flag on proxy terminal ptx");
 		goto on_error;
 	}
 
-	ret = fd_cloexec(terminal->proxy.pty, true);
+	ret = lxc_fd_cloexec(terminal->proxy.pty, true);
 	if (ret < 0) {
 		SYSERROR("Failed to set FD_CLOEXEC flag on proxy terminal pty");
 		goto on_error;
@@ -916,13 +930,13 @@ static int lxc_terminal_create_foreign(struct lxc_conf *conf, struct lxc_termina
 		goto err;
 	}
 
-	ret = fd_cloexec(terminal->ptx, true);
+	ret = lxc_fd_cloexec(terminal->ptx, true);
 	if (ret < 0) {
 		SYSERROR("Failed to set FD_CLOEXEC flag on terminal ptx");
 		goto err;
 	}
 
-	ret = fd_cloexec(terminal->pty, true);
+	ret = lxc_fd_cloexec(terminal->pty, true);
 	if (ret < 0) {
 		SYSERROR("Failed to set FD_CLOEXEC flag on terminal pty");
 		goto err;

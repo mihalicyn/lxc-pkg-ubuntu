@@ -1,3 +1,17 @@
+lxc (1:5.0.3-0ubuntu1) noble; urgency=medium
+
+  * Import LXC 5.0.3 upstream release
+  * dropped all debian/patches which are present in the LXC 5.0.3 already
+  * Added autopkgtest to ensure that LXC_DEVEL is always 0
+  * Align package names with the Debian ones:
+    - lxc-utils and lxc1 are now transitional to lxc
+    - lxc takes a place of lxc-utils and ships lxc-* utilities
+    - liblxc-dev is now transitional to lxc-dev
+    - lxc-dev takes a place of liblxc-dev and ships liblxc headers
+    - upgrade path fixes by Simon Deziel
+
+ -- Aleksandr Mikhalitsyn <aleksandr.mikhalitsyn@canonical.com>  Thu, 23 Nov 2023 18:37:00 +0100
+
 lxc (1:5.0.1-0ubuntu7) mantic; urgency=medium
 
   * Update apparmor profile to support new userns feature (LP: #2035315)
